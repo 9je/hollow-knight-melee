@@ -1,1 +1,7 @@
 .rc.log
+dev.toml
+.oracle/
+traces/
+__pycache__/
+*.egg-info/
+.venv/
