@@ -74,6 +74,16 @@ def test_longer_payloads_from_newer_versions_are_skipped():
     assert r.end_method == 2
 
 
+def test_truncated_mid_event_rejected():
+    data = _replay([(-123, 1.0)])
+    raw = data[15:-1]
+    # raw tail: POST_FRAME, FRAME_BOOKEND (5 bytes), GAME_END (3 bytes)
+    cut = raw[: len(raw) - 3 - 5 - 10]  # 10 bytes into the last Post Frame
+    blob = b"{U\x03raw[$U#l" + struct.pack(">i", len(cut)) + cut + b"}"
+    with pytest.raises(ValueError, match="truncated"):
+        read_slp(blob)
+
+
 def test_in_progress_replay_rejected():
     with pytest.raises(ValueError, match="still being written"):
         read_slp(b"{U\x03raw[$U#l" + struct.pack(">i", 0) + b"\x35")

@@ -139,6 +139,8 @@ def read_slp(data: bytes) -> Replay:
         code = raw[pos]
         if code not in sizes:
             raise ValueError(f"unknown event 0x{code:02x} at {pos}")
+        if pos + 1 + sizes[code] > len(raw):
+            raise ValueError(f"truncated event 0x{code:02x} at {pos}")
         payload = raw[pos: pos + 1 + sizes[code]]
         pos += 1 + sizes[code]
         if code == Event.GAME_START:
