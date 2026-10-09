@@ -5,7 +5,7 @@ import pytest
 
 from ssbmhk_tools import layout
 from ssbmhk_tools.playback import (
-    align_offset, playback_command, prepare_user_dir, record_replay, write_comm_file,
+    PointerChanged, absolute_map, align_offset, discover_pointers, playback_command, pointer_location, translate, prepare_user_dir, record_replay, write_comm_file,
 )
 from ssbmhk_tools.slp.reader import read_slp
 from ssbmhk_tools.slp.writer import PostFrame, PreFrame, SlpWriter, make_game_info
@@ -60,6 +60,31 @@ def test_align_offset_fails_when_nothing_matches():
     snaps[1].words[next(iter(snaps[1].words))] ^= 1
     with pytest.raises(AssertionError, match="no offset"):
         align_offset(snaps, replay, port=0)
+
+
+def test_pointer_location_is_one_hop():
+    assert pointer_location(0) == "80453130 2C"
+    assert pointer_location(1) == "80453FC0 2C"
+
+
+def test_discover_pointers_ignores_prematch_console_type():
+    found = {}
+    assert not discover_pointers([("80453130 2C", 0x10000006), ("80479D60", 1)], [0, 1], found)
+    assert not discover_pointers([("80453130 2C", 0x80D08B80)], [0, 1], found)
+    assert discover_pointers([("80453FC0 2C", 0x80E043C0)], [0, 1], found)
+    assert found == {0: 0x80D08B80, 1: 0x80E043C0}
+
+
+def test_absolute_map_and_translate():
+    ptrs = {0: 0x80D08B80}
+    amap = absolute_map(ptrs)
+    fx = next(f for f in layout.FIGHTER_FIELDS if f.name == "pos.x")
+    assert amap[f"{0x80D08B80 + fx.offset:08X}"] == layout.location(0, fx)
+    out = translate([("80453130 2C", 0x10000006), ("80453130 2C", 0x80D08B80),
+                     (f"{0x80D08B80 + fx.offset:08X}", 7), ("80479D60", 3)], amap, ptrs)
+    assert out == [(layout.location(0, fx), 7), ("80479D60", 3)]
+    with pytest.raises(PointerChanged):
+        translate([("80453130 2C", 0x80D09000)], amap, ptrs)
 
 
 from ssbmhk_tools.slp.reader import read_game_start

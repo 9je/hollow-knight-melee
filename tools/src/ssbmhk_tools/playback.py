@@ -68,20 +68,111 @@ def align_offset(snaps: list[Snapshot], replay: Replay, port: int) -> int:
     return good[0]
 
 
+def pointer_location(port: int) -> str:
+    """One-hop location whose value is the port's Fighter pointer (safe even before a match: never dereferences twice)."""
+    entity = layout.PLAYER_BLOCK + layout.PLAYER_STRIDE * port + layout.ENTITY_OFF
+    return f"{entity:08X} {layout.GOBJ_USER_DATA:X}"
+
+
+def _is_ram_ptr(v: int) -> bool:
+    return 0x80000000 <= v < 0x81800000
+
+
+def discover_pointers(pairs_iter, ports: list[int], found: dict[int, int]) -> bool:
+    """Feed (location, value) pairs; record valid Fighter pointers per port. True once all ports are known."""
+    by_loc = {pointer_location(p): p for p in ports}
+    for loc, v in pairs_iter:
+        port = by_loc.get(loc)
+        if port is not None and _is_ram_ptr(v):
+            found[port] = v
+    return all(p in found for p in ports)
+
+
+def absolute_map(pointers: dict[int, int]) -> dict[str, str]:
+    """Absolute `F+off` address -> logical layout key, for every field of every port."""
+    out = {}
+    for port, fptr in pointers.items():
+        for f in layout.FIGHTER_FIELDS:
+            out[f"{fptr + f.offset:08X}"] = layout.location(port, f)
+    return out
+
+
+class PointerChanged(RuntimeError):
+    pass
+
+
+def translate(pairs: list[tuple[str, int]], amap: dict[str, str], pointers: dict[int, int]) -> list[tuple[str, int]]:
+    """Rewrite absolute addresses to logical keys; drop pointer locations after checking they are unchanged."""
+    ptr_locs = {pointer_location(p): p for p in pointers}
+    out = []
+    for loc, v in pairs:
+        if loc in ptr_locs:
+            port = ptr_locs[loc]
+            if _is_ram_ptr(v) and v != pointers[port]:
+                raise PointerChanged(f"port {port} Fighter pointer changed {pointers[port]:08X} -> {v:08X}")
+            continue
+        out.append((amap.get(loc, loc), v))
+    return out
+
+
+def _launch(cfg: DevConfig, replay: Path, run_dir: Path, locs: list[str]):
+    prepare_user_dir(run_dir / "user", locs)
+    write_comm_file(run_dir / "comm.json", replay)
+    return Receiver(run_dir / "user" / "MemoryWatcher" / "MemoryWatcher"), \
+        playback_command(cfg.playback_appimage, run_dir / "user", run_dir / "comm.json", cfg.iso)
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+def find_fighter_pointers(cfg: DevConfig, replay: Path, run_dir: Path, ports: list[int],
+                          timeout_s: float = 300) -> dict[int, int]:
+    """Pass 1: run Playback watching only one-hop pointer locations until every port has a Fighter pointer.
+
+    The Playback build's MemoryWatcher does not null-check pointer chains, so two-hop locations crash it
+    before a match starts; one-hop locations are safe."""
+    locs = [pointer_location(p) for p in ports] + [layout.counter_location()]
+    rx, cmd = _launch(cfg, replay, run_dir, locs)
+    found: dict[int, int] = {}
+    with rx:
+        proc = subprocess.Popen(cmd)
+        deadline = time.monotonic() + timeout_s
+        try:
+            while time.monotonic() < deadline:
+                data = rx.recv(timeout=5.0)
+                if data is None:
+                    if proc.poll() is not None:
+                        raise RuntimeError(f"Dolphin exited with {proc.returncode} during pointer discovery")
+                    continue
+                if discover_pointers(parse_datagram(data), ports, found):
+                    return found
+            raise TimeoutError(f"no Fighter pointers for ports {ports} within {timeout_s}s (found {found})")
+        finally:
+            _stop(proc)
+
+
 def record_replay(cfg: DevConfig, replay: Path, out: Path, ports: list[int], timeout_s: float = 600) -> Path:
     parsed = read_slp(replay.read_bytes())
     last_frame = max(parsed.frames)
-    run_dir = cfg.work_dir / "playback" / uuid.uuid4().hex[:8]  # short: AF_UNIX paths are limited to ~107 bytes
-    locs = layout.locations(ports)
-    prepare_user_dir(run_dir / "user", locs)
-    write_comm_file(run_dir / "comm.json", replay)
-    assembler = FrameAssembler(locs)
+    base = cfg.work_dir / "playback" / uuid.uuid4().hex[:8]  # short: AF_UNIX paths are limited to ~107 bytes
+    pointers = find_fighter_pointers(cfg, replay, base / "p1", ports)
+    amap = absolute_map(pointers)
+    locs = [pointer_location(p) for p in ports] + list(amap) + [layout.counter_location()]
+    logical = layout.locations(ports)
+    assembler = FrameAssembler(logical)
     snaps: list[Snapshot] = []
-    with Receiver(run_dir / "user" / "MemoryWatcher" / "MemoryWatcher") as rx:
-        proc = subprocess.Popen(playback_command(cfg.playback_appimage, run_dir / "user",
-                                                 run_dir / "comm.json", cfg.iso))
+    rx, cmd = _launch(cfg, replay, base / "p2", locs)
+    with rx:
+        proc = subprocess.Popen(cmd)
         deadline = time.monotonic() + timeout_s
         offset = None
+        started = False
         try:
             while time.monotonic() < deadline:
                 data = rx.recv(timeout=5.0)
@@ -89,7 +180,16 @@ def record_replay(cfg: DevConfig, replay: Path, out: Path, ports: list[int], tim
                     if proc.poll() is not None:
                         raise RuntimeError(f"Dolphin exited with {proc.returncode}")
                     continue
-                snaps += assembler.feed(parse_datagram(data))
+                pairs = translate(parse_datagram(data), amap, pointers)
+                if not started:
+                    # The counter holds a stale value (e.g. 1) until the match starts and it restarts at 0;
+                    # drop counter reports until that restart.
+                    cl = layout.counter_location()
+                    zero = [i for i, (k, v) in enumerate(pairs) if k == cl and v == 0]
+                    started = bool(zero)
+                    pairs = [(k, v) for i, (k, v) in enumerate(pairs)
+                             if k != cl or (started and i >= zero[0])]
+                snaps += assembler.feed(pairs)
                 if offset is None and len(snaps) > 600:
                     offset = align_offset(snaps, parsed, ports[0])
                 if offset is not None and snaps[-1].counter >= last_frame + offset:
@@ -97,8 +197,7 @@ def record_replay(cfg: DevConfig, replay: Path, out: Path, ports: list[int], tim
             else:
                 raise TimeoutError(f"playback of {replay} did not finish in {timeout_s}s")
         finally:
-            proc.terminate()
-            proc.wait(timeout=30)
+            _stop(proc)
     offset = align_offset(snaps, parsed, ports[0])
     write_trace(out, {"source": "playback", "replay": str(replay), "ports": ports,
                       "slp_offset": offset, "fields": [f.name for f in layout.FIGHTER_FIELDS]}, snaps)
