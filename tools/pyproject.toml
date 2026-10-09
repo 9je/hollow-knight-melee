@@ -13,6 +13,7 @@ dev = ["pytest>=8"]
 
 [project.scripts]
 ssbmhk-verify-iso = "ssbmhk_tools.cli:verify_iso_main"
+ssbmhk-oracle-replay = "ssbmhk_tools.cli:oracle_replay_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
