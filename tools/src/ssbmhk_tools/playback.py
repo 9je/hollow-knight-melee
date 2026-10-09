@@ -88,12 +88,21 @@ def discover_pointers(pairs_iter, ports: list[int], found: dict[int, int]) -> bo
     return all(p in found for p in ports)
 
 
+# Trigger word: gm_80479D58.unk_0 (0x80479D58), incremented by gm_801A4D34 once per simulation step,
+# right after HSD_GObj_RunProcs (all fighter logic). 0x80479D60 (unk_8) is only bumped conditionally and was
+# observed to lag/lead fighter updates. MemoryWatcher keeps locations in a std::map and sends one datagram per
+# changed address in *string* order within a sample, so the trigger must sort after every other location:
+# use the uncached mirror 0xC0479D58 ("C..." sorts after "80..."/"81...").
+TRIGGER_LOC = "C0479D58"
+
+
 def absolute_map(pointers: dict[int, int]) -> dict[str, str]:
     """Absolute `F+off` address -> logical layout key, for every field of every port."""
     out = {}
     for port, fptr in pointers.items():
         for f in layout.FIGHTER_FIELDS:
             out[f"{fptr + f.offset:08X}"] = layout.location(port, f)
+    out[TRIGGER_LOC] = layout.counter_location()
     return out
 
 
@@ -163,9 +172,10 @@ def record_replay(cfg: DevConfig, replay: Path, out: Path, ports: list[int], tim
     base = cfg.work_dir / "playback" / uuid.uuid4().hex[:8]  # short: AF_UNIX paths are limited to ~107 bytes
     pointers = find_fighter_pointers(cfg, replay, base / "p1", ports)
     amap = absolute_map(pointers)
-    locs = [pointer_location(p) for p in ports] + list(amap) + [layout.counter_location()]
+    locs = [pointer_location(p) for p in ports] + list(amap)  # TRIGGER_LOC is last in amap, hence last here
+    assert locs[-1] == TRIGGER_LOC and max(locs[:-1]) < TRIGGER_LOC
     logical = layout.locations(ports)
-    assembler = FrameAssembler(logical)
+    assembler = FrameAssembler(logical, allow_gaps=True)  # sim steps within one emulated ms collapse; recorded in header
     snaps: list[Snapshot] = []
     rx, cmd = _launch(cfg, replay, base / "p2", locs)
     with rx:
@@ -200,5 +210,5 @@ def record_replay(cfg: DevConfig, replay: Path, out: Path, ports: list[int], tim
             _stop(proc)
     offset = align_offset(snaps, parsed, ports[0])
     write_trace(out, {"source": "playback", "replay": str(replay), "ports": ports,
-                      "slp_offset": offset, "fields": [f.name for f in layout.FIGHTER_FIELDS]}, snaps)
+                      "slp_offset": offset, "gaps": assembler.gaps, "fields": [f.name for f in layout.FIGHTER_FIELDS]}, snaps)
     return out
