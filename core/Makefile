@@ -39,3 +39,11 @@ oracle-selftest: $(B)/liboracle.a
 	$(CC) $(GEN_CFLAGS) $(INC) -Idifftest difftest/oracle_selftest.c $(B)/liboracle.a -lstdc++ -lm -o $(B)/oracle_selftest
 	$(B)/oracle_selftest
 .PHONY: dolphin-src oracle-selftest
+INSN_DIR := $(B)/insn
+insn-cases:
+	cd ../tools && .venv/bin/ssbmhk-recomp-insn-tests --config ../dev.toml --out ../core/$(INSN_DIR) $(INSN_ARGS)
+insn-fuzz: $(B)/liboracle.a insn-cases
+	$(CC) $(GEN_CFLAGS) $(OPT) $(INC) -Idifftest $(INSN_DIR)/insn_cases.c difftest/insn_fuzz.c runtime/test_hooks.c gekko/gekko_fp.c $(B)/liboracle.a -lstdc++ -lm -o $(B)/insn_fuzz
+	$(B)/insn_fuzz $(STATES) 1
+.PHONY: insn-cases insn-fuzz
+STATES ?= 200
