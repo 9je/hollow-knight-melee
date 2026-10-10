@@ -14,3 +14,5 @@ DVDGetDriveStatus
 OSLoadContext
 GXWaitDrawDone
 GXSetDrawDone
+gm_801A4B88
+lbCardGame_DecideGameMode

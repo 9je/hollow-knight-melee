@@ -54,7 +54,23 @@ void guest_trap(Cpu *c, uint32_t pc, uint32_t insn) {
 uint32_t guest_bad_return(Cpu *c, uint32_t expected, uint32_t got) {
   (void)c; fprintf(stderr, "BAD_RETURN expected=%08X got=%08X\n", expected, got); abort();
 }
+static unsigned long g_frames;
+#define MAGIC_ONLOAD 0x80000200u
+#define MAGIC_UNLOAD 0x80000204u
+static uint32_t g_unload_slot, g_unload_orig;
+static uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4);
+static uint8_t g_start[0x13C];   /* replay StartMeleeData (0x138) + RNG seed */
+static int g_have_start, g_forced;
 uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
+  if (target == MAGIC_UNLOAD) {   /* current mode's on_unload: runs last before runGameMode returns pending_mode */
+    fprintf(stderr, "on_unload hook frame %lu\n", g_frames);
+    st32(c, g_unload_slot, g_unload_orig);
+    if (g_unload_orig) { uint32_t lr = c->spr[SPR_LR]; call_guest(c, g_unload_orig, 0, 0); c->spr[SPR_LR] = lr; }
+    st8(c, 0x80479D31u, 0x0E);
+    return c->spr[SPR_LR];
+  }
+  if (target == MAGIC_ONLOAD) fprintf(stderr, "on_load hook frame %lu\n", g_frames);
+  if (target == MAGIC_ONLOAD) { st8(c, 0x80479D33u, 1); return c->spr[SPR_LR]; }  /* DebugVs on_load: go to state 1 (GS_VS) */
   GuestFn f = guest_lookup(target);
   if (!f) { fprintf(stderr, "INDIRECT_MISS %08X\n", target); abort(); }
   return f(c);
@@ -82,7 +98,6 @@ uint32_t hle___AI_SRC_INIT(Cpu *c) { RET; }  /* audio sample-rate calibration */
 uint32_t hle___AXOutInitDSP(Cpu *c) { RET; }  /* AX DSP task boot: no DSP */
 uint32_t hle___OSInitMemoryProtection(Cpu *c) { RET; }  /* BATs/MI protection: fixed host memory map */
 
-static unsigned long g_frames;
 /* Call a guest function from the host; returns its r3. Volatile registers are clobbered like a real call. */
 static uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4) {
   uint32_t lr = c->spr[SPR_LR];
@@ -95,6 +110,17 @@ static uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4) {
 /* One video frame: raise the VI display interrupt (DI0 status bit) and run the guest's handler. */
 uint32_t hle_VIWaitForRetrace(Cpu *c) {
   g_frames++;
+  if (g_have_start && !g_forced && g_frames == 30) {   /* leave the boot scene for the debug VS mode */
+    g_forced = 1;
+    if (ld8(c, 0x803DADA9u) != 0x0E) { fprintf(stderr, "modes[13] is not GM_DEBUG_VS\n"); abort(); }
+    st32(c, 0x803DADACu, MAGIC_ONLOAD);
+    uint8_t cur = ld8(c, 0x80479D30u);
+    for (uint32_t m = 0x803DACA4u; ld8(c, m + 1) != 0x2D || m == 0x803DACA4u; m += 0x14)   /* modes[] (0x14 each) */
+      if (ld8(c, m + 1) == cur) { g_unload_slot = m + 8; g_unload_orig = ld32(c, m + 8); st32(c, m + 8, MAGIC_UNLOAD); break; }
+    if (!g_unload_slot) { fprintf(stderr, "mode %02X not found\n", cur); abort(); }
+    st8(c, 0x80479D3Cu, 1);                                /* pending_mode_change */
+    st32(c, 0x80479D64u, 1);                               /* end the current scene's frame loop */
+  }
   service(c);
   hw[0x2030] |= 0x80;                                   /* VI DI0 interrupt status */
   uint32_t ctx = ld32(c, 0x800000D4u);                  /* OSGetCurrentContext */
@@ -177,6 +203,20 @@ static void service(Cpu *c) {
 void guest_irq(Cpu *c) { service(c); }
 /* No GPU: the draw-done token completes as soon as it is set; the PE finish interrupt is pending. */
 uint32_t hle_GXSetDrawDone(Cpu *c) { st8(c, 0x804D7328u, 0); pend_pe = 1; c->irq_pending = 1; RET; }
+/* gm_801A4B88(GameSceneInfo *info): current scene info. For GS_VS, install the replay's match setup and seed. */
+uint32_t hle_gm_801A4B88(Cpu *c) {
+  uint32_t info = c->gpr[3];
+  st32(c, 0x804D6720u, info);
+  fprintf(stderr, "scene info %08X kind %u frame %lu\n", info, ld8(c, info), g_frames);
+  if (g_have_start && ld8(c, info) == 2) {
+    uint32_t ed = ld32(c, info + 4);
+    for (int i = 0; i < 0x138; i++) st8(c, ed + i, g_start[i]);
+    st32(c, 0x804D5F90u, (uint32_t)g_start[0x138] << 24 | g_start[0x139] << 16 | g_start[0x13A] << 8 | g_start[0x13B]);
+    fprintf(stderr, "MATCH START at frame %lu (enter data %08X)\n", g_frames, ed);
+  }
+  RET;
+}
+uint32_t hle_lbCardGame_DecideGameMode(Cpu *c) { c->gpr[3] = 0x2D; RET; }  /* no memory card scene: GM_COUNT */
 uint32_t hle_GXWaitDrawDone(Cpu *c) { service(c); RET; }  /* takes the pending finish interrupt */
 /* BOOL DVDReadAbsAsyncPrio(DVDCommandBlock *block, void *addr, s32 length, s32 offset, cb, prio).
  * Reads straight from the ISO; block->state = END(0), transferredSize = length; callback(length, block) later. */
@@ -221,7 +261,13 @@ uint32_t hle_OSEnableInterrupts(Cpu *c) {
 
 static Cpu *g_cpu;
 static void on_alarm(int s) { (void)s; fprintf(stderr, "TIMEOUT after %lu frames\n", g_frames);
-  fprintf(stderr, "SCENE %02X %02X %02X %02X\n", ld8(g_cpu, 0x80479D30u), ld8(g_cpu, 0x80479D31u), ld8(g_cpu, 0x80479D32u), ld8(g_cpu, 0x80479D33u)); io_dump(); abort(); }
+  for (int i = 0; i < 0x14; i++) fprintf(stderr, "%02X ", ld8(g_cpu, 0x80479D30u + i)); fprintf(stderr, "\n");
+  for (int i = 0; i < 4; i++) {   /* player static blocks: 0x80453080 + 0xE90*i; +0xB0 entity gobj; gobj+0x2C fighter */
+    uint32_t b = 0x80453080u + 0xE90u * (uint32_t)i, g = ld32(g_cpu, b + 0xB0);
+    if (!g) continue;
+    uint32_t fp = ld32(g_cpu, g + 0x2C);
+    fprintf(stderr, "P%d char %u action %u x %g y %g\n", i + 1, ld32(g_cpu, b + 4), ld32(g_cpu, fp + 0x10), u2f(0) + (double)({uint32_t v = ld32(g_cpu, fp + 0xB0); float f; memcpy(&f, &v, 4); f;}), (double)({uint32_t v = ld32(g_cpu, fp + 0xB4); float f; memcpy(&f, &v, 4); f;}));
+  } io_dump(); abort(); }
 
 static void w32(uint8_t *m, uint32_t a, uint32_t v) { m[a & 0x1FFFFFF] = v >> 24; m[(a & 0x1FFFFFF) + 1] = v >> 16; m[(a & 0x1FFFFFF) + 2] = v >> 8; m[(a & 0x1FFFFFF) + 3] = v; }
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
@@ -250,6 +296,7 @@ int main(int argc, char **argv) {
   c->spr[SPR_LR] = 0x80000100u;
   signal(SIGALRM, on_alarm);
   alarm(argc > 3 ? atoi(argv[3]) : 10);
+  if (argc > 4) { FILE *f = fopen(argv[4], "rb"); g_have_start = f && fread(g_start, 1, sizeof g_start, f) == sizeof g_start; if (f) fclose(f); }
   uint32_t r = guest_lookup(GUEST_ENTRY)(c);
   fprintf(stderr, "__start returned %08X\n", r);
   io_dump();
