@@ -5,6 +5,11 @@
 #include <string.h>
 #include "gekko_fp.h"
 
+#ifdef __cplusplus
+#define _Noreturn [[noreturn]]
+extern "C" {
+#endif
+
 #define MEM1_SIZE 0x01800000u
 #define SPR_XER 1
 #define SPR_LR 8
@@ -87,4 +92,7 @@ static inline void psq_st(Cpu *c, uint32_t ea, GekkoPS v, uint32_t type, uint32_
   uint32_t n = psq_size(type, w);
   gekko_psq_store(n ? guest_ptr(c, ea, n, 1) : c->mem, v, type, scale, w);
 }
+#ifdef __cplusplus
+}
+#endif
 #endif
