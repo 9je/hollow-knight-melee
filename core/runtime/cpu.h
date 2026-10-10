@@ -31,6 +31,7 @@ typedef struct Cpu {
   uint32_t sr[16];
   uint32_t spr[1024];  /* indexed like Dolphin: XER=1, LR=8, CTR=9, GQRn=912+n, HID2=920 */
   uint8_t *mem;        /* MEM1_SIZE bytes */
+  uint32_t irq_pending; /* runtime sets nonzero when an interrupt source is pending */
 } Cpu;
 
 #define LR  (c->spr[SPR_LR])
@@ -50,6 +51,9 @@ uint32_t guest_mftb(Cpu *c, int upper);
 uint32_t guest_mfspr(Cpu *c, uint32_t spr);
 void guest_mtspr(Cpu *c, uint32_t spr, uint32_t value);
 void guest_fpscr_changed(Cpu *c);
+void guest_irq(Cpu *c);  /* deliver pending interrupts (called only with MSR.EE set) */
+/* Interrupt check point, emitted at every function entry and loop back-edge. */
+#define GUEST_POLL() do { if (__builtin_expect(c->irq_pending != 0, 0) && (c->msr & 0x8000u)) guest_irq(c); } while (0)
 
 static inline uint8_t *guest_ptr(Cpu *c, uint32_t ea, uint32_t size, int write) {
   uint32_t seg = ea >> 29, off = ea & 0x1FFFFFFFu;

@@ -115,3 +115,12 @@ def test_hle_replaces_a_guest_function(tmp_path):
         printf("%d %u %08X\\n", st, c->gpr[3], ret);""",
         hle={0x80006100: "g"}, extra="uint32_t hle_g(Cpu *c) { c->gpr[3] = 77; return LR; }")
     assert out.strip() == "0 77 80000100"
+
+
+def test_interrupt_poll_at_entry_and_loop_backedges():
+    f = F(0x80007000, [asm.addi(3, 0, 0), asm.addi(3, 3, 1), asm.cmpwi(0, 3, 10), asm.bc(12, 0, -8), asm.blr()])
+    prog = Program([f], [])
+    src = prog.emit(0x80007000)
+    body = src.split("\n")
+    assert body[1].strip() == "GUEST_POLL();"            # first statement of the function
+    assert "GUEST_POLL(); goto L_80007004;" in src      # backward branch (loop)

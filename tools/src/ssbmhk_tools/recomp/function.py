@@ -115,7 +115,8 @@ class Program:
                     return _guard(pre, test, f"LR = 0x{ra:08X}u;")
                 return _guard(pre, test, f"LR = 0x{ra:08X}u; " + self._call(f"{c_name(t)}(c)", ra))
             if g is f:
-                return _guard(pre, test, f"goto L_{t:08X};")
+                poll = "GUEST_POLL(); " if t <= pc else ""   # loops are interrupt check points
+                return _guard(pre, test, f"{poll}goto L_{t:08X};")
             return _guard(pre, test, f"return {c_name(t)}(c);")
         if i.op == "bclr":
             if i.lk:
@@ -134,7 +135,8 @@ class Program:
         if entry == f.addr and entry in self.hle:
             return f"uint32_t {c_name(entry)}(Cpu *c) {{ return hle_{self.hle[entry]}(c); }}  /* {f.name}: replaced */"
         labels = self.labels[f.addr]
-        out = [f"uint32_t {c_name(entry)}(Cpu *c) {{  /* {f.name}{'' if entry == f.addr else f' +0x{entry - f.addr:X}'} */"]
+        out = [f"uint32_t {c_name(entry)}(Cpu *c) {{  /* {f.name}{'' if entry == f.addr else f' +0x{entry - f.addr:X}'} */",
+               "  GUEST_POLL();"]   # function entry is an interrupt check point
         if entry != f.addr:
             out.append(f"  goto L_{entry:08X};")
         for k, w in enumerate(f.words):
