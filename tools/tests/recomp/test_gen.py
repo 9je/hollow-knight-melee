@@ -70,3 +70,13 @@ def test_guest_meta_has_mem1_crc32(real, tmp_path):
     meta = (tmp_path / "guest_meta.h").read_text()
     m = re.search(r"#define GUEST_MEM1_CRC32 0x([0-9A-F]{8})u", meta)
     assert m and int(m.group(1), 16) == zlib.crc32((tmp_path / "mem1.bin").read_bytes())
+
+
+def test_gecko_body_returning_past_the_call_site_gets_landings(real, tmp_path):
+    dol, fns = real
+    # as UCF Shield Drop does at 800998A4: return to the caller's return address + 8. Its function is called
+    # from 80099870, so that call must be able to land at 8009987C.
+    code = "C20998A4 00000002\n38E70008 7CE803A6\n4E800020 00000000\n"
+    generate(dol, fns, tmp_path, gecko=code)
+    shards = "".join(p.read_text() for p in tmp_path.glob("shard_*.c"))
+    assert "if (r_ == 0x8009987Cu) goto L_8009987C;" in shards

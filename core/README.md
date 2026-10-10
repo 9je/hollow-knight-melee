@@ -56,3 +56,20 @@ make -C core func-diff && cd core && ./build/func_diff --all --jobs 16 --csv bui
   where a random argument written to MSR sets PR=1 and Dolphin then rejects a privileged
   `mtmsr`. Retail code always runs with PR=0.
 - **Interrupts:** not modelled; the oracle ignores asynchronous exceptions (decrementer etc.).
+
+## libmelee_core (plan 1c)
+
+```bash
+make -C core core-test            # boots the game, determinism, solo Fox, online RNG sync
+make -C core runtime-test         # hooks, timebase, coroutine, nmsub zero sign
+make -C core replay-check-tool && (cd tools && .venv/bin/ssbmhk-replay-check)   # every replay in replay_dir
+```
+
+- The game runs on a coroutine and yields at `lb_80019894` (the scene loop's pad wait). Each `mc_step()` is one frame with the input set by `mc_set_input()`.
+- Time is virtual: one tick per timebase read, and a jump to `frame × 40.5 MHz/60` at each boundary.
+- Interrupts (DEC alarms, DVD, ARAM, PE finish) are taken at the recompiler's poll points, with the full CPU context saved and restored.
+- Matches start like Slippi playback: the debug-VS mode is entered at its GS_VS state, then the requested `StartMeleeData` and seed are installed.
+- The core is Slippi's Melee, not bare 1.02: every slippi-ssbm-asm code tagged `[affects-gameplay]` that Slippi's netplay INI enables (UCF 0.84, neutral spawns, wobble limit, ...; list in `runtime/slippi_gameplay.txt`) is applied as Gecko code at generation time (`make -C core gecko`, pinned and verified). The recompiler handles the Slippi asm idioms in those bodies: `bl`/`blrl` data tables, `branch` jumps into the middle of functions, and returns past the caller's return site (UCF Shield Drop).
+- `mc_start_match(..., MC_ONLINE_RNG)` replays an online match: Slippi online re-seeds the RNG every frame (`runtime/online_rng.gecko` plus a host proc).
+- A zero result of `fnmsub`/`fnmsubs`/`ps_nmsub` gets the sign Slippi's deterministic JIT gives it (`b - a*c`), not the hardware's (`gekko_slippi_nmsub`, set by `mc_init`; the difftest keeps the hardware rule).
+- Replay checking compares action, position, facing, percent, shield, velocities and airborne, bit for bit, on every frame for every fighter. Measured speed on the development machine: 100–125 frames/s on most stages, 66 on Fountain of Dreams (its reflections), so 1.1–2× real time.

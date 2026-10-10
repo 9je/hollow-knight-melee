@@ -11,8 +11,8 @@ from . import asm
 CORE = Path(__file__).resolve().parents[3] / "core"
 
 
-def build_and_run(tmp_path, funcs, data_words, main_body, hle=None, extra=""):
-    prog = Program(funcs, data_words, hle or {})
+def build_and_run(tmp_path, funcs, data_words, main_body, hle=None, extra="", entries=(), return_offsets=None):
+    prog = Program(funcs, data_words, hle or {}, entries=entries, return_offsets=return_offsets)
     defs = "\n".join(prog.emit(e) for e in sorted(prog.entries))
     protos = "\n".join(f"uint32_t {c_name(e)}(Cpu *c);" for e in sorted(prog.entries))
     table = ",\n".join(f"{{0x{e:08X}u, {c_name(e)}}}" for e in sorted(prog.entries))
@@ -140,3 +140,39 @@ def test_longjmp_lands_at_setjmp_return_site_in_a_live_frame(tmp_path):
         c->gpr[1] = 0x80100000u; LR = 0x80000100u; st = th_call(c, fn_80008000, &ret);
         printf("%d %u %08X\\n", st, c->gpr[3], ret);""")
     assert out.strip() == "0 7 80000100"
+
+
+def test_bl_to_blrl_loads_the_table_address_without_a_call(tmp_path):
+    # the asm idiom for data in code: `bl Table; mflr r3` with `Table: blrl; .long ...` gives r3 = &data
+    f1 = F(0x80001000, [asm.mflr(5), asm.bl(0x10), asm.mflr(3), asm.mtlr(5), asm.blr(),
+                        asm.blrl(), 0x4BFFE818, 0x00003330])
+    prog = Program([f1], [])
+    assert 0x80001014 not in prog.entries
+    out = build_and_run(tmp_path, [f1], [], """
+        LR = 0x80000100u;
+        st = th_call(c, fn_80001000, &ret);
+        printf("%d %08X %08X\\n", st, c->gpr[3], ret);""")
+    assert out.strip() == "0 80001018 80000100"
+
+
+def test_extra_entries_can_be_reached_by_indirect_jumps(tmp_path):
+    f1 = F(0x80001000, [asm.addi(3, 0, 1), asm.addi(3, 3, 2), asm.blr()])
+    prog = Program([f1], [], entries={0x80001004})
+    assert 0x80001004 in prog.entries
+    out = build_and_run(tmp_path, [f1], [], """
+        LR = 0x80000100u; c->gpr[3] = 10;
+        st = th_call(c, fn_80001004, &ret);
+        printf("%d %u\\n", st, c->gpr[3]);""", entries={0x80001004})
+    assert out.strip() == "0 12"
+
+
+def test_return_offsets_land_past_the_call_site(tmp_path):
+    # f2 returns to its caller's return address + 8 (Slippi's UCF Shield Drop does this from a Gecko body)
+    f1 = F(0x80001000, [asm.mflr(5), asm.bl(0xFC), asm.addi(3, 0, 1), asm.addi(3, 0, 7), asm.addi(4, 0, 9),
+                        asm.mtlr(5), asm.blr()])
+    f2 = F(0x80001100, [asm.mflr(6), asm.addi(6, 6, 8), asm.mtlr(6), asm.blr()])
+    out = build_and_run(tmp_path, [f1, f2], [], """
+        LR = 0x80000100u;
+        st = th_call(c, fn_80001000, &ret);
+        printf("%d %u %u %08X\\n", st, c->gpr[3], c->gpr[4], ret);""", return_offsets={0x80001100: {8}})
+    assert out.strip() == "0 0 9 80000100"

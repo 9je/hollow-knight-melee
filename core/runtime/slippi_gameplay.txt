@@ -1,0 +1,29 @@
+# Slippi Gecko codes baked into libmelee_core: every code tagged [affects-gameplay] in slippi-ssbm-asm
+# that Slippi's netplay INI enables ($Required / $Recommended). One #path comment from the INI per line.
+Common/Initialize Player Data/Init Player Data.asm
+Common/Initialize Stage Data/Init Stage Data.asm
+Common/NanaDeterminism/NanaDeterminism.asm
+Common/PSCameraIndependentMonitor/PSCameraIndependentMonitor.asm
+External/FreezeGlitchFix/FreezeGlitchFix.asm
+External/NeutralSpawn/NeutralSpawn.asm
+External/PreventWobbling/Init Wobble Count Air.asm
+External/PreventWobbling/Init Wobble Count Ground.asm
+External/PreventWobbling/Wobble Check.asm
+External/UCF 0.84/UCF/UCF DBOOC SquatRv Fix.asm
+External/UCF 0.84/UCF/UCF Dashback.asm
+External/UCF 0.84/UCF/UCF Pad Buffer + 1.0 Cardinals.asm
+External/UCF 0.84/UCF/UCF SDI.asm
+External/UCF 0.84/UCF/UCF Shield Drop Extended.asm
+External/UCF 0.84/UCF/UCF Shield Drop.asm
+External/UCF 0.84/UCF/UCF Shield SDI.asm
+External/UCF 0.84/UCF/UCF Tumble.asm
+Online/Core/BrawlOffscreenDamage.asm
+Online/Core/FreezeDeadUpFallPhysics/InitHitVelocity.asm
+Online/Core/FreezeDeadUpFallPhysics/UpdateFallVelocity.asm
+Online/Core/FreezeDeadUpFallPhysics/UpdateModelPos.asm
+Online/Core/Hacks/FD/DesyncProofBGTransformations.asm
+Online/Core/Hacks/Stadium/CustomZeroBuffer.asm
+Online/Core/Hacks/Stadium/GrPsxIsValid.asm
+Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+Online/Core/Hacks/Stadium/StadiumFileLoad.asm
+Online/Core/WhispyBlowDirFix/WhispyBlowDirFix.asm

@@ -1,0 +1,28 @@
+* Slippi online's per-frame RNG sync (slippi-ssbm-asm Online/Core/InitOnlinePlay.asm, FN_SyncRNG), for replaying
+* online matches. At StartMelee (0x8016E748), after the replaced `bl 0x802254B8`, when the runtime has set the
+* word at 0x80002F00, create the same GObj and proc Slippi does; the proc is a host function (0x80000208, frame.c).
+C216E748 0000000C
+3D808022 618C54B8
+* lis r12,0x8022 / ori r12,r12,0x54B8: the replaced bl 0x802254B8
+7D8903A6 4E800421
+* mtctr r12 / bctrl
+3D808000 800C2F00
+* lis r12,0x8000 / lwz r0,0x2F00(r12): online flag
+2C000000 4182003C
+* cmpwi r0,0 / beq done
+38600004 38800007
+* li r3,4 (player GObj type) / li r4,7 (not on pause)
+38A00000 3D808039
+* li r5,0 / lis r12,0x8039
+618C01F0 7D8903A6
+* ori r12,r12,0x01F0 / mtctr r12: GObj_Create
+4E800421 3C808000
+* bctrl / lis r4,0x8000
+60840208 38A00000
+* ori r4,r4,0x0208 (host SyncRNG) / li r5,0 (priority)
+3D808038 618CFD54
+* lis r12,0x8038 / ori r12,r12,0xFD54: GObj_AddProc
+7D8903A6 4E800421
+* mtctr r12 / bctrl
+60000000 00000000
+* done: nop / branch back

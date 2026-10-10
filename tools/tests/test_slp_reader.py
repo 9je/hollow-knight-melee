@@ -22,6 +22,7 @@ def test_game_start_fields():
     assert r.start.seed == 0xDEADBEEF
     assert [(p.port, p.ext_char, p.ptype, p.costume) for p in r.start.players] == [(0, 2, 0, 3), (1, 20, 1, 0)]
     assert len(r.start.game_info) == 312
+    assert r.start.major_scene == 0   # recorded from Slippi 3.12 on; this writer writes 3.5
 
 
 def test_frames_pre_post():

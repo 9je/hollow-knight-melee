@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "mc_internal.h"
 
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); exit(1); } } while (0)
@@ -52,6 +53,16 @@ int main(void) {
   CHECK(m->dead && strstr(m->error, "C8000000") != NULL);
   CHECK(coro_resume(co) == 1 && m->dead);       /* a dead machine stays parked */
   coro_free(co);
+  /* nmsub zero sign: hardware gives -(a*c - b) = -0 when a*c == b; Slippi's deterministic JIT computes
+   * b - a*c = +0. Everything else is the same. */
+  CHECK(signbit(gekko_fnmsubs(0, 2.0, 3.0, 6.0).ps0) && signbit(gekko_fnmsub(0, 2.0, 3.0, 6.0)));
+  gekko_slippi_nmsub = 1;
+  CHECK(!signbit(gekko_fnmsubs(0, 2.0, 3.0, 6.0).ps0) && !signbit(gekko_fnmsubs(0, 2.0, 3.0, 6.0).ps1));
+  CHECK(!signbit(gekko_fnmsub(0, 2.0, 3.0, 6.0)));
+  GekkoPS a = {2.0, 0.0}, cc = {3.0, 5.0}, b = {6.0, -0.0}, r = gekko_ps_nmsub(0, a, cc, b);
+  CHECK(!signbit(r.ps0) && signbit(r.ps1));                 /* -0 - (+0) = -0 */
+  CHECK(gekko_fnmsubs(0, 2.0, 3.0, 7.0).ps0 == 1.0);        /* nonzero results unchanged */
+  gekko_slippi_nmsub = 0;
   puts("runtime tests passed");
   return 0;
 }

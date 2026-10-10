@@ -16,6 +16,7 @@ ssbmhk-verify-iso = "ssbmhk_tools.cli:verify_iso_main"
 ssbmhk-oracle-replay = "ssbmhk_tools.cli:oracle_replay_main"
 ssbmhk-recomp-insn-tests = "ssbmhk_tools.recomp.cli:insn_tests_main"
 ssbmhk-recomp = "ssbmhk_tools.recomp.cli:recomp_main"
+ssbmhk-replay-check = "ssbmhk_tools.replaycheck:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -22,6 +22,9 @@ class Func:
     def end(self) -> int:
         return self.addr + self.size
 
+    def word_at(self, addr: int) -> int:
+        return self.words[(addr - self.addr) // 4]
+
 
 def c_name(addr: int) -> str:
     return f"fn_{addr:08X}"
@@ -30,6 +33,9 @@ def c_name(addr: int) -> str:
 def _target(i: Insn, pc: int) -> int:
     off = i.li if i.op == "b" else i.bd
     return (off if i.aa else pc + off) & 0xFFFFFFFF
+
+
+BLRL = 0x4E800021
 
 
 def _cond(i: Insn) -> tuple[str, str]:
@@ -53,11 +59,15 @@ def _guard(pre: str, test: str, action: str) -> str:
 
 
 class Program:
-    def __init__(self, funcs: list[Func], data_words: list[int], hle: dict[int, str] | None = None):
+    def __init__(self, funcs: list[Func], data_words: list[int], hle: dict[int, str] | None = None, entries=(),
+                 return_offsets: dict[int, set[int]] | None = None):
+        """entries: extra entry points, reached by indirect jumps the code itself does not reveal.
+        return_offsets: function start -> K, where a call to that function may return to its return address + K."""
+        return_offsets = return_offsets or {}
         self.hle = dict(hle or {})  # function start -> host replacement hle_<name>
         self.funcs = sorted(funcs, key=lambda f: f.addr)
         self._starts = [f.addr for f in self.funcs]
-        self.entries: set[int] = set(self._starts)
+        self.entries: set[int] = set(self._starts) | {e for e in entries if self.func_at(e) is not None}
         self.unresolved: dict[int, int] = {}
         self.labels: dict[int, set[int]] = {f.addr: set() for f in self.funcs}
         self.cases: dict[int, list[int]] = {}
@@ -79,10 +89,17 @@ class Program:
                 if g is None:
                     self.unresolved[pc] = t
                     continue
+                if i.lk and g.word_at(t) == BLRL:
+                    continue   # `bl Table` + `Table: blrl` loads the table address: no call (see _branch)
                 self.labels[g.addr].add(t)
                 if i.lk and t in setjmp:
                     self.landings.setdefault(f.addr, []).append(pc + 4)
                     self.labels[f.addr].add(pc + 4)
+                if i.lk and t in return_offsets:
+                    for k in sorted(return_offsets[t]):
+                        if self.func_at(pc + 4 + k) is f and pc + 4 + k not in self.landings.get(f.addr, []):
+                            self.landings.setdefault(f.addr, []).append(pc + 4 + k)
+                            self.labels[f.addr].add(pc + 4 + k)
                 if i.lk:
                     if t != pc + 4:
                         self.entries.add(t)
@@ -122,6 +139,8 @@ class Program:
             if i.lk:
                 if t == ra:
                     return _guard(pre, test, f"LR = 0x{ra:08X}u;")
+                if g.word_at(t) == BLRL:   # blrl returns to ra at once, leaving LR = t + 4
+                    return _guard(pre, test, f"LR = 0x{t + 4:08X}u;")
                 return _guard(pre, test, f"LR = 0x{ra:08X}u; " + self._call(f, f"{c_name(t)}(c)", ra))
             if g is f:
                 poll = "GUEST_POLL(); " if t <= pc else ""   # loops are interrupt check points

@@ -14,6 +14,9 @@
 #define GS_VS 2
 #define MAGIC_ONLOAD 0x80000200u        /* host callbacks planted in GameMode structs (not guest code) */
 #define MAGIC_UNLOAD 0x80000204u
+#define MAGIC_SYNC_RNG 0x80000208u      /* GObj proc created by runtime/online_rng.gecko */
+#define ADDR_ONLINE_FLAG 0x80002F00u    /* read by runtime/online_rng.gecko; +4: the RNG offset */
+#define ADDR_GLOBAL_FRAME 0x80479D60u
 
 static uint32_t mode_struct(Cpu *c, uint32_t kind) {
   for (uint32_t m = ADDR_MODES; ld8(c, m + 1) != GM_COUNT; m += 0x14)
@@ -64,6 +67,8 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
     uint32_t enter = ld32(c, info + 4);
     for (uint32_t i = 0; i < sizeof m->start; i++) st8(c, enter + i, m->start[i]);
     st32(c, ADDR_RAND_SEED, m->seed);
+    st32(c, ADDR_ONLINE_FLAG, (uint32_t)m->online);
+    st32(c, ADDR_ONLINE_FLAG + 4, m->seed);
     m->start_req = 0;
     m->in_match = 1;
   }
@@ -81,6 +86,10 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
     c->spr[SPR_LR] = lr;
     if (unload) st8(c, ADDR_STATE_MACHINE + 1, GM_DEBUG_VS);   /* pending_mode: runGameMode returns it */
     else st8(c, ADDR_STATE_MACHINE + 3, 1);                     /* curr_state_id: debug VS state 1 is GS_VS */
+    RET;
+  }
+  if (target == MAGIC_SYNC_RNG) {   /* Slippi FN_SyncRNG: seed = rotl(global frame, 16) + RNG offset */
+    st32(c, ADDR_RAND_SEED, rotl32(ld32(c, ADDR_GLOBAL_FRAME), 16) + ld32(c, ADDR_ONLINE_FLAG + 4));
     RET;
   }
   GuestFn f = guest_lookup(target);

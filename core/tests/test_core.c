@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
   uint8_t start[MC_START_SIZE];
   mc_solo_fox_start(start);
   CHECK(start[0] == 0x10 && start[0x0F] == 0x20 && start[0x60] == 0x02 && start[0x61] == 0x00 && start[0x85] == 0x03);
-  CHECK(mc_start_match(start, 1) == 0);
-  CHECK(mc_start_match(start, 1) == -1 && strstr(mc_error(), "already"));
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  CHECK(mc_start_match(start, 1, 0) == -1 && strstr(mc_error(), "already"));
   McInput idle = {0}, right = {0};
   right.stick_x = 127;
   mc_set_input(0, &idle);
@@ -68,6 +68,15 @@ int main(int argc, char **argv) {
   CHECK(mc_step() == -1);
   uint32_t h2 = boot_and_run(mem1, iso, 300);
   CHECK(h1 == h2);
+  /* an online match: Slippi's SyncRNG proc sets seed = rotl(global frame, 16) + the start seed every frame.
+   * Checked over the first frames on Battlefield, where nothing draws a random number after the proc yet
+   * (FD's background particles do, at once). */
+  start[0x0F] = 0x1F;
+  CHECK(mc_start_match(start, 0x37E0u, MC_ONLINE_RNG) == 0);
+  for (uint32_t gf = 0; gf < 5; gf++) {   /* the proc runs before the frame advances the global frame counter */
+    CHECK(mc_step() == 0);
+    CHECK(mc_peek32(0x80479D60u) == gf + 1 && mc_peek32(0x804D5F90u) == ((gf << 16 | gf >> 16) + 0x37E0u));
+  }
   puts("core tests passed");
   mc_shutdown();
   return 0;

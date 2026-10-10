@@ -31,7 +31,8 @@ typedef struct {
 void mc_set_input(int port, const McInput *in);     /* NULL = no controller */
 /* Starts a match; on return the game is at the in-game scene's first frame boundary, so the next
  * mc_step() runs the match's first frame (Slippi frame -123). */
-int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed);
+#define MC_ONLINE_RNG 1u   /* flags: replay a Slippi online match (its per-frame RNG sync, seeded by `seed`) */
+int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags);
 void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
 

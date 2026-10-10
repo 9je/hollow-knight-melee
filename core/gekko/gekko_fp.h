@@ -20,6 +20,9 @@ double gekko_fmul(uint32_t fpscr, double a, double c);
 double gekko_fdiv(uint32_t fpscr, double a, double b);
 double gekko_fmadd (uint32_t fpscr, double a, double c, double b);   /* a*c+b */
 double gekko_fmsub (uint32_t fpscr, double a, double c, double b);   /* a*c-b */
+/* Nonzero: fnmsub / fnmsubs / ps_nmsub give a zero result the sign of b - a*c, as Slippi's deterministic
+ * JIT computes them (Ishiiruka Jit64::fmaddXX), not of -(a*c - b) as the hardware does. Default 0. */
+extern int gekko_slippi_nmsub;
 double gekko_fnmadd(uint32_t fpscr, double a, double c, double b);
 double gekko_fnmsub(uint32_t fpscr, double a, double c, double b);
 /* scalar single (result written to both ps0 and ps1) */

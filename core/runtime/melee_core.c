@@ -51,6 +51,7 @@ static int run_frame(void) {
 int mc_init(const char *mem1_path, const char *iso_path) {
   mc_shutdown();
   init_error[0] = 0;
+  gekko_slippi_nmsub = 1;   /* the reference is Slippi Dolphin's JIT: zero signs of nmsub (gekko_fp.h) */
   Machine *m = calloc(1, sizeof *m);
   if (!m) return init_fail("out of memory");
   g_m = m;
@@ -128,13 +129,14 @@ void mc_set_input(int port, const McInput *in) {
   p[7] = in->trigger_r;
 }
 
-int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed) {
+int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags) {
   Machine *m = g_m;
   if (!m) return run_frame();
   if (m->dead) return -1;
   if (m->in_match || m->start_req) { snprintf(m->error, sizeof m->error, "a match was already started"); return -1; }
   memcpy(m->start, start, MC_START_SIZE);
   m->seed = seed;
+  m->online = (flags & MC_ONLINE_RNG) != 0;
   m->start_req = 1;
   for (int n = 0; !m->in_match; n++) {
     if (n == 600) {

@@ -68,13 +68,15 @@ $(GOBJ)/gekko_fp.o: gekko/gekko_fp.c gekko/gekko_fp.h
 
 # ---- libmelee_core (plan 1c) ----
 CORE_GEN := $(B)/gen-core
-UCF := $(B)/ucf084.gecko
-$(UCF):
-	bash fetch_ucf.sh $@
-ucf: $(UCF)
-core-gen: $(UCF)
-	$(MAKE) gen GEN=$(CORE_GEN) HLE=runtime/hle.txt GECKO=$(UCF)
-.PHONY: ucf core-gen
+GECKO_CODES := $(B)/slippi_gameplay.gecko
+$(GECKO_CODES): fetch_gecko.sh runtime/slippi_gameplay.txt
+	bash fetch_gecko.sh $@
+gecko: $(GECKO_CODES)
+$(B)/core.gecko: $(GECKO_CODES) runtime/online_rng.gecko
+	cat $^ > $@
+core-gen: $(B)/core.gecko
+	$(MAKE) gen GEN=$(CORE_GEN) HLE=runtime/hle.txt GECKO=$(B)/core.gecko
+.PHONY: gecko core-gen
 guest: gen
 	$(MAKE) $(B)/libguest.a
 .PHONY: gen guest
@@ -89,7 +91,7 @@ runtime-test: | $(B)
 CORE_GOBJ := $(B)/guest-core
 RUNTIME_SRCS := hw coro irq hle_io frame melee_core
 RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h $(GUEST_HDRS)
-$(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS)
+$(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS) $(CORE_GEN)/guest_meta.h
 	mkdir -p $(CORE_GOBJ)
 	$(CC) $(GEN_CFLAGS) $(INC) -I$(CORE_GEN) -c $< -o $@
 $(B)/libmelee_core.a: $(RUNTIME_SRCS:%=$(CORE_GOBJ)/rt_%.o) $(CORE_GOBJ)/libguest.a
@@ -102,3 +104,6 @@ core-test: core
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_core.c $(B)/libmelee_core.a -lm -o $(B)/test_core
 	$(B)/test_core $(CORE_GEN)/mem1.bin "$(ISO)"
 .PHONY: core core-test
+replay-check-tool: core
+	$(CC) $(GEN_CFLAGS) $(INC) tools/replay_check.c $(B)/libmelee_core.a -lm -o $(B)/replay_check
+.PHONY: replay-check-tool

@@ -28,6 +28,7 @@ typedef struct Machine {
   int in_match;
   uint8_t start[0x138];                 /* StartMeleeData to install */
   uint32_t seed;
+  int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   int dead;
   char error[256];

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .decode import TRAP_OPS, decode
 from .function import Func, Program, c_name
-from .gecko import apply_codes
+from .gecko import apply_codes, branch_targets, code_words, parent_return_skips
 
 
 # Branches whose target is outside every function by design; emitted as guest_trap.
@@ -62,6 +62,18 @@ def _write(path: Path, text: str) -> None:
         path.write_text(text)
 
 
+def _injection_sites(patched: dict[int, int], bodies) -> list[tuple[int, int]]:
+    """(patched site, body address) for each C2 injection: the site holds `b body`."""
+    starts = {a for a, _ in bodies}
+    out = []
+    for site, w in patched.items():
+        if w >> 26 == 18 and not w & 3:
+            t = (site + ((w & 0x03FFFFFC) ^ 0x02000000) - 0x02000000) & 0xFFFFFFFF
+            if t in starts:
+                out.append((site, t))
+    return out
+
+
 def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: str = "") -> Report:
     """hle_names: guest functions replaced by host functions `uint32_t hle_<name>(Cpu *)`.
     gecko: Gecko code text (04/C2) applied to code and to the MEM1 image."""
@@ -75,8 +87,18 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: s
     word = lambda a: patched.get(a, dol.word(a))  # noqa: E731
     funcs = [Func(s.name, s.addr, s.size, tuple(word(a) for a in range(s.addr, s.addr + s.size, 4)))
              for s in fns]
-    funcs += [Func(f"gecko_{a:08X}", a, 4 * len(b), tuple(b)) for a, b in bodies]
-    prog = Program(funcs, _data_words(dol), hle)
+    funcs += [Func(f"gecko_{a:08X}", a, 4 * len(b), code_words(a, b)) for a, b in bodies]
+    # a Gecko body runs inside the function it is injected in; one that returns past its caller's return site
+    # (parent_return_skips) needs landings at every call of that function
+    sites = {body_addr: site for site, body_addr in _injection_sites(patched, bodies)}
+    skips: dict[int, set[int]] = {}
+    for a, b in bodies:
+        ks = parent_return_skips(code_words(a, b))
+        host = next((s for s in fns if s.addr <= sites[a] < s.addr + s.size), None) if ks else None
+        if host is not None:
+            skips.setdefault(host.addr, set()).update(ks)
+    prog = Program(funcs, _data_words(dol), hle, entries={t for _, b in bodies for t in branch_targets(b)},
+                   return_offsets=skips)
     rep = Report(n_funcs=len(funcs), n_entries=len(prog.entries), unresolved={pc: t for pc, t in prog.unresolved.items() if KNOWN_UNRESOLVED.get(pc) != t},
                  jump_table_funcs=len(prog.cases), sda=sda_bases(dol, fns))
     for f in funcs:
