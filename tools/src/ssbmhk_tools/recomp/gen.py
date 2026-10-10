@@ -1,5 +1,6 @@
 """Whole-DOL generation: shards of C, the entry table, guest metadata, MEM1 image and a report."""
 import struct
+import zlib
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,17 +110,18 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: s
     table += [f'  {{0x{f.addr:08X}u, "{f.name}"}},' for f in funcs]
     table += ["};", "const size_t g_guest_nnames = sizeof g_guest_names / sizeof g_guest_names[0];"]
     _write(out / "guest_table.c", "\n".join(table) + "\n")
+    img = bytearray(dol.mem1_image())
+    for a, v in [*patched.items(), *((a + 4 * k, w) for a, b in bodies for k, w in enumerate(b))]:
+        img[a & 0x01FFFFFF:(a & 0x01FFFFFF) + 4] = v.to_bytes(4, "big")
+    img = bytes(img)
     _write(out / "guest_meta.h", "\n".join([
         "#pragma once", "#include <stddef.h>", "#include <stdint.h>",
         f"#define GUEST_R2 0x{rep.sda[0]:08X}u", f"#define GUEST_R13 0x{rep.sda[1]:08X}u",
         f"#define GUEST_ENTRY 0x{dol.entry:08X}u", f"#define GUEST_BSS_ADDR 0x{dol.bss_addr:08X}u",
         f"#define GUEST_BSS_SIZE 0x{dol.bss_size:08X}u", f'#define GUEST_MAIN_DOL_SHA1 "{dol.sha1}"',
+        f"#define GUEST_MEM1_CRC32 0x{zlib.crc32(img):08X}u",
         "typedef struct { uint32_t addr; const char *name; } GuestName;",
         "extern const GuestName g_guest_names[];", "extern const size_t g_guest_nnames;", ""]))
-    img = bytearray(dol.mem1_image())
-    for a, v in [*patched.items(), *((a + 4 * k, w) for a, b in bodies for k, w in enumerate(b))]:
-        img[a & 0x01FFFFFF:(a & 0x01FFFFFF) + 4] = v.to_bytes(4, "big")
-    img = bytes(img)
     if not (out / "mem1.bin").exists() or (out / "mem1.bin").read_bytes() != img:
         (out / "mem1.bin").write_bytes(img)
     lines = [rep.summary(), "", "Trap instructions (HLE candidates for plan 1c):"]

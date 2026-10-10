@@ -60,3 +60,13 @@ def test_gecko_codes_patch_code_and_image(real, tmp_path):
     img = (tmp_path / "mem1.bin").read_bytes()
     assert img[(at + 4) & 0x01FFFFFF:(at + 8) & 0x01FFFFFF] == bytes.fromhex("60000000")
     assert img[0x1800:0x1804] == bytes.fromhex("38000000")
+
+
+def test_guest_meta_has_mem1_crc32(real, tmp_path):
+    import re
+    import zlib
+    dol, fns = real
+    generate(dol, fns, tmp_path)
+    meta = (tmp_path / "guest_meta.h").read_text()
+    m = re.search(r"#define GUEST_MEM1_CRC32 0x([0-9A-F]{8})u", meta)
+    assert m and int(m.group(1), 16) == zlib.crc32((tmp_path / "mem1.bin").read_bytes())
