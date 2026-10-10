@@ -92,7 +92,10 @@ bool step(u32 word) {
   else
     Interpreter::RunInterpreterOp(g_interp, inst);
   g_last_exceptions = s.Exceptions;
-  return s.Exceptions != 0;
+  // Only synchronous exceptions stop execution; decrementer/external/perf-monitor are interrupts,
+  // which plan 1b does not model (the recompiled side has no interrupt delivery either).
+  return (s.Exceptions & (EXCEPTION_SYSCALL | EXCEPTION_DSI | EXCEPTION_ISI | EXCEPTION_ALIGNMENT |
+                          EXCEPTION_FPU_UNAVAILABLE | EXCEPTION_PROGRAM)) != 0;
 }
 }  // namespace
 

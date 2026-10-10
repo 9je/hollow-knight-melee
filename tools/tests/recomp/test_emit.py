@@ -47,3 +47,9 @@ def test_every_decoder_op_is_emittable():
     missing = {n for n in names - d.BRANCH_OPS - d.TRAP_OPS - d.NOP_OPS
                if n not in __import__("ssbmhk_tools.recomp.emit", fromlist=["OPS"]).OPS}
     assert missing == set()
+
+
+def test_fp_load_store_faults_on_misaligned_ea():
+    # Dolphin raises an alignment exception for every FP load/store whose EA is not 4-byte aligned
+    for word in (0xC0230008, 0xC8230008, 0xD0230008, 0xD8230008, 0x7C2327AE):  # lfs lfd stfs stfd stfiwx
+        assert "if (ea_ & 3u) guest_fault(c, ea_" in e(word), hex(word)

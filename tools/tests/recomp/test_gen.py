@@ -29,3 +29,9 @@ def test_generate_whole_dol(real, tmp_path):
     assert set(rep.trap_ops) <= {"sc", "rfi", "tw", "dcbz_l", "unknown"}
     assert (tmp_path / "mem1.bin").stat().st_size == 0x01800000
     assert "GUEST_R13" in (tmp_path / "guest_meta.h").read_text()
+
+
+def test_guest_table_has_function_names(real, tmp_path):
+    dol, fns = real
+    generate(dol, fns, tmp_path)
+    assert '"memcpy"' in (tmp_path / "guest_table.c").read_text()

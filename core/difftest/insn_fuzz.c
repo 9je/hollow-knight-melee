@@ -39,6 +39,7 @@ static void rand_state(Rng *g, Cpu *c) {
 
 static void place_ea(Rng *g, const InsnCase *k, Cpu *c) {
   uint32_t t = 0x80100100u + 8u * (uint32_t)(rng_next(g) % 0x1A0);
+  if (rng_next(g) % 4 == 0) t += (uint32_t)(rng_next(g) & 7);  /* misaligned EAs: alignment exceptions */
   switch (k->ea_kind) {
   case 1: case 3: c->gpr[k->ra] = t - (uint32_t)k->disp; break;
   case 2: case 4:
@@ -49,7 +50,8 @@ static void place_ea(Rng *g, const InsnCase *k, Cpu *c) {
   }
 }
 
-static int diff(const Cpu *a, const Cpu *b, char *out, size_t n) {
+/* faulted: DAR/DSISR are exception-handler state Dolphin sets on a fault; not compared then. */
+static int diff(const Cpu *a, const Cpu *b, int faulted, char *out, size_t n) {
   for (int i = 0; i < 32; i++) if (a->gpr[i] != b->gpr[i]) return snprintf(out, n, "r%d dolphin=%08X ours=%08X", i, a->gpr[i], b->gpr[i]);
   for (int i = 0; i < 32; i++) {
     if (f2u(a->fpr[i].ps0) != f2u(b->fpr[i].ps0)) return snprintf(out, n, "f%d.ps0 dolphin=%016llX ours=%016llX", i, (unsigned long long)f2u(a->fpr[i].ps0), (unsigned long long)f2u(b->fpr[i].ps0));
@@ -57,7 +59,7 @@ static int diff(const Cpu *a, const Cpu *b, char *out, size_t n) {
   }
   if (a->cr != b->cr) return snprintf(out, n, "cr dolphin=%08X ours=%08X", a->cr, b->cr);
   if ((a->spr[SPR_XER] & XER_MASK) != (b->spr[SPR_XER] & XER_MASK)) return snprintf(out, n, "xer dolphin=%08X ours=%08X", a->spr[SPR_XER], b->spr[SPR_XER]);
-  for (int i = 0; i < 1024; i++) if (i != SPR_XER && a->spr[i] != b->spr[i]) return snprintf(out, n, "spr%d dolphin=%08X ours=%08X", i, a->spr[i], b->spr[i]);
+  for (int i = 0; i < 1024; i++) if (i != SPR_XER && !(faulted && (i == 18 || i == 19)) && a->spr[i] != b->spr[i]) return snprintf(out, n, "spr%d dolphin=%08X ours=%08X", i, a->spr[i], b->spr[i]);
   if (a->msr != b->msr) return snprintf(out, n, "msr dolphin=%08X ours=%08X", a->msr, b->msr);
   if ((a->fpscr & 0xFF) != (b->fpscr & 0xFF)) return snprintf(out, n, "fpscr dolphin=%08X ours=%08X", a->fpscr, b->fpscr);
   for (int i = 0; i < 16; i++) if (a->sr[i] != b->sr[i]) return snprintf(out, n, "sr%d", i);
@@ -97,7 +99,7 @@ int main(int argc, char **argv) {
       char msg[160] = "";
       int fail = 0;
       if ((dr == DOL_OK) != (tr == TH_OK)) { fail = 1; snprintf(msg, sizeof msg, "status dolphin=%d(exc %X) ours=%d", dr, dolphin_last_exceptions(), tr); }
-      else if (diff(A, B, msg, sizeof msg)) fail = 1;
+      else if (diff(A, B, dr != DOL_OK, msg, sizeof msg)) fail = 1;
       if (fail) {
         bad++; op_bad++;
         if (printed++ < 30) printf("MISMATCH %s %08X state %ld: %s\n", kc->op, kc->word, s, msg);

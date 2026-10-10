@@ -169,6 +169,11 @@ def _int_ops():
 def F(n): return f"c->fpr[{n}]"
 
 
+def _al(size, write):
+    """Dolphin raises an alignment exception for FP loads/stores whose EA is not 4-byte aligned."""
+    return f"if (ea_ & 3u) guest_fault(c, ea_, {size}, {write}); "
+
+
 def _fp_ops():
     t = {}
     A0, B0, C0 = (lambda i: f"{F(i.ra)}.ps0"), (lambda i: f"{F(i.rb)}.ps0"), (lambda i: f"{F(i.rc)}.ps0")
@@ -213,14 +218,14 @@ def _fp_ops():
     for suf, ea, upd in forms:
         u = (lambda upd: (lambda i: f" {G(i.ra)} = ea_;" if upd else ""))(upd)
         t["lfs" + suf] = (lambda ea, u: lambda i: (
-            f"{{ uint32_t ea_ = {ea(i)}; {F(i.rd)}.ps0 = {F(i.rd)}.ps1 = u2f(gekko_convert_to_double(ld32(c, ea_)));{u(i)} }}"))(ea, u)
+            f"{{ uint32_t ea_ = {ea(i)}; {_al(4, 0)}{F(i.rd)}.ps0 = {F(i.rd)}.ps1 = u2f(gekko_convert_to_double(ld32(c, ea_)));{u(i)} }}"))(ea, u)
         t["lfd" + suf] = (lambda ea, u: lambda i: (
-            f"{{ uint32_t ea_ = {ea(i)}; {F(i.rd)}.ps0 = u2f(ld64(c, ea_));{u(i)} }}"))(ea, u)
+            f"{{ uint32_t ea_ = {ea(i)}; {_al(8, 0)}{F(i.rd)}.ps0 = u2f(ld64(c, ea_));{u(i)} }}"))(ea, u)
         t["stfs" + suf] = (lambda ea, u: lambda i: (
-            f"{{ uint32_t ea_ = {ea(i)}; st32(c, ea_, gekko_convert_to_single(f2u({F(i.rs)}.ps0)));{u(i)} }}"))(ea, u)
+            f"{{ uint32_t ea_ = {ea(i)}; {_al(4, 1)}st32(c, ea_, gekko_convert_to_single(f2u({F(i.rs)}.ps0)));{u(i)} }}"))(ea, u)
         t["stfd" + suf] = (lambda ea, u: lambda i: (
-            f"{{ uint32_t ea_ = {ea(i)}; st64(c, ea_, f2u({F(i.rs)}.ps0));{u(i)} }}"))(ea, u)
-    t["stfiwx"] = lambda i: f"st32(c, {_ea_x(i)}, (uint32_t)f2u({F(i.rs)}.ps0));"
+            f"{{ uint32_t ea_ = {ea(i)}; {_al(8, 1)}st64(c, ea_, f2u({F(i.rs)}.ps0));{u(i)} }}"))(ea, u)
+    t["stfiwx"] = lambda i: f"{{ uint32_t ea_ = {_ea_x(i)}; {_al(4, 1)}st32(c, ea_, (uint32_t)f2u({F(i.rs)}.ps0)); }}"
     ea_q = lambda i: f"{_ra0(i)} + (uint32_t){i.psq_d}"
     ea_qu = lambda i: f"{G(i.ra)} + (uint32_t){i.psq_d}"
     for name, ea, upd in (("psq_l", ea_q, False), ("psq_lu", ea_qu, True)):

@@ -16,7 +16,8 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
 }
 uint32_t guest_mftb(Cpu *c, int upper) { (void)c; (void)upper; return 0; }
 uint32_t guest_mfspr(Cpu *c, uint32_t spr) { return c->spr[spr]; }
-void guest_mtspr(Cpu *c, uint32_t spr, uint32_t value) { c->spr[spr] = value; }
+/* Mirrors Dolphin's mtspr side effects on register values only: DMAL's DMA_T trigger bit self-clears. */
+void guest_mtspr(Cpu *c, uint32_t spr, uint32_t value) { c->spr[spr] = spr == 923 ? value & ~2u : value; }
 void guest_fpscr_changed(Cpu *c) { _mm_setcsr((_mm_getcsr() & ~0x8000u) | ((c->fpscr & GEKKO_FPSCR_NI) ? 0x8000u : 0u)); }
 
 int th_run(Cpu *c, void (*fn)(Cpu *)) {

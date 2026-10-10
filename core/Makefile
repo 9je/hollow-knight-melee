@@ -64,3 +64,7 @@ $(B)/guest/gekko_fp.o: gekko/gekko_fp.c
 guest: gen
 	$(MAKE) $(B)/libguest.a
 .PHONY: gen guest
+func-diff: $(B)/liboracle.a $(B)/libguest.a
+	$(CC) $(GEN_CFLAGS) $(INC) -Idifftest -I$(GEN) difftest/func_diff.c runtime/test_hooks.c \
+	  $(B)/libguest.a $(B)/liboracle.a -lstdc++ -lm -o $(B)/func_diff
+.PHONY: func-diff
