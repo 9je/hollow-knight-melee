@@ -38,6 +38,31 @@ int main(int argc, char **argv) {
   CHECK(_mm_getcsr() == 0x1F80u);
   CHECK(mc_frame() == 301);
   CHECK((mc_peek32(0x80479D30u) >> 24) < 0x2Du);   /* state_machine.curr_mode is a valid GameModeKind */
+  /* solo Fox on Final Destination */
+  uint8_t start[MC_START_SIZE];
+  mc_solo_fox_start(start);
+  CHECK(start[0] == 0x10 && start[0x0F] == 0x20 && start[0x60] == 0x02 && start[0x61] == 0x00 && start[0x85] == 0x03);
+  CHECK(mc_start_match(start, 1) == 0);
+  CHECK(mc_start_match(start, 1) == -1 && strstr(mc_error(), "already"));
+  McInput idle = {0}, right = {0};
+  right.stick_x = 127;
+  mc_set_input(0, &idle);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  for (int i = 0; i < 180; i++) CHECK(mc_step() == 0);     /* past the 123-frame countdown */
+  McFighter fox;
+  CHECK(mc_read_fighter(0, 0, &fox) == 0);
+  CHECK(fox.action == 14 && fox.airborne == 0);           /* Wait, on the stage */
+  CHECK(mc_read_fighter(1, 0, &fox) == 1);                /* port 2 empty */
+  CHECK(mc_read_fighter(0, 1, &fox) == 1);                /* Fox has no follower */
+  CHECK(mc_read_fighter(4, 0, &fox) == -1);
+  CHECK(mc_read_fighter(0, 0, &fox) == 0);
+  float x0 = fox.x;
+  mc_set_input(0, &right);
+  for (int i = 0; i < 30; i++) CHECK(mc_step() == 0);
+  CHECK(mc_read_fighter(0, 0, &fox) == 0);
+  CHECK(fox.x > x0 + 10.0f && fox.action >= 20 && fox.action <= 22);   /* Dash / Run / RunDirect */
+  for (int i = 0; i < 600; i++) CHECK(mc_step() == 0);     /* a one-player match keeps running */
+  CHECK(mc_read_fighter(0, 0, &fox) == 0);
   /* determinism across shutdown / re-init */
   mc_shutdown();
   CHECK(mc_step() == -1);

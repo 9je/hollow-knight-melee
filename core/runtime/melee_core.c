@@ -112,3 +112,87 @@ uint64_t mc_frame(void) { return g_m ? g_m->frames : 0; }
 uint32_t mc_mem_crc32(void) { return g_m ? crc32_buf(g_m->cpu.mem, MEM1_SIZE) : 0; }
 static int in_mem1(uint32_t ea, uint32_t n) { return ea >= 0x80000000u && ea - 0x80000000u <= MEM1_SIZE - n; }
 uint32_t mc_peek32(uint32_t ea) { return g_m && in_mem1(ea, 4) ? ld32(&g_m->cpu, ea) : 0; }
+
+void mc_set_input(int port, const McInput *in) {
+  if (!g_m || port < 0 || port > 3) return;
+  uint8_t *p = g_m->pad[port];
+  memset(p, 0, 12);
+  if (!in) { p[10] = 0xFF; return; }       /* err = PAD_ERR_NO_CONTROLLER */
+  p[0] = (uint8_t)(in->buttons >> 8);
+  p[1] = (uint8_t)in->buttons;
+  p[2] = (uint8_t)in->stick_x;
+  p[3] = (uint8_t)in->stick_y;
+  p[4] = (uint8_t)in->cstick_x;
+  p[5] = (uint8_t)in->cstick_y;
+  p[6] = in->trigger_l;
+  p[7] = in->trigger_r;
+}
+
+int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed) {
+  Machine *m = g_m;
+  if (!m) return run_frame();
+  if (m->dead) return -1;
+  if (m->in_match || m->start_req) { snprintf(m->error, sizeof m->error, "a match was already started"); return -1; }
+  memcpy(m->start, start, MC_START_SIZE);
+  m->seed = seed;
+  m->start_req = 1;
+  for (int n = 0; !m->in_match; n++) {
+    if (n == 600) {
+      snprintf(m->error, sizeof m->error, "match did not start within 600 frames");
+      m->dead = 1;
+      return -1;
+    }
+    if (run_frame() != 0) return -1;
+  }
+  return 0;
+}
+
+/* Solo Fox on Final Destination: an untimed time match (one-player stock matches end at once).
+ * Rules bytes as Slippi records them for a 4-stock FD match, with match_kind = time, timer off. */
+void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
+  static const char rules[] =
+      "1001 8e4c c300 0000 0000 00ff ff6e 0020 0000 01e0 0000 0000 0000 0000 0000 0000"
+      "ffff fff8 0000 000f 0000 0000 3f80 0000 3f80 0000 3f80 0000 0000 0000 0000 0000";
+  static const char fox[] = "020004000000000009007800c000040100000000000000003f8000003f8000003f800000";
+  static const char none[] = "1503040000ff000009007800c000040100000000000000003f8000003f8000003f800000";
+  static const char none45[] = "2103040000ff0000090078004000040000000000000000003f8000003f8000003f800000";
+  memset(out, 0, MC_START_SIZE);
+  int k = 0;
+  for (const char *s = rules; *s; s++) {
+    if (*s == ' ') continue;
+    unsigned v;
+    sscanf(s, "%2x", &v);
+    out[k++] = (uint8_t)v;
+    s++;
+  }
+  for (int i = 0; i < 6; i++) {
+    const char *h = i == 0 ? fox : i < 4 ? none : none45;
+    for (int j = 0; j < 0x24; j++) { unsigned v; sscanf(h + 2 * j, "%2x", &v); out[0x60 + 0x24 * i + j] = (uint8_t)v; }
+  }
+}
+
+static float f32at(Cpu *c, uint32_t ea) { uint32_t v = ld32(c, ea); float f; memcpy(&f, &v, 4); return f; }
+int mc_read_fighter(int port, int follower, McFighter *out) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t block = 0x80453080u + 0xE90u * (uint32_t)port;   /* player static block */
+  uint32_t gobj = ld32(c, block + (follower ? 0xB4u : 0xB0u));
+  if (!gobj) return 1;
+  if (!in_mem1(gobj, 0x30)) return -1;
+  uint32_t fp = ld32(c, gobj + 0x2C);                       /* Fighter */
+  if (!in_mem1(fp, 0x2000)) return -1;
+  out->action = ld32(c, fp + 0x10);
+  out->x = f32at(c, fp + 0xB0);
+  out->y = f32at(c, fp + 0xB4);
+  out->facing = f32at(c, fp + 0x2C);
+  out->percent = f32at(c, fp + 0x1830);
+  out->shield = f32at(c, fp + 0x1998);
+  out->self_vel_x = f32at(c, fp + 0x80);
+  out->self_vel_y = f32at(c, fp + 0x84);
+  out->kb_vel_x = f32at(c, fp + 0x8C);
+  out->kb_vel_y = f32at(c, fp + 0x90);
+  out->ground_vel = f32at(c, fp + 0xEC);
+  out->airborne = ld32(c, fp + 0xE0);
+  return 0;
+}
