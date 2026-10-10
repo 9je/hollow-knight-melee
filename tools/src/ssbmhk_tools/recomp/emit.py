@@ -166,7 +166,77 @@ def _int_ops():
     return t
 
 
-OPS = _int_ops()
+def F(n): return f"c->fpr[{n}]"
+
+
+def _fp_ops():
+    t = {}
+    A0, B0, C0 = (lambda i: f"{F(i.ra)}.ps0"), (lambda i: f"{F(i.rb)}.ps0"), (lambda i: f"{F(i.rc)}.ps0")
+    for n in ("fadd", "fsub", "fdiv"):
+        t[n] = (lambda n: lambda i: f"{F(i.rd)}.ps0 = gekko_{n}(c->fpscr, {A0(i)}, {B0(i)});")(n)
+        t[n + "s"] = (lambda n: lambda i: f"{F(i.rd)} = gekko_{n}s(c->fpscr, {A0(i)}, {B0(i)});")(n)
+    t["fmul"] = lambda i: f"{F(i.rd)}.ps0 = gekko_fmul(c->fpscr, {A0(i)}, {C0(i)});"
+    t["fmuls"] = lambda i: f"{F(i.rd)} = gekko_fmuls(c->fpscr, {A0(i)}, {C0(i)});"
+    for n in ("fmadd", "fmsub", "fnmadd", "fnmsub"):
+        t[n] = (lambda n: lambda i: f"{F(i.rd)}.ps0 = gekko_{n}(c->fpscr, {A0(i)}, {C0(i)}, {B0(i)});")(n)
+        t[n + "s"] = (lambda n: lambda i: f"{F(i.rd)} = gekko_{n}s(c->fpscr, {A0(i)}, {C0(i)}, {B0(i)});")(n)
+    t["frsp"] = lambda i: f"{F(i.rd)} = gekko_frsp(c->fpscr, {B0(i)});"
+    t["fres"] = lambda i: f"{F(i.rd)} = gekko_fres({B0(i)});"
+    t["frsqrte"] = lambda i: f"{F(i.rd)}.ps0 = gekko_frsqrte({B0(i)});"
+    t["fctiw"] = lambda i: f"{F(i.rd)}.ps0 = u2f(gekko_fctiw({B0(i)}));"
+    t["fctiwz"] = lambda i: f"{F(i.rd)}.ps0 = u2f(gekko_fctiwz({B0(i)}));"
+    t["fsel"] = lambda i: f"{F(i.rd)}.ps0 = gekko_fsel({A0(i)}, {B0(i)}, {C0(i)});"
+    for n in ("fneg", "fabs", "fnabs", "fmr"):
+        t[n] = (lambda n: lambda i: f"{F(i.rd)}.ps0 = gekko_{n}({B0(i)});")(n)
+    t["fcmpu"] = t["fcmpo"] = lambda i: f"cr_set(c, {i.crfd}, fcmp4({A0(i)}, {B0(i)}));"
+    t["mffs"] = lambda i: f"{F(i.rd)}.ps0 = u2f(0xFFF8000000000000ull | c->fpscr);"
+    t["mtfsf"] = lambda i: (f"{{ uint32_t m_ = {_h(_nibbles(i.fm))}; c->fpscr = (c->fpscr & ~m_) | "
+                            f"((uint32_t)f2u({B0(i)}) & m_); guest_fpscr_changed(c); }}")
+    # paired singles: whole registers
+    A, B, C = (lambda i: F(i.ra)), (lambda i: F(i.rb)), (lambda i: F(i.rc))
+    for n in ("add", "sub", "div"):
+        t["ps_" + n] = (lambda n: lambda i: f"{F(i.rd)} = gekko_ps_{n}(c->fpscr, {A(i)}, {B(i)});")(n)
+    for n in ("mul", "muls0", "muls1"):
+        t["ps_" + n] = (lambda n: lambda i: f"{F(i.rd)} = gekko_ps_{n}(c->fpscr, {A(i)}, {C(i)});")(n)
+    for n in ("madd", "msub", "nmadd", "nmsub", "madds0", "madds1", "sum0", "sum1"):
+        t["ps_" + n] = (lambda n: lambda i: f"{F(i.rd)} = gekko_ps_{n}(c->fpscr, {A(i)}, {C(i)}, {B(i)});")(n)
+    for n in ("merge00", "merge01", "merge10", "merge11"):
+        t["ps_" + n] = (lambda n: lambda i: f"{F(i.rd)} = gekko_ps_{n}({A(i)}, {B(i)});")(n)
+    for n in ("neg", "abs", "nabs", "mr", "res"):
+        t["ps_" + n] = (lambda n: lambda i: f"{F(i.rd)} = gekko_ps_{n}({B(i)});")(n)
+    t["ps_rsqrte"] = lambda i: f"{F(i.rd)} = gekko_ps_rsqrte(c->fpscr, {B(i)});"
+    t["ps_sel"] = lambda i: f"{F(i.rd)} = gekko_ps_sel({A(i)}, {B(i)}, {C(i)});"
+    t["ps_cmpu0"] = t["ps_cmpo0"] = lambda i: f"cr_set(c, {i.crfd}, fcmp4({F(i.ra)}.ps0, {F(i.rb)}.ps0));"
+    t["ps_cmpu1"] = t["ps_cmpo1"] = lambda i: f"cr_set(c, {i.crfd}, fcmp4({F(i.ra)}.ps1, {F(i.rb)}.ps1));"
+    # FP loads/stores
+    forms = (("", _ea_d, False), ("u", _ea_du, True), ("x", _ea_x, False), ("ux", _ea_xu, True))
+    for suf, ea, upd in forms:
+        u = (lambda upd: (lambda i: f" {G(i.ra)} = ea_;" if upd else ""))(upd)
+        t["lfs" + suf] = (lambda ea, u: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}; {F(i.rd)}.ps0 = {F(i.rd)}.ps1 = u2f(gekko_convert_to_double(ld32(c, ea_)));{u(i)} }}"))(ea, u)
+        t["lfd" + suf] = (lambda ea, u: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}; {F(i.rd)}.ps0 = u2f(ld64(c, ea_));{u(i)} }}"))(ea, u)
+        t["stfs" + suf] = (lambda ea, u: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}; st32(c, ea_, gekko_convert_to_single(f2u({F(i.rs)}.ps0)));{u(i)} }}"))(ea, u)
+        t["stfd" + suf] = (lambda ea, u: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}; st64(c, ea_, f2u({F(i.rs)}.ps0));{u(i)} }}"))(ea, u)
+    t["stfiwx"] = lambda i: f"st32(c, {_ea_x(i)}, (uint32_t)f2u({F(i.rs)}.ps0));"
+    ea_q = lambda i: f"{_ra0(i)} + (uint32_t){i.psq_d}"
+    ea_qu = lambda i: f"{G(i.ra)} + (uint32_t){i.psq_d}"
+    for name, ea, upd in (("psq_l", ea_q, False), ("psq_lu", ea_qu, True)):
+        t[name] = (lambda ea, upd: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}, g_ = c->spr[{912 + i.psq_i}]; "
+            f"{F(i.rd)} = psq_ld(c, ea_, (g_ >> 16) & 7u, (g_ >> 24) & 63u, {i.psq_w});"
+            + (f" {G(i.ra)} = ea_;" if upd else "") + " }"))(ea, upd)
+    for name, ea, upd in (("psq_st", ea_q, False), ("psq_stu", ea_qu, True)):
+        t[name] = (lambda ea, upd: lambda i: (
+            f"{{ uint32_t ea_ = {ea(i)}, g_ = c->spr[{912 + i.psq_i}]; "
+            f"psq_st(c, ea_, {F(i.rs)}, g_ & 7u, (g_ >> 8) & 63u, {i.psq_w});"
+            + (f" {G(i.ra)} = ea_;" if upd else "") + " }"))(ea, upd)
+    return t
+
+
+OPS = {**_int_ops(), **_fp_ops()}
 FUZZ_EXCLUDE = {"mftb", "mtmsr"} | TRAP_OPS   # plus mfspr/mtspr of HOOKED_SPR, filtered by word
 
 
