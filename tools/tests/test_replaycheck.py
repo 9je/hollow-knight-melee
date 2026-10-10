@@ -10,11 +10,12 @@ POST = {"action": 14, "x": -60.0, "y": 0.0001, "facing": 1.0, "percent": 0.0, "s
         "self_y": 0.0, "kb_x": 0.0, "kb_y": 0.0, "self_ground_x": 0.0, "airborne": 0}
 
 
-def replay(frames=(-123, -122), pre=PRE, follower=False, major_scene=2):
+def replay(frames=(-123, -122), pre=PRE, follower=False, major_scene=2, version=(3, 19, 1), ucf=((1, 1),) * 4,
+           pal=False):
     gi = bytes(range(256)) + bytes(0x38)
-    start = GameStart(version=(3, 19, 1), game_info=gi, seed=0x1234, stage=32,
+    start = GameStart(version=version, game_info=gi, seed=0x1234, stage=32,
                       players=[PlayerSlot(0, 2, 0, 0), PlayerSlot(1, 20, 0, 0), PlayerSlot(2, 0, 3, 0), PlayerSlot(3, 0, 3, 0)],
-                      ucf=[(1, 1)] * 4, major_scene=major_scene)
+                      ucf=list(ucf), major_scene=major_scene, pal=pal)
     fr = {}
     for n in frames:
         posts = {(0, False): Post(n, 0, False, dict(POST)), (1, False): Post(n, 1, False, dict(POST))}
@@ -22,6 +23,10 @@ def replay(frames=(-123, -122), pre=PRE, follower=False, major_scene=2):
             posts[(1, True)] = Post(n, 1, True, dict(POST))
         fr[n] = Frame(number=n, pre={(0, False): Pre(n, 0, False, dict(pre)), (1, False): Pre(n, 1, False, dict(pre))}, post=posts)
     return Replay(start=start, frames=fr, end_method=2)
+
+
+def test_ucf_of_absent_ports_is_ignored():
+    pack_run(replay(ucf=((1, 1), (1, 1), (0, 0), (0, 0))))
 
 
 def test_online_matches_are_flagged():
@@ -45,6 +50,11 @@ def test_pack_run_layout():
     (replay(pre={k: v for k, v in PRE.items() if k != "raw_y"}), "raw stick"),
     (replay(frames=(-123, -121)), "contiguous"),
     (replay(frames=()), "no frames"),
+    (replay(frames=(-100, -99)), "frame -123"),
+    (replay(version=(3, 6, 0)), "3.7"),                         # no major scene: online matches unknown
+    (replay(pal=True), "PAL"),
+    (replay(ucf=((1, 1), (0, 1), (1, 1), (1, 1))), "UCF"),      # port 2 played without UCF dashback
+    (replay(ucf=((1, 2), (1, 1), (1, 1), (1, 1))), "UCF"),      # Dween shield drop
 ])
 def test_unsupported_replays_are_refused(r, why):
     with pytest.raises(ReplayUnsupported, match=why):

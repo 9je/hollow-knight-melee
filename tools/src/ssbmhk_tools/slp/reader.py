@@ -44,7 +44,8 @@ class GameStart:
     stage: int
     players: list[PlayerSlot]
     ucf: list[tuple[int, int]]
-    major_scene: int = 0   # 8 = Slippi online; 0 when not recorded (before Slippi 3.12)
+    major_scene: int = 0   # 8 = Slippi online; 0 when not recorded (before replay spec 3.7.0)
+    pal: bool = False
 
 
 @dataclass
@@ -128,6 +129,7 @@ def _game_start(payload: bytes) -> GameStart:
         version=version, game_info=bytes(gi), seed=struct.unpack_from(">I", payload, 0x13D)[0],
         stage=struct.unpack_from(">H", gi, 0xE)[0], players=players, ucf=ucf,
         major_scene=payload[0x1A4] if len(payload) > 0x1A4 else 0,
+        pal=len(payload) > 0x1A1 and payload[0x1A1] != 0,
     )
 
 

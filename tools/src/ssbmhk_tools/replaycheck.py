@@ -36,12 +36,22 @@ def _trigger(v: float) -> int:
 
 
 def pack_run(r: Replay) -> bytes:
+    """Refuses (ReplayUnsupported) replays the core cannot run as they were played: a refusal is a SKIP,
+    never a divergence."""
     frames = sorted(r.frames)
     if not frames:
         raise ReplayUnsupported("replay has no frames")
     if frames != list(range(frames[0], frames[-1] + 1)):
         raise ReplayUnsupported("frames are not contiguous")
+    if frames[0] != -123:
+        raise ReplayUnsupported(f"replay starts at frame {frames[0]}, not frame -123")
+    if r.start.version < (3, 7, 0):
+        raise ReplayUnsupported("recorded by Slippi older than 3.7 (no scene: online RNG sync unknown)")
+    if r.start.pal:
+        raise ReplayUnsupported("PAL replay (the core is NTSC 1.02)")
     ports = [p.port for p in r.start.players if p.ptype != 3]
+    if any(tuple(r.start.ucf[p]) != (1, 1) for p in ports):
+        raise ReplayUnsupported("played without UCF 0.84 dashback and shield drop (the core always has UCF)")
     out = bytearray(MAGIC + r.start.game_info)
     flags = ONLINE_RNG if r.start.major_scene == SCENE_ONLINE else 0
     out += struct.pack(">IiIBB2x", r.start.seed, frames[0], len(frames), sum(1 << p for p in ports), flags)
