@@ -4,3 +4,4 @@ playback_appimage = "~/.config/Slippi Launcher/playback/Slippi_Playback-x86_64.A
 netplay_appimage = "~/.config/Slippi Launcher/netplay/Slippi_Online-x86_64.AppImage"
 replay_dir = "~/Slippi"
 work_dir = ".oracle"
+decomp_dir = "~/src-ref/melee"

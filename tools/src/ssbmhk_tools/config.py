@@ -10,6 +10,7 @@ class DevConfig:
     netplay_appimage: Path
     replay_dir: Path
     work_dir: Path
+    decomp_dir: Path | None = None
 
 
 def _resolve(raw: str, base: Path) -> Path:
@@ -20,4 +21,4 @@ def _resolve(raw: str, base: Path) -> Path:
 def load_dev_config(path: Path) -> DevConfig:
     data = tomllib.loads(path.read_text())
     base = path.parent
-    return DevConfig(**{k: _resolve(data[k], base) for k in DevConfig.__dataclass_fields__})
+    return DevConfig(**{k: _resolve(data[k], base) for k in DevConfig.__dataclass_fields__ if k in data})
