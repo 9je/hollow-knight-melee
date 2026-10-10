@@ -50,7 +50,7 @@ insn-fuzz: $(B)/liboracle.a insn-cases
 STATES ?= 200
 GEN := $(B)/gen
 gen:
-	cd ../tools && .venv/bin/ssbmhk-recomp --config ../dev.toml --out ../core/$(GEN)
+	cd ../tools && .venv/bin/ssbmhk-recomp --config ../dev.toml --out ../core/$(GEN) $(if $(HLE),--hle ../core/$(HLE))
 GUEST_SRCS = $(wildcard $(GEN)/shard_*.c) $(GEN)/guest_table.c
 GUEST_OBJS = $(GUEST_SRCS:$(GEN)/%.c=$(B)/guest/%.o)
 $(B)/guest/%.o: $(GEN)/%.c
