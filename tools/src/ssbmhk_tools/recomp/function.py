@@ -61,6 +61,10 @@ class Program:
         self.unresolved: dict[int, int] = {}
         self.labels: dict[int, set[int]] = {f.addr: set() for f in self.funcs}
         self.cases: dict[int, list[int]] = {}
+        # __longjmp returns to a __setjmp return site, possibly through a later call of the same frame:
+        # each function that calls __setjmp resumes at its own setjmp return sites (landings).
+        setjmp = {f.addr for f in self.funcs if f.name == "__setjmp"}
+        self.landings: dict[int, list[int]] = {}
         has_bcctr = set()
         for f in self.funcs:
             for k, w in enumerate(f.words):
@@ -76,6 +80,9 @@ class Program:
                     self.unresolved[pc] = t
                     continue
                 self.labels[g.addr].add(t)
+                if i.lk and t in setjmp:
+                    self.landings.setdefault(f.addr, []).append(pc + 4)
+                    self.labels[f.addr].add(pc + 4)
                 if i.lk:
                     if t != pc + 4:
                         self.entries.add(t)
@@ -99,8 +106,10 @@ class Program:
             return self.funcs[k]
         return None
 
-    def _call(self, call: str, ra: int) -> str:
-        return (f"{{ uint32_t r_ = {call}; if (r_ != 0x{ra:08X}u) return guest_bad_return(c, 0x{ra:08X}u, r_); }}")
+    def _call(self, f: Func, call: str, ra: int) -> str:
+        land = "".join(f"if (r_ == 0x{s:08X}u) goto L_{s:08X}; " for s in self.landings.get(f.addr, []))
+        return (f"{{ uint32_t r_ = {call}; if (r_ != 0x{ra:08X}u) {{ {land}"
+                f"return guest_bad_return(c, 0x{ra:08X}u, r_); }} }}")
 
     def _branch(self, f: Func, i: Insn, pc: int) -> str:
         ra = pc + 4
@@ -113,7 +122,7 @@ class Program:
             if i.lk:
                 if t == ra:
                     return _guard(pre, test, f"LR = 0x{ra:08X}u;")
-                return _guard(pre, test, f"LR = 0x{ra:08X}u; " + self._call(f"{c_name(t)}(c)", ra))
+                return _guard(pre, test, f"LR = 0x{ra:08X}u; " + self._call(f, f"{c_name(t)}(c)", ra))
             if g is f:
                 poll = "GUEST_POLL(); " if t <= pc else ""   # loops are interrupt check points
                 return _guard(pre, test, f"{poll}goto L_{t:08X};")
@@ -121,12 +130,12 @@ class Program:
         if i.op == "bclr":
             if i.lk:
                 return _guard(pre, test, f"uint32_t t_ = LR & ~3u; LR = 0x{ra:08X}u; "
-                                         + self._call("guest_call_indirect(c, t_)", ra))
+                                         + self._call(f, "guest_call_indirect(c, t_)", ra))
             return _guard(pre, test, "return LR;")
         # bcctr
         if i.lk:
             return _guard(pre, test, f"uint32_t t_ = CTR & ~3u; LR = 0x{ra:08X}u; "
-                                     + self._call("guest_call_indirect(c, t_)", ra))
+                                     + self._call(f, "guest_call_indirect(c, t_)", ra))
         cases = " ".join(f"case 0x{t:08X}u: goto L_{t:08X};" for t in self.cases.get(f.addr, []))
         return _guard(pre, test, f"switch (CTR & ~3u) {{ {cases} default: return guest_call_indirect(c, CTR & ~3u); }}")
 

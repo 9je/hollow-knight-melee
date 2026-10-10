@@ -52,9 +52,14 @@ void guest_trap(Cpu *c, uint32_t pc, uint32_t insn) {
   (void)c; fprintf(stderr, "TRAP pc=%08X (%s) insn=%08X lr=%08X\n", pc, fname(pc), insn, c->spr[SPR_LR]); io_dump(); abort();
 }
 uint32_t guest_bad_return(Cpu *c, uint32_t expected, uint32_t got) {
-  (void)c; fprintf(stderr, "BAD_RETURN expected=%08X got=%08X\n", expected, got); abort();
+  /* A guest return to an address other than the caller's return site (longjmp): unwind host frames
+   * by propagating it until the frame whose call site matches resumes there. */
+  (void)c; (void)expected;
+  return got;
 }
 static unsigned long g_frames;
+static uint8_t *g_inputs; static long g_ninputs, g_k = -1;
+static FILE *g_trace;
 #define MAGIC_ONLOAD 0x80000200u
 #define MAGIC_UNLOAD 0x80000204u
 static uint32_t g_unload_slot, g_unload_orig;
@@ -212,11 +217,34 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
     uint32_t ed = ld32(c, info + 4);
     for (int i = 0; i < 0x138; i++) st8(c, ed + i, g_start[i]);
     st32(c, 0x804D5F90u, (uint32_t)g_start[0x138] << 24 | g_start[0x139] << 16 | g_start[0x13A] << 8 | g_start[0x13B]);
+    if (g_inputs) g_k = 0;
     fprintf(stderr, "MATCH START at frame %lu (enter data %08X)\n", g_frames, ed);
   }
   RET;
 }
 uint32_t hle_lbCardGame_DecideGameMode(Cpu *c) { c->gpr[3] = 0x2D; RET; }  /* no memory card scene: GM_COUNT */
+/* lb_800198E0: one logic frame's pad consume. In a match: trace fighter state (end of previous frame),
+ * overwrite the queue slot about to be read with the replay's raw PADStatus, then HSD_PadRenewMasterStatus. */
+uint32_t hle_lb_800198E0(Cpu *c) {
+  uint32_t lr = c->spr[SPR_LR];
+  if (g_k >= 0 && g_inputs) {
+    for (int i = 0; i < 4; i++) {
+      uint32_t b = 0x80453080u + 0xE90u * (uint32_t)i, g = ld32(c, b + 0xB0);
+      if (!g) continue;
+      uint32_t fp = ld32(c, g + 0x2C);
+      fprintf(g_trace, "%ld %d %u %08X %08X %08X\n", g_k - 1 - 123, i, ld32(c, fp + 0x10), ld32(c, fp + 0xB0), ld32(c, fp + 0xB4), ld32(c, 0x804D5F90u));
+    }
+    uint32_t p = 0x804C1F78u;
+    if (ld8(c, p + 3) && g_k < g_ninputs) {
+      uint32_t q = ld32(c, p + 8) + ld8(c, p + 1) * 0x30u;
+      for (int j = 0; j < 48; j++) st8(c, q + j, g_inputs[g_k * 48 + j]);
+      g_k++;
+    }
+  }
+  call_guest(c, 0x8037750Cu, 0, 0);   /* HSD_PadRenewMasterStatus */
+  c->spr[SPR_LR] = lr;
+  RET;
+}
 uint32_t hle_GXWaitDrawDone(Cpu *c) { service(c); RET; }  /* takes the pending finish interrupt */
 /* BOOL DVDReadAbsAsyncPrio(DVDCommandBlock *block, void *addr, s32 length, s32 offset, cb, prio).
  * Reads straight from the ISO; block->state = END(0), transferredSize = length; callback(length, block) later. */
@@ -260,7 +288,7 @@ uint32_t hle_OSEnableInterrupts(Cpu *c) {
 }
 
 static Cpu *g_cpu;
-static void on_alarm(int s) { (void)s; fprintf(stderr, "TIMEOUT after %lu frames\n", g_frames);
+static void on_alarm(int s) { (void)s; if (g_trace) fflush(g_trace); fprintf(stderr, "TIMEOUT after %lu frames\n", g_frames);
   for (int i = 0; i < 0x14; i++) fprintf(stderr, "%02X ", ld8(g_cpu, 0x80479D30u + i)); fprintf(stderr, "\n");
   for (int i = 0; i < 4; i++) {   /* player static blocks: 0x80453080 + 0xE90*i; +0xB0 entity gobj; gobj+0x2C fighter */
     uint32_t b = 0x80453080u + 0xE90u * (uint32_t)i, g = ld32(g_cpu, b + 0xB0);
@@ -296,6 +324,9 @@ int main(int argc, char **argv) {
   c->spr[SPR_LR] = 0x80000100u;
   signal(SIGALRM, on_alarm);
   alarm(argc > 3 ? atoi(argv[3]) : 10);
+  if (argc > 5) { FILE *f = fopen(argv[5], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    g_inputs = malloc((size_t)n); if (fread(g_inputs, 1, (size_t)n, f) != (size_t)n) abort(); fclose(f); g_ninputs = n / 48;
+    g_trace = fopen("/tmp/claude-1000/trace.txt", "w"); }
   if (argc > 4) { FILE *f = fopen(argv[4], "rb"); g_have_start = f && fread(g_start, 1, sizeof g_start, f) == sizeof g_start; if (f) fclose(f); }
   uint32_t r = guest_lookup(GUEST_ENTRY)(c);
   fprintf(stderr, "__start returned %08X\n", r);

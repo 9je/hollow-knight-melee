@@ -124,3 +124,19 @@ def test_interrupt_poll_at_entry_and_loop_backedges():
     body = src.split("\n")
     assert body[1].strip() == "GUEST_POLL();"            # first statement of the function
     assert "GUEST_POLL(); goto L_80007004;" in src      # backward branch (loop)
+
+
+def test_longjmp_lands_at_setjmp_return_site_in_a_live_frame(tmp_path):
+    # f: buf = r1 - 64; if (__setjmp(buf) == 0) cb(); return r3.  cb: __longjmp(buf, 7) (tail branch).
+    # The longjmp returns to f's setjmp return site through f's *later* call to cb; f must resume there.
+    f = F(0x80008000, [asm.mflr(0), asm.stw(0, 4, 1), asm.addi(1, 1, -16), asm.addi(31, 1, -64), asm.addi(3, 31, 0),
+                       asm.bl(0x80008100 - 0x80008014), asm.cmpwi(0, 3, 0), asm.bc(4, 2, 0x10),
+                       asm.bl(0x80008300 - 0x80008020), asm.addi(3, 0, 99), asm.addi(3, 3, 0),
+                       asm.addi(1, 1, 16), asm.lwz(0, 4, 1), asm.mtlr(0), asm.blr()], name="f")
+    sj = F(0x80008100, [asm.mflr(0), asm.stw(0, 0, 3), asm.stw(1, 4, 3), asm.addi(3, 0, 0), asm.blr()], name="__setjmp")
+    lj = F(0x80008200, [asm.lwz(0, 0, 3), asm.lwz(1, 4, 3), asm.mtlr(0), asm.addi(3, 4, 0), asm.blr()], name="__longjmp")
+    cb = F(0x80008300, [asm.addi(3, 31, 0), asm.addi(4, 0, 7), asm.b(0x80008200 - 0x80008308)], name="cb")
+    out = build_and_run(tmp_path, [f, sj, lj, cb], [], """
+        c->gpr[1] = 0x80100000u; LR = 0x80000100u; st = th_call(c, fn_80008000, &ret);
+        printf("%d %u %08X\\n", st, c->gpr[3], ret);""")
+    assert out.strip() == "0 7 80000100"
