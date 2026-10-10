@@ -14,12 +14,13 @@ gekko-test: | $(B)
 DOLSRC := difftest/dolphin-src/Source/Core
 DOL_INTERP := Interpreter_Integer Interpreter_LoadStore Interpreter_Branch Interpreter_SystemRegisters \
               Interpreter_FloatingPoint Interpreter_Paired Interpreter_LoadStorePaired Interpreter_Tables
+STUB_HDRS := $(shell find difftest/stubs -name '*.h')
 DOL_CXXFLAGS := -O2 -std=c++23 -Idifftest/stubs -I$(DOLSRC) -Igekko -Iruntime -msse2 -mfpmath=sse -ffp-contract=off
 
 dolphin-src:
 	bash difftest/fetch_dolphin.sh
 
-$(B)/oracle/%.o: $(DOLSRC)/Core/PowerPC/Interpreter/%.cpp | dolphin-src
+$(B)/oracle/%.o: $(DOLSRC)/Core/PowerPC/Interpreter/%.cpp $(STUB_HDRS) | dolphin-src
 	mkdir -p $(B)/oracle
 	$(CXX) $(DOL_CXXFLAGS) -c $< -o $@
 $(B)/oracle/FloatUtils.o: $(DOLSRC)/Common/FloatUtils.cpp
@@ -28,7 +29,7 @@ $(B)/oracle/FloatUtils.o: $(DOLSRC)/Common/FloatUtils.cpp
 $(B)/oracle/ConditionRegister.o: $(DOLSRC)/Core/PowerPC/ConditionRegister.cpp
 	mkdir -p $(B)/oracle
 	$(CXX) $(DOL_CXXFLAGS) -c $< -o $@
-$(B)/oracle/oracle.o: difftest/oracle.cpp difftest/oracle.h
+$(B)/oracle/oracle.o: difftest/oracle.cpp difftest/oracle.h $(STUB_HDRS)
 	mkdir -p $(B)/oracle
 	$(CXX) $(DOL_CXXFLAGS) -c $< -o $@
 ORACLE_OBJS := $(DOL_INTERP:%=$(B)/oracle/%.o) $(B)/oracle/FloatUtils.o $(B)/oracle/ConditionRegister.o $(B)/oracle/oracle.o

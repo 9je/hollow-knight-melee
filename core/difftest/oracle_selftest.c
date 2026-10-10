@@ -26,6 +26,22 @@ int main(void) {
   uint32_t pc = 0x80005000u; uint64_t n;
   c->spr[SPR_LR] = 0x80000100u;
   assert(dolphin_run(c, &pc, 0x80000100u, 100, &n) == DOL_OK && c->gpr[3] == 7 && n == 2);
+  /* mtfsf 0xFF,f1 (sets NI) ; fmul f3,f4,f5 ; blr -- NI set mid-run must flush the denormal product */
+  {
+    static const uint32_t prog[] = {0xFDFE0D8Eu, 0xFC640172u, 0x4E800020u};
+    for (int k = 0; k < 3; k++) {
+      uint32_t w = prog[k];
+      c->mem[0x6000 + 4 * k] = (uint8_t)(w >> 24); c->mem[0x6001 + 4 * k] = (uint8_t)(w >> 16);
+      c->mem[0x6002 + 4 * k] = (uint8_t)(w >> 8); c->mem[0x6003 + 4 * k] = (uint8_t)w;
+    }
+    c->fpscr = 0;
+    c->fpr[1].ps0 = u2f(4u);                       /* low FPSCR bits: NI */
+    c->fpr[4].ps0 = u2f(0x0170000000000000ull);    /* 2^-1000 */
+    c->fpr[5].ps0 = u2f(0x3CD0000000000000ull);    /* 2^-50 -> product 2^-1050 is denormal */
+    c->spr[SPR_LR] = 0x80000100u; pc = 0x80006000u;
+    assert(dolphin_run(c, &pc, 0x80000100u, 100, &n) == DOL_OK);
+    assert((c->fpscr & 4u) && f2u(c->fpr[3].ps0) == 0);
+  }
   puts("oracle_selftest OK");
   return 0;
 }

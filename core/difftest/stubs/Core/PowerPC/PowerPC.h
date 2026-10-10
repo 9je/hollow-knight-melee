@@ -5,6 +5,7 @@
 #include <bit>
 #include <cstring>
 #include <type_traits>
+#include <xmmintrin.h>
 #include "Common/CommonTypes.h"
 #include "Common/FloatUtils.h"
 #include "Core/PowerPC/ConditionRegister.h"
@@ -86,7 +87,11 @@ public:
   void WriteFullTimeBaseValue(u64) {}
 };
 
-inline void RoundingModeUpdated(PowerPCState&) {}
+// As Dolphin's SetSIMDMode on x86-64: MXCSR.FTZ follows FPSCR.NI, MXCSR.RC follows FPSCR.RN.
+inline void RoundingModeUpdated(PowerPCState& s) {
+  static const u32 rc[4] = {0x0000, 0x6000, 0x4000, 0x2000};
+  _mm_setcsr(0x1F80u | rc[s.fpscr.Hex & 3] | ((s.fpscr.Hex & 4) ? 0x8000u : 0u));
+}
 inline void MMCRUpdated(PowerPCState&) {}
 inline void RecalculateAllFeatureFlags(PowerPCState&) {}
 }  // namespace PowerPC

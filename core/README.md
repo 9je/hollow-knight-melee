@@ -30,7 +30,7 @@ make -C core func-diff && cd core && ./build/func_diff --all --jobs 16 --csv bui
 - **Per instruction:** 56,800 distinct non-branch instruction words (all of them, capped at 4,000
   per op; 160 ops), 1,000 random CPU/memory states each: **0 mismatches at -O2 and at -O0**.
   After adding FP alignment faults, rerun with 300 states each and 1 in 4 EAs misaligned:
-  17,040,000 cases, **0 mismatches**.
+  17,040,000 cases, **0 mismatches** at both -O2 and -O0.
 - **Whole DOL:** 19,827 functions, 133 shards, 185 functions with jump tables, 0 unresolved
   branches, 0 compiler warnings. Generation ~10 s; `make guest -j16` ~3 min; `libguest.a` 39 MB.
 - **Math/memory list** (70 functions x 1,000 argument sets): 67,858 PASS, 1,142 FAULT_EQUAL,

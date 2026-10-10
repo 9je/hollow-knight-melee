@@ -8,6 +8,9 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 #include "Core/Debugger/BranchWatch.h"
+// cpu.h defines LR/CTR for generated code; Dolphin's function-like LR()/CTR() are not used below.
+#undef LR
+#undef CTR
 #include "oracle.h"
 
 CPUInfo cpu_info;
