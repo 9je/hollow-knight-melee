@@ -1,0 +1,16 @@
+__OSInitAudioSystem
+__OSInitMemoryProtection
+VIWaitForRetrace
+PADRead
+CARDProbeEx
+__ARChecksize
+ARStartDMA
+OSRestoreInterrupts
+OSEnableInterrupts
+__AI_SRC_INIT
+__AXOutInitDSP
+DVDReadAbsAsyncPrio
+DVDGetDriveStatus
+OSLoadContext
+GXWaitDrawDone
+GXSetDrawDone
