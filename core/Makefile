@@ -82,3 +82,7 @@ func-diff: $(B)/liboracle.a $(B)/libguest.a
 	$(CC) $(GEN_CFLAGS) $(INC) -Idifftest -I$(GEN) difftest/func_diff.c runtime/test_hooks.c \
 	  $(B)/libguest.a $(B)/liboracle.a -lstdc++ -lm -o $(B)/func_diff
 .PHONY: func-diff
+runtime-test: | $(B)
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_runtime.c runtime/hw.c runtime/coro.c gekko/gekko_fp.c -lm -o $(B)/test_runtime
+	$(B)/test_runtime
+.PHONY: runtime-test
