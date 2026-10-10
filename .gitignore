@@ -7,3 +7,5 @@ __pycache__/
 .venv/
 spikes/*/dolphin-src/
 spikes/*/build/
+core/build/
+core/difftest/dolphin-src/
