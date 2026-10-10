@@ -5,3 +5,5 @@ traces/
 __pycache__/
 *.egg-info/
 .venv/
+spikes/*/dolphin-src/
+spikes/*/build/
