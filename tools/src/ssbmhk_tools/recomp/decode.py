@@ -52,7 +52,7 @@ OP4_X = {0: "ps_cmpu0", 32: "ps_cmpo0", 64: "ps_cmpu1", 96: "ps_cmpo1", 40: "ps_
 ROT_RC = {"rlwimi", "rlwinm", "rlwnm"}
 
 BRANCH_OPS = {"b", "bc", "bclr", "bcctr"}
-TRAP_OPS = {"sc", "rfi", "tw", "mtfsb0", "mtfsb1", "mtfsfi", "mcrfs", "dcbz_l", "unknown"}
+TRAP_OPS = {"rfi", "tw", "mtfsb0", "mtfsb1", "mtfsfi", "mcrfs", "dcbz_l", "unknown"}
 NOP_OPS = {"sync", "isync", "eieio", "dcbf", "dcbst", "dcbt", "dcbtst", "dcbi", "icbi"}
 
 

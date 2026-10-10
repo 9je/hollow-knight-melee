@@ -242,12 +242,14 @@ def _fp_ops():
 
 
 OPS = {**_int_ops(), **_fp_ops()}
-FUZZ_EXCLUDE = {"mftb", "mtmsr"} | TRAP_OPS   # plus mfspr/mtspr of HOOKED_SPR, filtered by word
+FUZZ_EXCLUDE = {"mftb", "mtmsr", "sc"} | TRAP_OPS   # plus mfspr/mtspr of HOOKED_SPR, filtered by word
 
 
 def emit_insn(i: Insn, pc: int) -> str:
     if i.op in NOP_OPS:
         return f"/* {i.op} */"
+    if i.op == "sc":   # the OS system-call handler only syncs caches; the runtime decides
+        return f"guest_sc(c, 0x{pc:08X}u);"
     if i.op in TRAP_OPS:
         return f"guest_trap(c, 0x{pc:08X}u, 0x{i.word:08X}u);"
     dot = i.op.endswith(".") and i.op not in ("andi.", "andis.", "addic.")

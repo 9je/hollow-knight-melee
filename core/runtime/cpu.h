@@ -40,7 +40,10 @@ typedef struct Cpu {
 
 /* Hooks: implemented by the runtime (plan 1c) or by test_hooks.c. */
 _Noreturn void guest_fault(Cpu *c, uint32_t ea, uint32_t size, int write);
+/* EAs outside MEM1 (hardware registers, locked cache, ...): returns host memory to access, or faults. */
+uint8_t *guest_io_ptr(Cpu *c, uint32_t ea, uint32_t size, int write);
 _Noreturn void guest_trap(Cpu *c, uint32_t pc, uint32_t insn);
+void guest_sc(Cpu *c, uint32_t pc);  /* `sc`: system call */
 uint32_t guest_bad_return(Cpu *c, uint32_t expected, uint32_t got);
 uint32_t guest_call_indirect(Cpu *c, uint32_t target);
 uint32_t guest_mftb(Cpu *c, int upper);
@@ -51,7 +54,7 @@ void guest_fpscr_changed(Cpu *c);
 static inline uint8_t *guest_ptr(Cpu *c, uint32_t ea, uint32_t size, int write) {
   uint32_t seg = ea >> 29, off = ea & 0x1FFFFFFFu;
   if ((seg == 4u || seg == 6u) && off + size <= MEM1_SIZE) return c->mem + off;
-  guest_fault(c, ea, size, write);
+  return guest_io_ptr(c, ea, size, write);
 }
 static inline uint32_t ld8(Cpu *c, uint32_t ea) { return *guest_ptr(c, ea, 1, 0); }
 static inline uint32_t ld16(Cpu *c, uint32_t ea) { uint16_t v; memcpy(&v, guest_ptr(c, ea, 2, 0), 2); return __builtin_bswap16(v); }

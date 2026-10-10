@@ -35,3 +35,14 @@ def test_guest_table_has_function_names(real, tmp_path):
     dol, fns = real
     generate(dol, fns, tmp_path)
     assert '"memcpy"' in (tmp_path / "guest_table.c").read_text()
+
+
+def test_hle_names_and_unchanged_files_keep_mtime(real, tmp_path):
+    dol, fns = real
+    generate(dol, fns, tmp_path, hle_names=["OSReport"])
+    shards = sorted(tmp_path.glob("shard_*.c"))
+    assert any("return hle_OSReport(c);" in p.read_text() for p in shards)
+    assert "uint32_t hle_OSReport(Cpu *c);" in (tmp_path / "guest_fns.h").read_text()
+    before = {p: p.stat().st_mtime_ns for p in shards}
+    generate(dol, fns, tmp_path, hle_names=["OSReport"])
+    assert {p: p.stat().st_mtime_ns for p in shards} == before

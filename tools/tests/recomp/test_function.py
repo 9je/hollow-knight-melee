@@ -11,8 +11,8 @@ from . import asm
 CORE = Path(__file__).resolve().parents[3] / "core"
 
 
-def build_and_run(tmp_path, funcs, data_words, main_body):
-    prog = Program(funcs, data_words)
+def build_and_run(tmp_path, funcs, data_words, main_body, hle=None, extra=""):
+    prog = Program(funcs, data_words, hle or {})
     defs = "\n".join(prog.emit(e) for e in sorted(prog.entries))
     protos = "\n".join(f"uint32_t {c_name(e)}(Cpu *c);" for e in sorted(prog.entries))
     table = ",\n".join(f"{{0x{e:08X}u, {c_name(e)}}}" for e in sorted(prog.entries))
@@ -24,6 +24,7 @@ def build_and_run(tmp_path, funcs, data_words, main_body):
         #include "guest_table.h"
         #include "test_hooks.h"
         {protos}
+        {extra}
         {defs}
         const GuestEntry g_guest_entries[] = {{ {table} }};
         const size_t g_guest_nentries = sizeof g_guest_entries / sizeof g_guest_entries[0];
@@ -103,3 +104,14 @@ def test_two_unconditional_indirect_calls_in_one_function(tmp_path):
         c->gpr[1] = 0x80100000u; LR = 0x80000100u; c->gpr[5] = 0x80000000u;
         st = th_call(c, fn_80005000, &ret); printf("%d %u\\n", st, c->gpr[3]);""")
     assert out.strip() == "0 2"
+
+
+def test_hle_replaces_a_guest_function(tmp_path):
+    # f calls g; g is replaced by a host function that sets r3 = 77 and returns LR
+    g = F(0x80006100, [asm.addi(3, 0, 1), asm.blr()], name="g")
+    f = F(0x80006000, [asm.mflr(0), asm.stw(0, 4, 1), asm.bl(0x80006100 - 0x80006008), asm.lwz(0, 4, 1), asm.mtlr(0), asm.blr()])
+    out = build_and_run(tmp_path, [f, g], [], """
+        c->gpr[1] = 0x80100000u; LR = 0x80000100u; st = th_call(c, fn_80006000, &ret);
+        printf("%d %u %08X\\n", st, c->gpr[3], ret);""",
+        hle={0x80006100: "g"}, extra="uint32_t hle_g(Cpu *c) { c->gpr[3] = 77; return LR; }")
+    assert out.strip() == "0 77 80000100"

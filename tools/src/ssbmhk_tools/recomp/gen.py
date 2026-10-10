@@ -54,13 +54,23 @@ def _data_words(dol) -> list[int]:
     return out
 
 
-def generate(dol, fns, out: Path, shard_funcs: int = 150) -> Report:
+def _write(path: Path, text: str) -> None:
+    """Write only when the content changed, so make rebuilds only what changed."""
+    if not path.exists() or path.read_text() != text:
+        path.write_text(text)
+
+
+def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=()) -> Report:
+    """hle_names: guest functions replaced by host functions `uint32_t hle_<name>(Cpu *)`."""
     out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("shard_*.c"):
-        old.unlink()
+    by_name = {s.name: s.addr for s in fns}
+    missing = [n for n in hle_names if n not in by_name]
+    if missing:
+        raise ValueError(f"unknown HLE functions: {missing}")
+    hle = {by_name[n]: n for n in hle_names}
     funcs = [Func(s.name, s.addr, s.size, tuple(dol.word(a) for a in range(s.addr, s.addr + s.size, 4)))
              for s in fns]
-    prog = Program(funcs, _data_words(dol))
+    prog = Program(funcs, _data_words(dol), hle)
     rep = Report(n_funcs=len(funcs), n_entries=len(prog.entries), unresolved={pc: t for pc, t in prog.unresolved.items() if KNOWN_UNRESOLVED.get(pc) != t},
                  jump_table_funcs=len(prog.cases), sda=sda_bases(dol, fns))
     for f in funcs:
@@ -75,15 +85,16 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150) -> Report:
     by_func: dict[int, list[int]] = {}
     for e in entries:
         by_func.setdefault(prog.func_at(e).addr, []).append(e)
-    (out / "guest_fns.h").write_text(
-        "#pragma once\n#include \"cpu.h\"\n" + "".join(f"uint32_t {c_name(e)}(Cpu *c);\n" for e in entries))
+    _write(out / "guest_fns.h",
+           "#pragma once\n#include \"cpu.h\"\n" + "".join(f"uint32_t {c_name(e)}(Cpu *c);\n" for e in entries)
+           + "".join(f"uint32_t hle_{n}(Cpu *c);\n" for n in sorted(hle.values())))
     for n in range(0, len(funcs), shard_funcs):
         parts = ['#include "cpu.h"', '#include "guest_fns.h"', ""]
         for f in funcs[n:n + shard_funcs]:
             for e in by_func[f.addr]:
                 parts.append(prog.emit(e))
                 parts.append("")
-        (out / f"shard_{n // shard_funcs:03d}.c").write_text("\n".join(parts))
+        _write(out / f"shard_{n // shard_funcs:03d}.c", "\n".join(parts))
         rep.n_shards += 1
     table = ['#include "guest_table.h"', '#include "guest_fns.h"', '#include "guest_meta.h"',
              "const GuestEntry g_guest_entries[] = {"]
@@ -92,15 +103,17 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150) -> Report:
               "const GuestName g_guest_names[] = {"]
     table += [f'  {{0x{f.addr:08X}u, "{f.name}"}},' for f in funcs]
     table += ["};", "const size_t g_guest_nnames = sizeof g_guest_names / sizeof g_guest_names[0];"]
-    (out / "guest_table.c").write_text("\n".join(table) + "\n")
-    (out / "guest_meta.h").write_text("\n".join([
+    _write(out / "guest_table.c", "\n".join(table) + "\n")
+    _write(out / "guest_meta.h", "\n".join([
         "#pragma once", "#include <stddef.h>", "#include <stdint.h>",
         f"#define GUEST_R2 0x{rep.sda[0]:08X}u", f"#define GUEST_R13 0x{rep.sda[1]:08X}u",
         f"#define GUEST_ENTRY 0x{dol.entry:08X}u", f"#define GUEST_BSS_ADDR 0x{dol.bss_addr:08X}u",
         f"#define GUEST_BSS_SIZE 0x{dol.bss_size:08X}u", f'#define GUEST_MAIN_DOL_SHA1 "{dol.sha1}"',
         "typedef struct { uint32_t addr; const char *name; } GuestName;",
         "extern const GuestName g_guest_names[];", "extern const size_t g_guest_nnames;", ""]))
-    (out / "mem1.bin").write_bytes(bytes(dol.mem1_image()))
+    img = bytes(dol.mem1_image())
+    if not (out / "mem1.bin").exists() or (out / "mem1.bin").read_bytes() != img:
+        (out / "mem1.bin").write_bytes(img)
     lines = [rep.summary(), "", "Trap instructions (HLE candidates for plan 1c):"]
     for op, fc in sorted(rep.trap_funcs.items()):
         lines.append(f"  {op}: " + ", ".join(f"{n}x{k}" for n, k in sorted(fc.items())))

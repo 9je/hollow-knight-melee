@@ -53,7 +53,8 @@ def _guard(pre: str, test: str, action: str) -> str:
 
 
 class Program:
-    def __init__(self, funcs: list[Func], data_words: list[int]):
+    def __init__(self, funcs: list[Func], data_words: list[int], hle: dict[int, str] | None = None):
+        self.hle = dict(hle or {})  # function start -> host replacement hle_<name>
         self.funcs = sorted(funcs, key=lambda f: f.addr)
         self._starts = [f.addr for f in self.funcs]
         self.entries: set[int] = set(self._starts)
@@ -130,6 +131,8 @@ class Program:
 
     def emit(self, entry: int) -> str:
         f = self.func_at(entry)
+        if entry == f.addr and entry in self.hle:
+            return f"uint32_t {c_name(entry)}(Cpu *c) {{ return hle_{self.hle[entry]}(c); }}  /* {f.name}: replaced */"
         labels = self.labels[f.addr]
         out = [f"uint32_t {c_name(entry)}(Cpu *c) {{  /* {f.name}{'' if entry == f.addr else f' +0x{entry - f.addr:X}'} */"]
         if entry != f.addr:

@@ -8,6 +8,8 @@ GuestFn (*th_lookup)(uint32_t addr);
 
 void guest_fault(Cpu *c, uint32_t ea, uint32_t size, int write) { (void)c; (void)size; (void)write; th_last_fault_ea = ea; longjmp(th_jmp, TH_FAULT); }
 void guest_trap(Cpu *c, uint32_t pc, uint32_t insn) { (void)c; (void)insn; th_last_trap_pc = pc; longjmp(th_jmp, TH_TRAP); }
+uint8_t *guest_io_ptr(Cpu *c, uint32_t ea, uint32_t size, int write) { guest_fault(c, ea, size, write); }
+void guest_sc(Cpu *c, uint32_t pc) { guest_trap(c, pc, 0x44000002u); }
 uint32_t guest_bad_return(Cpu *c, uint32_t expected, uint32_t got) { (void)c; (void)expected; th_last_target = got; longjmp(th_jmp, TH_BAD_RETURN); }
 uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   GuestFn f = th_lookup ? th_lookup(target) : 0;
