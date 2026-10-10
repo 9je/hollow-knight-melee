@@ -46,3 +46,17 @@ def test_hle_names_and_unchanged_files_keep_mtime(real, tmp_path):
     before = {p: p.stat().st_mtime_ns for p in shards}
     generate(dol, fns, tmp_path, hle_names=["OSReport"])
     assert {p: p.stat().st_mtime_ns for p in shards} == before
+
+
+def test_gecko_codes_patch_code_and_image(real, tmp_path):
+    dol, fns = real
+    # inject at OSReport's first instruction: body = (li r0,0 ; original-ish nop) then branch back
+    at = next(s.addr for s in fns if s.name == "OSReport")
+    code = f"C2{at & 0x01FFFFFF:06X} 00000001\n38000000 00000000\n04{(at + 4) & 0x01FFFFFF:06X} 60000000\n"
+    generate(dol, fns, tmp_path, gecko=code)
+    shards = "".join(p.read_text() for p in tmp_path.glob("shard_*.c"))
+    assert "uint32_t fn_80001800(Cpu *c) {  /* gecko_" in shards
+    assert f"return fn_80001800(c);" in shards and f"return fn_{at + 4:08X}(c);" in shards
+    img = (tmp_path / "mem1.bin").read_bytes()
+    assert img[(at + 4) & 0x01FFFFFF:(at + 8) & 0x01FFFFFF] == bytes.fromhex("60000000")
+    assert img[0x1800:0x1804] == bytes.fromhex("38000000")

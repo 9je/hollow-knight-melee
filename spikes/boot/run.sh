@@ -2,7 +2,7 @@
 # THROWAWAY: regenerate with spikes/boot/hle.txt, rebuild incrementally, run the boot probe.
 set -e
 cd "$(dirname "$0")/../.."
-make -s -C core gen GEN=build/gen-boot HLE=../spikes/boot/hle.txt > /dev/null
+make -s -C core gen GEN=build/gen-boot HLE=../spikes/boot/hle.txt GECKO=build/ucf084.gecko > /dev/null
 make -s -C core build/libguest.a GEN=build/gen-boot -j"$(nproc)" > /dev/null
 gcc -O1 -g -std=c11 -Icore/runtime -Icore/gekko -Icore/build/gen-boot spikes/boot/boot.c core/build/libguest.a -lm -o core/build/boot
 ISO=$(python3 -c "import tomllib;print(tomllib.load(open('dev.toml','rb'))['iso'])")

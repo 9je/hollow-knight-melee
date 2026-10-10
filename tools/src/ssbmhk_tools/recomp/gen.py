@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .decode import TRAP_OPS, decode
 from .function import Func, Program, c_name
+from .gecko import apply_codes
 
 
 # Branches whose target is outside every function by design; emitted as guest_trap.
@@ -60,16 +61,20 @@ def _write(path: Path, text: str) -> None:
         path.write_text(text)
 
 
-def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=()) -> Report:
-    """hle_names: guest functions replaced by host functions `uint32_t hle_<name>(Cpu *)`."""
+def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: str = "") -> Report:
+    """hle_names: guest functions replaced by host functions `uint32_t hle_<name>(Cpu *)`.
+    gecko: Gecko code text (04/C2) applied to code and to the MEM1 image."""
     out.mkdir(parents=True, exist_ok=True)
     by_name = {s.name: s.addr for s in fns}
     missing = [n for n in hle_names if n not in by_name]
     if missing:
         raise ValueError(f"unknown HLE functions: {missing}")
     hle = {by_name[n]: n for n in hle_names}
-    funcs = [Func(s.name, s.addr, s.size, tuple(dol.word(a) for a in range(s.addr, s.addr + s.size, 4)))
+    patched, bodies = apply_codes(gecko) if gecko else ({}, [])
+    word = lambda a: patched.get(a, dol.word(a))  # noqa: E731
+    funcs = [Func(s.name, s.addr, s.size, tuple(word(a) for a in range(s.addr, s.addr + s.size, 4)))
              for s in fns]
+    funcs += [Func(f"gecko_{a:08X}", a, 4 * len(b), tuple(b)) for a, b in bodies]
     prog = Program(funcs, _data_words(dol), hle)
     rep = Report(n_funcs=len(funcs), n_entries=len(prog.entries), unresolved={pc: t for pc, t in prog.unresolved.items() if KNOWN_UNRESOLVED.get(pc) != t},
                  jump_table_funcs=len(prog.cases), sda=sda_bases(dol, fns))
@@ -111,7 +116,10 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=()) -> Repor
         f"#define GUEST_BSS_SIZE 0x{dol.bss_size:08X}u", f'#define GUEST_MAIN_DOL_SHA1 "{dol.sha1}"',
         "typedef struct { uint32_t addr; const char *name; } GuestName;",
         "extern const GuestName g_guest_names[];", "extern const size_t g_guest_nnames;", ""]))
-    img = bytes(dol.mem1_image())
+    img = bytearray(dol.mem1_image())
+    for a, v in [*patched.items(), *((a + 4 * k, w) for a, b in bodies for k, w in enumerate(b))]:
+        img[a & 0x01FFFFFF:(a & 0x01FFFFFF) + 4] = v.to_bytes(4, "big")
+    img = bytes(img)
     if not (out / "mem1.bin").exists() or (out / "mem1.bin").read_bytes() != img:
         (out / "mem1.bin").write_bytes(img)
     lines = [rep.summary(), "", "Trap instructions (HLE candidates for plan 1c):"]

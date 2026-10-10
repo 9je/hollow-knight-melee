@@ -35,6 +35,7 @@ def recomp_main(argv=None):
     ap = argparse.ArgumentParser(description="Recompile main.dol into C")
     ap.add_argument("--config", default="dev.toml")
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--gecko", type=Path, help="Gecko code file (04/C2 codes) applied before recompiling")
     ap.add_argument("--hle", type=Path, help="file listing guest functions replaced by host hle_<name>")
     a = ap.parse_args(argv)
     hle_names = a.hle.read_text().split() if a.hle else []
@@ -42,7 +43,7 @@ def recomp_main(argv=None):
         dol, fns = _inputs(a.config)
     except WrongDol as e:
         raise SystemExit(f"error: {e}")
-    rep = generate(dol, fns, a.out, hle_names=hle_names)
+    rep = generate(dol, fns, a.out, hle_names=hle_names, gecko=a.gecko.read_text() if a.gecko else "")
     print(rep.summary())
     if rep.unresolved:
         raise SystemExit(f"error: {len(rep.unresolved)} unresolved branches, see {a.out / 'report.txt'}")
