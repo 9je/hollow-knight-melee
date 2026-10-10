@@ -27,3 +27,20 @@ def insn_tests_main(argv=None):
     dol, fns = _inputs(a.config)
     summary = write_cases(dol, fns, a.out, a.per_op, a.seed, set(filter(None, a.ops.split(","))) or None)
     print(summary)
+
+
+def recomp_main(argv=None):
+    from .dol import WrongDol
+    from .gen import generate
+    ap = argparse.ArgumentParser(description="Recompile main.dol into C")
+    ap.add_argument("--config", default="dev.toml")
+    ap.add_argument("--out", required=True, type=Path)
+    a = ap.parse_args(argv)
+    try:
+        dol, fns = _inputs(a.config)
+    except WrongDol as e:
+        raise SystemExit(f"error: {e}")
+    rep = generate(dol, fns, a.out)
+    print(rep.summary())
+    if rep.unresolved:
+        raise SystemExit(f"error: {len(rep.unresolved)} unresolved branches, see {a.out / 'report.txt'}")

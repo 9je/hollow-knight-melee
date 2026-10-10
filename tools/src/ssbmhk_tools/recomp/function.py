@@ -48,7 +48,7 @@ def _cond(i: Insn) -> tuple[str, str]:
 
 def _guard(pre: str, test: str, action: str) -> str:
     if not test:
-        return pre + action
+        return f"{pre}{{ {action} }}"
     return f"{pre}if ({test}) {{ {action} }}"
 
 

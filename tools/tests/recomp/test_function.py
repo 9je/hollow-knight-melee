@@ -91,3 +91,15 @@ def test_bad_return_is_reported(tmp_path):
     out = build_and_run(tmp_path, [f, g], [], """
         c->gpr[1] = 0x80100000u; LR = 0x80000100u; st = th_call(c, fn_80004000, &ret); printf("%d\\n", st);""")
     assert out.strip() == "3"   # TH_BAD_RETURN
+
+
+def test_two_unconditional_indirect_calls_in_one_function(tmp_path):
+    # f: call g through LR twice (blrl), adding 1 each time
+    g = F(0x80005100, [asm.addi(3, 3, 1), asm.blr()])
+    f = F(0x80005000, [asm.mflr(0), asm.stw(0, 4, 1), asm.addi(3, 0, 0),
+                       asm.addi(5, 5, 0x5100), asm.mtlr(5), asm.blrl(),
+                       asm.mtlr(5), asm.blrl(), asm.lwz(0, 4, 1), asm.mtlr(0), asm.blr()])
+    out = build_and_run(tmp_path, [f, g], [], """
+        c->gpr[1] = 0x80100000u; LR = 0x80000100u; c->gpr[5] = 0x80000000u;
+        st = th_call(c, fn_80005000, &ret); printf("%d %u\\n", st, c->gpr[3]);""")
+    assert out.strip() == "0 2"

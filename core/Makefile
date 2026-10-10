@@ -47,3 +47,20 @@ insn-fuzz: $(B)/liboracle.a insn-cases
 	$(B)/insn_fuzz $(STATES) 1
 .PHONY: insn-cases insn-fuzz
 STATES ?= 200
+GEN := $(B)/gen
+gen:
+	cd ../tools && .venv/bin/ssbmhk-recomp --config ../dev.toml --out ../core/$(GEN)
+GUEST_SRCS = $(wildcard $(GEN)/shard_*.c) $(GEN)/guest_table.c
+GUEST_OBJS = $(GUEST_SRCS:$(GEN)/%.c=$(B)/guest/%.o)
+$(B)/guest/%.o: $(GEN)/%.c
+	mkdir -p $(B)/guest
+	$(CC) $(GEN_CFLAGS) $(OPT) $(INC) -I$(GEN) -c $< -o $@
+$(B)/libguest.a: $(GUEST_OBJS) $(B)/guest/dispatch.o $(B)/guest/gekko_fp.o
+	ar rcs $@ $^
+$(B)/guest/dispatch.o: runtime/dispatch.c
+	mkdir -p $(B)/guest; $(CC) $(GEN_CFLAGS) $(INC) -c $< -o $@
+$(B)/guest/gekko_fp.o: gekko/gekko_fp.c
+	mkdir -p $(B)/guest; $(CC) $(GEN_CFLAGS) $(INC) -c $< -o $@
+guest: gen
+	$(MAKE) $(B)/libguest.a
+.PHONY: gen guest
