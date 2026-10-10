@@ -86,3 +86,19 @@ runtime-test: | $(B)
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_runtime.c runtime/hw.c runtime/coro.c gekko/gekko_fp.c -lm -o $(B)/test_runtime
 	$(B)/test_runtime
 .PHONY: runtime-test
+CORE_GOBJ := $(B)/guest-core
+RUNTIME_SRCS := hw coro irq hle_io frame melee_core
+RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h $(GUEST_HDRS)
+$(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS)
+	mkdir -p $(CORE_GOBJ)
+	$(CC) $(GEN_CFLAGS) $(INC) -I$(CORE_GEN) -c $< -o $@
+$(B)/libmelee_core.a: $(RUNTIME_SRCS:%=$(CORE_GOBJ)/rt_%.o) $(CORE_GOBJ)/libguest.a
+	cp $(CORE_GOBJ)/libguest.a $@ && ar rs $@ $(RUNTIME_SRCS:%=$(CORE_GOBJ)/rt_%.o)
+core: core-gen
+	$(MAKE) $(CORE_GOBJ)/libguest.a GEN=$(CORE_GEN) GOBJ=$(CORE_GOBJ) LIBGUEST=$(CORE_GOBJ)/libguest.a -j$$(nproc)
+	$(MAKE) $(B)/libmelee_core.a
+ISO = $(shell python3 -c "import tomllib;print(tomllib.load(open('../dev.toml','rb'))['iso'])")
+core-test: core
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_core.c $(B)/libmelee_core.a -lm -o $(B)/test_core
+	$(B)/test_core $(CORE_GEN)/mem1.bin "$(ISO)"
+.PHONY: core core-test
