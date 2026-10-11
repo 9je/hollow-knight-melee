@@ -14,6 +14,9 @@ namespace FoxMelee.Lab {
                     case "run-right": a[i].StickX = 80; break;
                     case "run-left": a[i].StickX = -80; break;
                     case "drop-run-right": if (i >= 90) a[i].StickX = 80; break;   // fall in from a top gate, then run
+                    case "drop-hop-right":                                          // fall in, then run right with a full jump + double jump every 50 frames
+                        if (i >= 90) { a[i].StickX = 80; int h = (i - 90) % 50; if (h < 8 || (h >= 22 && h < 24)) a[i].Buttons = X; }
+                        break;
                     case "hop-right": a[i].StickX = 80; if (i % 40 < 3) a[i].Buttons = X; break;
                     case "wavedash-right":   // jump, then air dodge down-right on the 4th airborne frame, every 60 frames
                         int k = i % 60;
