@@ -97,3 +97,26 @@ def test_real_replay_matches_bit_for_bit(dev_config):
         assert res.frames > 1000 and res.values > res.frames
         return
     pytest.skip("no supported replay in replay_dir")
+
+
+def test_reload_flag_is_packed():
+    flags = pack_run(replay(), reload_collision=True)[8 + 0x138 + 13]
+    assert flags & 2
+
+
+def test_fd_replay_stays_bit_exact_with_reloaded_collision(dev_config):
+    exe, mem1 = CORE_BUILD / "replay_check", CORE_BUILD / "gen-core" / "mem1.bin"
+    if not exe.exists() or not mem1.exists():
+        pytest.skip("run `make -C core replay-check-tool` first")
+    for path in sorted(dev_config.replay_dir.rglob("*.slp")):
+        r = read_slp(path.read_bytes())
+        if r.start.stage != 32:   # Final Destination
+            continue
+        try:
+            pack_run(r)
+        except ReplayUnsupported:
+            continue
+        res = check_file(path, mem1, dev_config.iso, exe, reload_collision=True)
+        assert res.mismatch is None, res.mismatch
+        return
+    pytest.skip("no supported Final Destination replay in replay_dir")

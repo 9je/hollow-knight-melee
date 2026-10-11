@@ -27,7 +27,11 @@ int main(int argc, char **argv) {
   int32_t first = (int32_t)be32(h + 4);
   uint8_t mask = h[12], flags = h[13];
   if ((size_t)size != hdr + (size_t)nframes * 32u) { fprintf(stderr, "run file size mismatch\n"); return 2; }
-  if (mc_init(argv[1], argv[2]) != 0 || mc_start_match(start, seed, flags) != 0) { fprintf(stderr, "%s\n", mc_error()); return 1; }
+  if (mc_init(argv[1], argv[2]) != 0 || mc_start_match(start, seed, flags & MC_ONLINE_RNG) != 0) { fprintf(stderr, "%s\n", mc_error()); return 1; }
+  if (flags & 2) {   /* RELOAD_COLLISION: the stage's own collision, through the room API */
+    const McCollision *own = mc_get_collision();
+    if (!own || mc_load_collision(own) != 0) { fprintf(stderr, "reload: %s\n", own ? mc_error() : "no collision"); return 1; }
+  }
   struct timespec t0, t1;
   clock_gettime(CLOCK_MONOTONIC, &t0);
   for (uint32_t k = 0; k < nframes; k++) {
