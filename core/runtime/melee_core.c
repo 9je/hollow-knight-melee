@@ -34,17 +34,22 @@ static void guest_main(void *arg) {
   guest_lookup(GUEST_ENTRY)(&g_m->cpu);
   mc_die("__start returned");
 }
-/* Resume the guest until its next frame boundary, with the guest's MXCSR swapped in. */
-static int run_frame(void) {
-  Machine *m = g_m;
-  if (!m) { snprintf(init_error, sizeof init_error, "libmelee_core is not initialised"); return -1; }
-  if (m->dead) return -1;
-  m->error[0] = 0;                      /* a live machine's message only describes the last call */
+/* Resume the guest until its next frame boundary, with the guest's MXCSR swapped in (on the worker). */
+static void resume_on_worker(void *arg) {
+  Machine *m = arg;
   unsigned host = _mm_getcsr();
   _mm_setcsr(m->guest_csr);
   coro_resume(m->guest);
   m->guest_csr = _mm_getcsr();
   _mm_setcsr(host);
+}
+
+static int run_frame(void) {
+  Machine *m = g_m;
+  if (!m) { snprintf(init_error, sizeof init_error, "libmelee_core is not initialised"); return -1; }
+  if (m->dead) return -1;
+  m->error[0] = 0;                      /* a live machine's message only describes the last call */
+  worker_call(resume_on_worker, m);     /* guest code runs on the core's own thread (worker.c) */
   return m->dead ? -1 : 0;
 }
 
@@ -100,6 +105,7 @@ int mc_init(const char *mem1_path, const char *iso_path) {
 void mc_shutdown(void) {
   Machine *m = g_m;
   if (!m) return;
+  worker_stop();
   coro_free(m->guest);
   if (m->iso) fclose(m->iso);
   free(m->cpu.mem);

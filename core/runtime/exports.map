@@ -1,0 +1,4 @@
+{
+  global: mc_*;
+  local: *;
+};

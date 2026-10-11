@@ -1,6 +1,6 @@
 CC ?= gcc
 CXX ?= g++
-GEN_CFLAGS := -O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing -Wall -Wno-unused-label
+GEN_CFLAGS := -fPIC -O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing -Wall -Wno-unused-label
 INC := -Igekko -Iruntime
 B := build
 
@@ -89,7 +89,7 @@ runtime-test: | $(B)
 	$(B)/test_runtime
 .PHONY: runtime-test
 CORE_GOBJ := $(B)/guest-core
-RUNTIME_SRCS := hw coro irq hle_io frame melee_core room room_check room_build
+RUNTIME_SRCS := hw coro irq hle_io frame melee_core room room_check room_build worker
 RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h runtime/room.h $(GUEST_HDRS)
 $(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS) $(CORE_GEN)/guest_meta.h
 	mkdir -p $(CORE_GOBJ)
@@ -101,11 +101,11 @@ core: core-gen
 	$(MAKE) $(B)/libmelee_core.a
 ISO = $(shell python3 -c "import tomllib;print(tomllib.load(open('../dev.toml','rb'))['iso'])")
 core-test: core
-	$(CC) $(GEN_CFLAGS) $(INC) tests/test_core.c $(B)/libmelee_core.a -lm -o $(B)/test_core
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_core.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_core
 	$(B)/test_core $(CORE_GEN)/mem1.bin "$(ISO)"
 .PHONY: core core-test
 replay-check-tool: core
-	$(CC) $(GEN_CFLAGS) $(INC) tools/replay_check.c $(B)/libmelee_core.a -lm -o $(B)/replay_check
+	$(CC) $(GEN_CFLAGS) $(INC) tools/replay_check.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/replay_check
 .PHONY: replay-check-tool
 
 # ---- rooms (plan 2) ----
@@ -113,6 +113,17 @@ room-test: | $(B)
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_room.c runtime/room_check.c runtime/room_build.c -lm -o $(B)/test_room
 	$(B)/test_room
 rooms-test: core
-	$(CC) $(GEN_CFLAGS) $(INC) tests/test_rooms.c $(B)/libmelee_core.a -lm -o $(B)/test_rooms
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_rooms.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_rooms
 	$(B)/test_rooms $(CORE_GEN)/mem1.bin "$(ISO)"
 .PHONY: room-test rooms-test
+
+# ---- shared library (plan 3) ----
+$(B)/libmelee_core.so: $(B)/libmelee_core.a runtime/exports.map
+	$(CC) -shared -o $@ -Wl,--whole-archive $(B)/libmelee_core.a -Wl,--no-whole-archive \
+	  -Wl,--version-script=runtime/exports.map -Wl,-soname,libmelee_core.so -lm -lpthread
+shared: core
+	$(MAKE) $(B)/libmelee_core.so
+shared-test: shared
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_shared.c -ldl -lpthread -o $(B)/test_shared
+	$(B)/test_shared $(B)/libmelee_core.so $(CORE_GEN)/mem1.bin "$(ISO)"
+.PHONY: shared shared-test
