@@ -67,6 +67,7 @@ int mc_load_collision(const McCollision *col) {
   return 0;
 }
 
+static float ldf(Cpu *c, uint32_t ea) { uint32_t u = ld32(c, ea); float f; memcpy(&f, &u, 4); return f; }
 static void stf(Cpu *c, uint32_t ea, float f) { uint32_t u; memcpy(&u, &f, 4); st32(c, ea, u); }
 
 /* Writes the pending room as one guest block: MapCollData, verts, lines, joints. */
@@ -111,19 +112,82 @@ static void free_islands(Cpu *c) {
 /* Free everything the previous load allocated first, then allocate and load: with the same sizes the
  * allocator hands back the same blocks every time (the leak check relies on it). Nothing reads the old
  * collision between the frees and mpLibLoad: this runs between frames, inside one host job. */
+#define FN_MPCOLL_SET_POS 0x80043680u    /* mpColl_80043680(CollData *, Vec3 *) */
+#define FN_CHECK_FLOOR 0x8004F008u       /* mpCheckFloor */
+#define FN_SET_AIRBORNE 0x8007D5D4u      /* ftCommon_8007D5D4(fp) */
+#define FN_CAMERA_SNAP 0x80076064u       /* ftCamera_80076064(fp) */
+
+int mc_place_fighter(int port, float x, float y) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  if (port < 0 || port > 3) return set_error("port must be 0..3");
+  if (!m->in_match) return set_error("no match is running");
+  if (!isfinite(x) || !isfinite(y)) return set_error("position must be finite");
+  if (!ld32(&m->cpu, 0x80453080u + 0xE90u * (uint32_t)port + 0xB0u)) return set_error("no fighter on that port");
+  m->place_pending[port] = 1; m->place_x[port] = x; m->place_y[port] = y;
+  return 0;
+}
+
+/* bool mpCheckFloor(ax, ay, bx, by, y_offset, Vec3 *out, int *line, u32 *flags, Vec3 *normal,
+ *                   line_skip, joint_skip, joint_only, cb, gobj): the floor crossed by segment a->b.
+ * Nine integer arguments: the ninth goes on the stack, so the call runs on a temporary guest frame
+ * that also holds the outputs. Returns the line id, or -1; *y_out gets the contact height. */
+static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, float normal[3]) {
+  uint32_t sp = c->gpr[1], f = (sp - 0x60u) & ~15u;   /* frame: +0 back chain, +8 arg 9, +0x10 vec, +0x1C line, +0x20 flags, +0x30 normal */
+  st32(c, f, sp);
+  st32(c, f + 8, 0);                                   /* gobj = NULL */
+  const float a[5] = {x, y + 10.0f, x, y - 10.0f, 0.0f};
+  for (int k = 0; k < 5; k++) c->fpr[1 + k].ps0 = c->fpr[1 + k].ps1 = (double)a[k];
+  c->gpr[1] = f;
+  c->gpr[5] = f + 0x20;                                /* flags_out */
+  c->gpr[6] = f + 0x30;                                /* normal_out */
+  c->gpr[7] = c->gpr[8] = c->gpr[9] = 0xFFFFFFFFu;    /* line_id_skip, joint_id_skip, joint_id_only */
+  c->gpr[10] = 0;                                      /* no callback */
+  uint32_t hit = call_guest(c, FN_CHECK_FLOOR, f + 0x10, f + 0x1C);   /* vec_out, line_id_out */
+  c->gpr[1] = sp;
+  if (!hit) return -1;
+  *y_out = ldf(c, f + 0x14);
+  *flags = ld32(c, f + 0x20);
+  for (int k = 0; k < 3; k++) normal[k] = ldf(c, f + 0x30 + 4u * k);
+  return (int)ld32(c, f + 0x1C);
+}
+
+static void place(Cpu *c, int port, float x, float y) {
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + 0xB0u);
+  if (!gobj) return;
+  uint32_t fp = ld32(c, gobj + 0x2C);
+  if (ld32(c, fp + 0xE0) == 0) {                    /* grounded: stand on the floor within 10 units, or fall */
+    float fy, n[3]; uint32_t fl;
+    int line = floor_under(c, x, y, &fy, &fl, n);
+    if (line >= 0) {
+      y = fy;
+      st32(c, fp + 0x83C, (uint32_t)line);          /* CollData.floor: index, flags, normal */
+      st32(c, fp + 0x840, fl);
+      for (int k = 0; k < 3; k++) stf(c, fp + 0x844 + 4u * k, n[k]);
+    } else {
+      call_guest(c, FN_SET_AIRBORNE, fp, 0);
+    }
+  }
+  stf(c, fp + 0xB0, x); stf(c, fp + 0xB4, y);
+  stf(c, fp + 0xBC, x); stf(c, fp + 0xC0, y);      /* prev_pos */
+  call_guest(c, FN_MPCOLL_SET_POS, fp + 0x6F0u, fp + 0xB0u);
+  call_guest(c, FN_CAMERA_SNAP, fp, 0);
+}
+
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
-  if (!m->room_pending) return;
-  m->room_pending = 0;
-  for (int k = 0; k < 3; k++) call_guest(c, FN_HSD_FREE, ld32(c, ADDR_COLL_ARRAYS + 4u * k), 0);
-  free_islands(c);
-  if (m->room_guest) call_guest(c, FN_HSD_FREE, m->room_guest, 0);   /* our previous MapCollData (not the stage file's) */
-  uint32_t d = write_room(c, &m->room);
-  call_guest(c, FN_MPLIBLOAD, d, 0);
-  m->room_guest = d;
+  if (m->room_pending) {
+    m->room_pending = 0;
+    for (int k = 0; k < 3; k++) call_guest(c, FN_HSD_FREE, ld32(c, ADDR_COLL_ARRAYS + 4u * k), 0);
+    free_islands(c);
+    if (m->room_guest) call_guest(c, FN_HSD_FREE, m->room_guest, 0);   /* our previous MapCollData (not the stage file's) */
+    uint32_t d = write_room(c, &m->room);
+    call_guest(c, FN_MPLIBLOAD, d, 0);
+    m->room_guest = d;
+  }
+  for (int p = 0; p < 4; p++) if (m->place_pending[p]) { m->place_pending[p] = 0; place(c, p, m->place_x[p], m->place_y[p]); }
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u
-static float ldf(Cpu *c, uint32_t ea) { uint32_t u = ld32(c, ea); float f; memcpy(&f, &u, 4); return f; }
 
 int mc_get_bounds(McBox *blast, McBox *cam) {
   Machine *m = g_m;

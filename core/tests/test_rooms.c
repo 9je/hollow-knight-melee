@@ -84,11 +84,44 @@ static void test_bounds(void) {
   mc_shutdown();
 }
 
+static void test_place(void) {
+  solo_fox();
+  steps(180, NULL);
+  CHECK(mc_place_fighter(4, 0, 0) == -1);
+  McInput run = {0}; run.stick_x = 127;
+  steps(40, &run);
+  McFighter before = fox();
+  CHECK(before.action == 21 && before.airborne == 0);   /* Run */
+  CHECK(mc_place_fighter(0, -40.0f, 0.0f) == 0);
+  steps(1, &run);
+  McFighter after = fox();
+  CHECK(after.action == 21 && after.airborne == 0 && fabsf(after.x - (-40.0f + before.ground_vel)) < 3.0f);
+  /* airborne: keeps action and velocity */
+  McInput jump = {0}; jump.buttons = 0x0800;
+  steps(8, &jump);
+  McFighter air = fox();
+  CHECK(air.airborne == 1);
+  CHECK(mc_place_fighter(0, 0.0f, 60.0f) == 0);
+  steps(1, NULL);
+  McFighter air2 = fox();
+  CHECK(air2.airborne == 1 && air2.action == air.action && fabsf(air2.y - 60.0f) < 5.0f);
+  /* grounded fighter placed over nothing: airborne, then falls */
+  steps(120, NULL);
+  CHECK(fox().airborne == 0);
+  CHECK(mc_place_fighter(0, 0.0f, 120.0f) == 0);
+  steps(1, NULL);
+  CHECK(fox().airborne == 1);
+  steps(30, NULL);
+  CHECK(fox().y < 120.0f);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   test_reload_is_invisible();
   test_bounds();
+  test_place();
   puts("rooms tests passed");
   return 0;
 }

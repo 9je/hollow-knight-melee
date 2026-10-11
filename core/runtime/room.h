@@ -40,3 +40,7 @@ typedef struct {
 /* Builds collision into library-owned storage (valid until the next call). 0 ok, -1 + reason in why. */
 int mc_build_collision(const McShape *shapes, int n_shapes, const McCollision **out, char *why, size_t why_size);
 
+/* Moves the port's fighter to (x, y) at the next frame boundary, keeping its action and velocity.
+ * A grounded fighter is snapped to a floor within 10 units (Melee's spawn probe) or becomes airborne. */
+int mc_place_fighter(int port, float x, float y);
+

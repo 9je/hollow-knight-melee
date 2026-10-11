@@ -35,7 +35,8 @@ typedef struct Machine {
   int room_pending;                     /* a validated room waits in room_* below */
   McVec2 *room_verts; McLine *room_lines; McJoint *room_joints;   /* host copies, MC_MAX_* each */
   McCollision room;
-  uint32_t room_guest;                  /* guest block holding the current room (freed on the next load) */
+  uint32_t room_guest;
+  int place_pending[4]; float place_x[4], place_y[4];   /* mc_place_fighter, run after a pending room */                  /* guest block holding the current room (freed on the next load) */
   int dead;
   char error[256];
 } Machine;
