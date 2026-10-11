@@ -5,7 +5,8 @@
  * positions through the object's position matrix and back through the inverse of the camera's view matrix (Melee
  * world units), per-vertex colour from Melee's lighting and its TEV stages evaluated with a white texture (the host
  * multiplies by the texture: exact for the common texture x colour stages), and texture coordinates through the
- * texgen matrices. Triangles are sorted back to front (Hollow Knight's shaders write no depth) and grouped into runs
+ * texgen matrices. Triangles are ordered back to front after Melee's z modes (Hollow Knight's shaders write no depth;
+ * see order_keys) and grouped into runs
  * of one texture and blend mode, drawn in order by the host. Textures are decoded once and cached by their source.
  * Approximations: TEV is evaluated per vertex; alpha compare, fog, indirect textures and dst-alpha are ignored. */
 #include <math.h>
@@ -24,7 +25,7 @@ typedef struct {
   uint8_t tmem[0x80000];
 } GxState;
 
-typedef struct { McGxVert v[3]; float depth; int32_t tex; uint8_t blend, p_link; uint32_t gobj; } Tri;
+typedef struct { McGxVert v[3]; float depth; int32_t tex; uint8_t blend, p_link, zmode; uint32_t gobj; } Tri;
 
 typedef struct { uint32_t addr, fmt, w, h, wrap, tlut_hash; uint8_t *rgba; uint32_t gen, last_used; int baked; int ax, ay, atlas; } Tex;   /* atlas: 0 not yet, 1 in it, -1 no room */
 #define FMT_BAKED 0x100u     /* a texture with a draw's TEV baked in: addr = source texture id, tlut_hash = TEV hash */
@@ -116,7 +117,7 @@ typedef struct { float r, g, b, a; } C4;
 typedef struct {
   int ntev, texmap, texcoord, cull;
   int32_t tex;
-  uint8_t blend;
+  uint8_t blend, zmode;   /* zmode: BP 0x40 (bit 0 compare, bits 1-3 function, bit 4 update) */
 } DrawSetup;
 
 #define tev_raw S.tev_raw
@@ -293,6 +294,7 @@ static void setup_draw(DrawSetup *d) {
   uint32_t cm = S.bp[0x41];
   int blend = (int)(cm & 1), src = (int)((cm >> 8) & 7), dst = (int)((cm >> 5) & 7);
   d->blend = !blend ? MC_GX_OPAQUE : dst == 1 ? MC_GX_ADD : MC_GX_ALPHA;
+  d->zmode = (uint8_t)(S.bp[0x40] & 0x1F);
   (void)src;
   for (int i = 0; i < 4; i++) { tev_regs[i] = reg_color(i); konst_regs[i] = konst_color(i); }
 }
@@ -515,7 +517,7 @@ static void emit_tri(const Vtx *a, const Vtx *b, const Vtx *c, const DrawSetup *
       v[i]->u, v[i]->v};
   }
   t->depth = (a->vz + b->vz + c->vz) / 3;
-  t->tex = d->tex; t->blend = d->blend; t->p_link = span_plink; t->gobj = span_gobj;
+  t->tex = d->tex; t->blend = d->blend; t->zmode = d->zmode; t->p_link = span_plink; t->gobj = span_gobj;
 }
 
 /* the TEV's per-vertex inputs (the lit channel colours) are the same on every vertex: the draw's look is then a
@@ -717,7 +719,7 @@ static int command(Rd *r) {
 
 static int run(Rd *r) { while (r->p < r->end) if (!command(r)) return 0; return 1; }
 
-/* ---- the atlas: ordinary textures (not baked ones) share one texture, so a sorted frame needs few runs. Each
+/* ---- the atlas: fighters' and items' ordinary textures (not baked ones) share one texture, so a sorted frame needs few runs. Each
  * texture gets a cell of 3x3 copies laid out by its wrap mode (texture coordinates -1..2 stay exact) and a 1-texel
  * border. */
 #define ATLAS 4096
@@ -761,7 +763,7 @@ static int fit_cell(float *c0, float *c1, float *c2, int wrap) {
 }
 
 static void to_atlas(Tri *tr) {
-  if (tr->tex < 0 || tr->p_link != 8) return;   /* fighters' bodies: effects keep their own (few, changing) textures */
+  if (tr->tex < 0 || (tr->p_link != 8 && tr->p_link != 9)) return;   /* fighters and items (models): effects keep their own (few, changing) textures */
   Tex *t = &texs[tr->tex];
   if (t->baked) return;
   if (t->atlas == 0) t->atlas = atlas_place(t);
@@ -776,11 +778,38 @@ static void to_atlas(Tri *tr) {
   tr->tex = MC_GX_ATLAS;
 }
 
-typedef struct { float depth; int index; } Key;
+/* Draw order without a depth buffer, after Melee's z modes (BP 0x40):
+ *  layer 1: solid depth-tested triangles, each by its own depth (Fox's body);
+ *  layer 0 / 2: translucent depth-tested draws (most effects), each kept whole and placed by its mean depth, behind
+ *    the solid ones when it lies wholly behind their mean depth, else in front;
+ *  layer 3: draws whose depth test always passes (the shield bubble, the shine's outline): over everything, in
+ *    Melee's order.
+ * Keeping a draw whole also keeps the runs few (one per draw, not one per interleaved triangle). */
+typedef struct { int layer; float depth; int index; } Key;
 static int cmp_key(const void *a, const void *b) {
   const Key *x = a, *y = b;
+  if (x->layer != y->layer) return x->layer - y->layer;
   if (x->depth != y->depth) return x->depth < y->depth ? -1 : 1;   /* view z: more negative is farther: drawn first */
   return x->index - y->index;                                       /* stable: equal depths keep Melee's order */
+}
+static int z_always(uint8_t zmode) { return !(zmode & 1) || ((zmode >> 1) & 7) == 7; }
+
+static void order_keys(Key *k) {
+  double solid = 0; int nsolid = 0;
+  for (int i = 0; i < ntris; i++)
+    if (tris[i].blend == MC_GX_OPAQUE && !z_always(tris[i].zmode)) { solid += tris[i].depth; nsolid++; }
+  float mid = nsolid ? (float)(solid / nsolid) : 0;
+  for (int i = 0, end; i < ntris; i = end) {
+    const Tri *t = &tris[i];
+    end = i + 1;   /* one draw: the same object, texture, blend and z mode, in a row */
+    while (end < ntris && tris[end].gobj == t->gobj && tris[end].tex == t->tex && tris[end].blend == t->blend && tris[end].zmode == t->zmode) end++;
+    if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
+    if (t->blend == MC_GX_OPAQUE) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
+    float sum = 0, far = -1e30f;
+    for (int j = i; j < end; j++) { sum += tris[j].depth; far = fmaxf(far, tris[j].depth); }
+    int layer = nsolid && far < mid ? 0 : 2;
+    for (int j = i; j < end; j++) k[j] = (Key){layer, sum / (float)(end - i), j};
+  }
 }
 static Key *keys; static int cap_keys;
 
@@ -839,7 +868,7 @@ int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const
   }
   for (int i = 0; i < ntris; i++) to_atlas(&tris[i]);
   if (ntris > cap_keys) { Key *p = realloc(keys, (size_t)ntris * sizeof *p); if (!p) return -1; keys = p; cap_keys = ntris; }
-  for (int i = 0; i < ntris; i++) keys[i] = (Key){tris[i].depth, i};
+  order_keys(keys);
   qsort(keys, (size_t)ntris, sizeof *keys, cmp_key);
   if (3 * ntris > cap_v) { McGxVert *p = realloc(out_v, (size_t)(3 * ntris) * sizeof *p); if (!p) return -1; out_v = p; cap_v = 3 * ntris; }
   int nr = 0;

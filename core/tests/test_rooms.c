@@ -437,10 +437,22 @@ static void test_gx_decode(void) {
     CHECK(r[i].tex < 0 || mc_gx_texture(r[i].tex, &t) == 0);
   }
   CHECK(bubble);
+  /* the shield is drawn with z compare ALWAYS: Melee puts it over Fox, so it comes after all of Fox's triangles */
+  CHECK(mc_gx_decode(FIGHTER | EFFECTS, &v, &nv, &r, &nr) == 0);
+  int last_fox = -1, bubble_at = -1;
+  for (int i = 0; i < nr; i++) if (r[i].p_link == 8) last_fox = i; else if (r[i].blend == MC_GX_ALPHA) bubble_at = i;
+  CHECK(last_fox >= 0 && bubble_at > last_fox);
   /* laser: an item */
   steps(30, &idle);
   McInput b = {0}; b.buttons = 0x0200;
   steps(1, &b); steps(15, &idle);
+  /* lasers and their effects stay whole draws: Fox's body is not cut into pieces between them (a few runs, not
+   * hundreds: each run is a draw call in Hollow Knight) */
+  for (int k = 0; k < 6; k++) { steps(2, &b); steps(4, &idle); }
+  CHECK(mc_gx_decode(FIGHTER | ITEM | EFFECTS, &v, &nv, &r, &nr) == 0);
+  int fox_pieces = 0;
+  for (int i = 0; i < nr; i++) fox_pieces += r[i].p_link == 8 && (i == 0 || r[i - 1].p_link != 8);
+  CHECK(fox_pieces <= 2 && nr < 80);
   CHECK(mc_gx_decode(ITEM, &v, &nv, &r, &nr) == 0 && nv > 0);
   for (int i = 0; i < nr; i++) CHECK(r[i].p_link == 9);
   CHECK(mc_gx_decode(EFFECTS, &v, &nv, &r, &nr) == 0);
