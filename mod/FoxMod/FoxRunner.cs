@@ -120,6 +120,7 @@ namespace FoxMelee {
                     at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
                     if (at < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
                     if (at == 0 && combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                    if (at == 0 && combat != null && enemies != null) foreach (var go in combat.Struck) enemies.Guard(go);
                     if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position)) { Fail("applying a hit to Fox: " + core.Error); return; }
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)

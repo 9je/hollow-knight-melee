@@ -21,6 +21,8 @@ namespace FoxMelee {
         readonly Collider2D[] found = new Collider2D[64];
         readonly List<object> targets = new List<object>();
         readonly List<HitEvent> real = new List<HitEvent>();               // hits on live enemies: Melee hears of these
+        /// Enemies Fox's own attacks (not lasers) landed on this frame (their HealthManager objects): EnemyBridge.Guard.
+        public readonly List<GameObject> Struck = new List<GameObject>();
         readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
         MeleeCore core;
         readonly HitlagTimers hitlag = new HitlagTimers();
@@ -52,6 +54,7 @@ namespace FoxMelee {
         /// this frame as a Melee victim's would; false if the core failed.
         public bool Frame(MeleeCore core, RoomTransform room) {
             int n = core.ReadHitboxes(boxes);
+            Struck.Clear();
             if (n < 0) return false;
             hurting.Clear();
             for (int i = 0; i < n; i++) if (HitRules.HurtsEnemies(boxes[i])) hurting.Add(boxes[i]);
@@ -169,6 +172,7 @@ namespace FoxMelee {
             });
             if (!enemy) return;
             real.Add(h);
+            if (!HitRules.IsItem(h.Box) && !Struck.Contains(hm.gameObject)) Struck.Add(hm.gameObject);
             int dir = DirectionUtils.GetCardinalDirection(direction);
             // a laser gives Fox no hitlag, so the victim's comes from Melee's formula for the laser's damage
             int damage = h.Box.Damage > 0 && (int)h.Box.Damage == 0 ? 1 : (int)h.Box.Damage;

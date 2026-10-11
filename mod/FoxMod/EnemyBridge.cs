@@ -47,6 +47,9 @@ namespace FoxMelee {
             return hm != null ? (object)hm.gameObject : go;
         }
 
+        /// Fox's attack landed on this enemy (a HealthManager object): its body can't hurt him for the grace.
+        public void Guard(GameObject enemy) => hits.Guard(enemy, tuning.GraceFrames);
+
         /// At the hit pause (mc_step_to_hits): Melee resolves each held-back hit.
         public bool Frame(MeleeCore core, RoomTransform room, Vector2 knight) {
             later.Clear();

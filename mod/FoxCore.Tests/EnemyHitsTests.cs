@@ -16,6 +16,22 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void AnEnemyFoxJustHitCannotHitHimForTheGrace() {
+            var e = new EnemyHits(cooldownFrames: 30);
+            object a = new object(), b = new object();
+            e.Guard(a, frames: 20);                     // Fox's attack landed on a: its body can't hurt him for a moment
+            Assert.True(e.Accept(b));                   // other enemies still can
+            for (int i = 0; i < 19; i++) { e.Tick(); Assert.False(e.Accept(a)); }
+            e.Tick();
+            Assert.True(e.Accept(a));
+            e.Guard(a, frames: 5);                      // a grace never shortens a running cooldown (30 frames)
+            for (int i = 0; i < 29; i++) e.Tick();
+            Assert.False(e.Accept(a));
+            e.Tick();
+            Assert.True(e.Accept(a));
+        }
+
+        [Fact]
         public void AHollowKnightHitBecomesAMeleeHitScaledByMasks() {
             var t = new EnemyHitTuning { PercentPerMask = 10, Angle = 361, BaseKnockback = 30, KnockbackGrowth = 90, ShieldDamagePerMask = 8 };
             var h = EnemyHits.ToMelee(t, masks: 2, fromX: -12.5f, fromY: 4);

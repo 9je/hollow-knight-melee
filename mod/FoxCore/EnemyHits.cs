@@ -20,6 +20,7 @@ namespace FoxMelee {
         public double ShieldDamagePerMask = 8;      // on top of the hit's damage: Hollow Knight hits are heavy on shields
         public int UnblockableFromMasks = 3;        // attacks this big go through the shield
         public int CooldownFrames = 30;             // per enemy, replacing the Knight's long invulnerability
+        public int GraceFrames = 20;                // after Fox's attack lands on an enemy, its body can't hurt him (0: off)
     }
 
     /// Enemies hitting Fox: each enemy (source) can hit again only after its cooldown, so one enemy's hit does not
@@ -36,6 +37,13 @@ namespace FoxMelee {
             if (left.ContainsKey(source)) return false;
             left[source] = cooldown;
             return true;
+        }
+
+        /// Fox's attack landed on `source`: it can't hit him for `frames` (as the nail's knockback keeps the Knight
+        /// clear, so attacking through an enemy is not punished by touching it). Never shortens a running cooldown.
+        public void Guard(object source, int frames) {
+            if (frames <= 0) return;
+            if (!left.TryGetValue(source, out int now) || now < frames) left[source] = frames;
         }
 
         /// After each Melee frame.
