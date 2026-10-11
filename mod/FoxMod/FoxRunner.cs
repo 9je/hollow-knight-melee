@@ -105,6 +105,9 @@ namespace FoxMelee {
             if (state == State.Waiting && !Boot()) return;
             var f = Flags(hero);
             LogBusy(f);
+            // Loading a save or coming back from death, the Knight wakes on the ground: Fox lies there instead and gets
+            // up when Hollow Knight hands over (at a bench the Knight sits; that stays Hollow Knight's)
+            if (f.Respawning && !f.HazardRespawning && !f.Dead && PlayerData.instance.GetInt("respawnType") == 0 && Wake(hero, gm, f)) return;
             // A new room is converted once Hollow Knight has finished bringing the Knight in.
             if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
             SetKnightVisible(hero, session.KnightVisible(f));
@@ -128,6 +131,10 @@ namespace FoxMelee {
                 return;
             }
             if (!WatchTerrain(gm.sceneName)) return;
+            if (needPlace && waking) {            // Fox already lies where the Knight woke: he gets up from there
+                waking = false; needPlace = false; getUp = true;
+                session.TakeRespawns();
+            }
             if (needPlace) {
                 if (!PlaceAtKnight(hero)) return;
                 needPlace = false;
@@ -157,6 +164,12 @@ namespace FoxMelee {
                 if (GcInput.InventoryOpen || GcInput.QuickMapHeld) input = new McInput();   // the controller is Hollow Knight's menu's
                 rawInput = input;
                 input = respawnHold.Filter(input);
+                if (getUp) {                      // back from waking: Melee's get-up (stick up from DownWait) unless the
+                    bool lying = fox.Action >= ActionDownFirst && fox.Action <= ActionDownLast;   // player picks
+                    bool neutral = input.Buttons == 0 && Math.Abs((int)input.StickX) < 23 && Math.Abs((int)input.StickY) < 23;
+                    if (!lying || !neutral) getUp = false;   // a roll, a get-up attack: Melee's own options
+                    else if (fox.Action == ActionDownWaitU || fox.Action == ActionDownWaitD) { input = new McInput { StickY = 127 }; getUp = false; }
+                }
                 core.SetInput(0, input);
                 int at = 0;
                 bool pause = combat != null || enemies != null;
@@ -461,6 +474,36 @@ namespace FoxMelee {
             profClock = 0; profWorst = 0; profMeleeMs = 0; profBridgeMs = 0; profSfxMs = 0; profMeleeFrames = 0; profUnityFrames = 0;
             if (gx != null) { gx.DecodeMs = gx.MeshMs = gx.UploadMs = 0; gx.Uploads = gx.Runs = 0; gx.UploadBytes = 0; }
         }
+
+        // Waking: Fox, dropped just above where the Knight wakes, lands in a knockdown and lies there (Melee runs with no
+        // input) while Hollow Knight plays the Knight's wake-up, hidden; false leaves it all to Hollow Knight.
+        bool waking, getUp;
+        const uint ActionDownFirst = 183, ActionDownLast = 198;   // DownBoundU .. DownStandD
+        const uint ActionDownWaitU = 184, ActionDownWaitD = 192;
+        bool Wake(HeroController hero, GameManager gm, HeroFlags f) {
+            if (session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return true;
+            if (session.KnightVisible(f) || gx == null) return false;   // no room (or no Melee graphics): the Knight's own
+            if (!waking) {
+                var feet = (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero));
+                var at = room.ToMelee(new V2(feet.x, feet.y));
+                if (!core.TumbleFighter(0, (float)at.X, (float)at.Y + 3f)) { Fail($"mc_tumble_fighter: {core.Error}"); return true; }
+                waking = true; needPlace = true; wakeClock = Frame;
+                Log($"waking: Fox lies at ({feet.x:F2}, {feet.y:F2}) while the Knight wakes");
+            }
+            SetKnightVisible(hero, false);
+            wakeClock += Time.unscaledDeltaTime;
+            int frames = 0;
+            while (wakeClock >= Frame && frames < 4) {
+                wakeClock -= Frame;
+                core.SetInput(0, new McInput());
+                if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return true; }
+                frames++;
+            }
+            if (wakeClock > Frame) wakeClock = 0;
+            if (core.ReadFighter(0, out fox)) gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z, frames > 0);
+            return true;
+        }
+        float wakeClock;
 
         // What Hollow Knight is doing with the Knight, logged when it changes (deaths, spikes, respawns, loading).
         void LogBusy(HeroFlags f) {

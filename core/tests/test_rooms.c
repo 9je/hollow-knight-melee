@@ -586,6 +586,15 @@ static void test_tumble_fighter(void) {
   int down = 0;
   for (int i = 0; i < 90 && !down; i++) { steps(1, NULL); down = fox().action >= 183 && fox().action <= 198; }
   CHECK(down);                                        /* DownBound..: landed hard */
+  int wait = 0;
+  for (int i = 0; i < 90 && !wait; i++) { steps(1, NULL); wait = fox().action == 184 || fox().action == 192; }
+  CHECK(wait);                                        /* DownWaitU / DownWaitD: lying still */
+  McInput up = {0}; up.stick_y = 127;
+  steps(1, &up);
+  CHECK(fox().action == 186 || fox().action == 194); /* DownStandU / DownStandD: getting up */
+  int stood = 0;
+  for (int i = 0; i < 90 && !stood; i++) { steps(1, NULL); stood = fox().action == 14; }
+  CHECK(stood);
   mc_shutdown();
 }
 
