@@ -4,29 +4,27 @@ using UnityEngine;
 
 namespace FoxMelee {
     /// Draws Melee's own frame (Fox, his items and effects, as Melee's graphics code drew them: core GX capture) in the
-    /// room: one mesh per run, drawn in the core's back-to-front order (Hollow Knight's shaders write no depth, so the
-    /// order comes from sortingOrder). Textures are uploaded once and again only when the core says they changed.
+    /// room: one mesh with a sub-mesh per run, which Unity draws in the core's back-to-front order (Hollow Knight's
+    /// shaders write no depth). The one renderer sorts against the room as the Knight's own does (his sorting layer,
+    /// order and depth), so Fox stays behind the room's foreground whatever effects are showing. Textures are uploaded
+    /// once and again only when the core says they changed.
     sealed class GxRenderer {
-        const float Z = 0f;
-        const int BaseOrder = 0;
         static readonly Color AdditiveTint = new Color(0.5f, 0.5f, 0.5f, 0.5f);   // Particles/Additive doubles colour x tint
 
-        sealed class Slot {
-            public GameObject Go; public Mesh Mesh; public MeshRenderer Renderer;
-            public readonly List<Vector3> V = new List<Vector3>();
-            public readonly List<Color32> C = new List<Color32>();
-            public readonly List<Vector2> U = new List<Vector2>();
-            public readonly List<int> I = new List<int>();
-        }
-
         readonly GxFrame frame = new GxFrame();
-        readonly List<Slot> slots = new List<Slot>();
+        readonly List<Vector3> v = new List<Vector3>();
+        readonly List<Color32> c = new List<Color32>();
+        readonly List<Vector2> u = new List<Vector2>();
+        readonly List<int> idx = new List<int>();
+        Material[] mats = new Material[0];
         readonly Dictionary<(int id, int ws, int wt), (uint gen, Texture2D tex)> textures = new Dictionary<(int, int, int), (uint, Texture2D)>();
         readonly Dictionary<(Texture2D tex, byte blend), Material> materials = new Dictionary<(Texture2D, byte), Material>();
         readonly Shader sprite, additive;
         readonly GameObject root;
-        int shown;
-        public bool Shown => shown > 0;
+        readonly Mesh mesh;
+        readonly MeshRenderer renderer;
+        bool shown;
+        public bool Shown => shown;
 
         public GxRenderer() {
             sprite = Shader.Find("Sprites/Default") ?? throw new InvalidOperationException("Sprites/Default shader not found");
@@ -34,54 +32,51 @@ namespace FoxMelee {
             if (additive == null) FoxMod.Instance.LogWarn("Particles/Additive shader not found: additive effects blend normally");
             root = new GameObject("FoxMeleeFrame");
             UnityEngine.Object.DontDestroyOnLoad(root);
+            mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.MarkDynamic();
+            root.AddComponent<MeshFilter>().sharedMesh = mesh;
+            renderer = root.AddComponent<MeshRenderer>();
+            root.SetActive(false);
         }
 
-        /// False when the core could not decode a frame (the caller falls back to fox.model).
-        public bool Draw(MeleeCore core, RoomTransform room) {
+        /// False when the core could not decode a frame (the caller falls back to fox.model). `like`: the Knight's
+        /// renderer, whose sorting Fox takes; `z`: the Knight's depth.
+        public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z) {
             if (!core.GxDecode(GxFrame.FoxAndEffects, frame) || frame.VertexCount == 0) { Hide(); return false; }
-            root.SetActive(true);
             float inv = (float)(1.0 / room.Scale);
             float ox = (float)room.Origin.X, oy = (float)room.Origin.Y;
-            int used = 0;
-            foreach (var run in frame.Runs) {
+            var runs = frame.Runs;
+            if (mats.Length != runs.Count) mats = new Material[runs.Count];
+            v.Clear(); c.Clear(); u.Clear();
+            for (int r = 0; r < runs.Count; r++) {
+                var run = runs[r];
                 var tex = Texture(core, run);
-                var mat = Material(tex, run.Blend);
-                if (used == slots.Count) slots.Add(NewSlot());
-                var s = slots[used];
-                s.V.Clear(); s.C.Clear(); s.U.Clear(); s.I.Clear();
+                mats[r] = Material(tex, run.Blend);
                 for (int k = 0; k < run.Count; k++) {
                     int i = run.First + k;
-                    s.V.Add(new Vector3(frame.Pos[3 * i] * inv + ox, frame.Pos[3 * i + 1] * inv + oy, Z));
-                    s.C.Add(new Color32(frame.Color[4 * i], frame.Color[4 * i + 1], frame.Color[4 * i + 2],
-                                        run.Blend == GxFrame.Opaque && tex == null ? (byte)255 : frame.Color[4 * i + 3]));
-                    s.U.Add(new Vector2(frame.Uv[2 * i], frame.Uv[2 * i + 1]));
-                    s.I.Add(k);
+                    v.Add(new Vector3(frame.Pos[3 * i] * inv + ox, frame.Pos[3 * i + 1] * inv + oy, z));
+                    c.Add(new Color32(frame.Color[4 * i], frame.Color[4 * i + 1], frame.Color[4 * i + 2],
+                                      run.Blend == GxFrame.Opaque && tex == null ? (byte)255 : frame.Color[4 * i + 3]));
+                    u.Add(new Vector2(frame.Uv[2 * i], frame.Uv[2 * i + 1]));
                 }
-                s.Mesh.Clear();
-                s.Mesh.SetVertices(s.V); s.Mesh.SetColors(s.C); s.Mesh.SetUVs(0, s.U); s.Mesh.SetTriangles(s.I, 0);
-                s.Mesh.RecalculateBounds();
-                s.Renderer.sharedMaterial = mat;
-                s.Renderer.sortingOrder = BaseOrder + used;
-                if (!s.Go.activeSelf) s.Go.SetActive(true);
-                used++;
             }
-            for (int i = used; i < shown; i++) slots[i].Go.SetActive(false);
-            shown = used;
+            mesh.Clear();
+            mesh.SetVertices(v); mesh.SetColors(c); mesh.SetUVs(0, u);
+            mesh.subMeshCount = runs.Count;
+            for (int r = 0; r < runs.Count; r++) {   // sub-meshes draw in order: the core's back-to-front runs
+                idx.Clear();
+                for (int k = 0; k < runs[r].Count; k++) idx.Add(runs[r].First + k);
+                mesh.SetTriangles(idx, r, false);
+            }
+            mesh.RecalculateBounds();
+            renderer.sharedMaterials = mats;
+            if (like != null) { renderer.sortingLayerID = like.sortingLayerID; renderer.sortingOrder = like.sortingOrder; }
+            if (!shown) { root.SetActive(true); shown = true; }
             return true;
         }
 
         public void Hide() {
-            for (int i = 0; i < shown; i++) slots[i].Go.SetActive(false);
-            shown = 0;
-        }
-
-        Slot NewSlot() {
-            var go = new GameObject("FoxMeleeRun" + slots.Count);
-            go.transform.SetParent(root.transform, false);
-            var mesh = new Mesh();
-            mesh.MarkDynamic();
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            return new Slot { Go = go, Mesh = mesh, Renderer = go.AddComponent<MeshRenderer>() };
+            if (shown) { root.SetActive(false); shown = false; }
         }
 
         Texture2D Texture(MeleeCore core, GxRun run) {

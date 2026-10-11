@@ -136,7 +136,7 @@ namespace FoxMelee {
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
             if (gx != null && frames == 0 && room == gxRoom && gx.Shown) return;   // nothing new to draw
             gxRoom = room;
-            if (gx != null && gx.Draw(core, room)) {
+            if (gx != null && gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z)) {
                 model?.Hide(); effects?.Hide();
                 if (placeholder) placeholder.SetActive(false);
                 return;
