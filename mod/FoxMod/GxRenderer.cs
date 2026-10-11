@@ -92,6 +92,12 @@ namespace FoxMelee {
             if (textures.TryGetValue(key, out var have) && have.gen == t.Gen) return have.tex;
             var tex = have.tex;
             if (tex != null && (tex.width != t.W || tex.height != t.H)) { Forget(tex); tex = null; }
+            // the atlas (4096x4096, 64 MB) changes a cell at a time: copy only that region on the GPU
+            if (run.Tex == GxFrame.Atlas && tex != null && core.GxAtlasDirty(out int dx, out int dy, out int dw, out int dh)
+                && SystemInfo.copyTextureSupport != UnityEngine.Rendering.CopyTextureSupport.None && UploadRegion(tex, t, dx, dy, dw, dh)) {
+                textures[key] = (t.Gen, tex);
+                return tex;
+            }
             if (tex == null)   // a recycled id of the same size reuses its texture (and materials): no churn
                 tex = new Texture2D(t.W, t.H, TextureFormat.RGBA32, false) {
                     filterMode = FilterMode.Bilinear,
@@ -99,8 +105,26 @@ namespace FoxMelee {
                 };
             tex.LoadRawTextureData(t.Rgba, t.W * t.H * 4);   // top row first: v = 0 is the first row, as the core's
             tex.Apply(false, false);
+            if (run.Tex == GxFrame.Atlas) core.GxAtlasDirty(out _, out _, out _, out _);   // all of it is up to date
             textures[key] = (t.Gen, tex);
             return tex;
+        }
+
+        byte[] region = new byte[0];
+        Texture2D regionTex;
+        bool UploadRegion(Texture2D atlas, GxTexture t, int x, int y, int w, int h) {
+            if (w <= 0 || h <= 0 || x + w > t.W || y + h > t.H) return false;
+            if (region.Length != w * h * 4) region = new byte[w * h * 4];   // LoadRawTextureData(byte[]) wants the exact size
+            for (int row = 0; row < h; row++)
+                System.Runtime.InteropServices.Marshal.Copy(t.Rgba + ((y + row) * t.W + x) * 4, region, row * w * 4, w * 4);
+            if (regionTex == null || regionTex.width != w || regionTex.height != h) {
+                if (regionTex != null) UnityEngine.Object.Destroy(regionTex);
+                regionTex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            }
+            regionTex.LoadRawTextureData(region);
+            regionTex.Apply(false, false);
+            Graphics.CopyTexture(regionTex, 0, 0, 0, 0, w, h, atlas, 0, 0, x, y);
+            return true;
         }
 
         static TextureWrapMode Wrap(int w) => w == 1 ? TextureWrapMode.Repeat : w == 2 ? TextureWrapMode.Mirror : TextureWrapMode.Clamp;

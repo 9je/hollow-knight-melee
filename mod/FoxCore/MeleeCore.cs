@@ -79,6 +79,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxAtlasDirtyFn(out uint x, out uint y, out uint w, out uint h);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ReportFn(int port, int follower, uint group, float damage);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SfxFn([Out] McSfx[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
@@ -90,7 +91,7 @@ namespace FoxMelee {
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
         readonly HitlagFn hitlag; readonly ApplyHitFn applyHit; readonly SetPercentFn setPercent;
-        readonly GxCaptureFn gxCapture; readonly GxDecodeFn gxDecode; readonly GxTextureFn gxTexture; readonly SfxFn sfx;
+        readonly GxCaptureFn gxCapture; readonly GxDecodeFn gxDecode; readonly GxTextureFn gxTexture; readonly GxAtlasDirtyFn gxAtlasDirty; readonly SfxFn sfx;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
 
@@ -122,6 +123,7 @@ namespace FoxMelee {
             setPercent = NativeLib.Symbol<SetPercentFn>(lib, "mc_set_percent");
             gxDecode = NativeLib.Symbol<GxDecodeFn>(lib, "mc_gx_decode");
             gxTexture = NativeLib.Symbol<GxTextureFn>(lib, "mc_gx_texture");
+            gxAtlasDirty = NativeLib.Symbol<GxAtlasDirtyFn>(lib, "mc_gx_atlas_dirty");
             sfx = NativeLib.Symbol<SfxFn>(lib, "mc_read_sfx");
         }
 
@@ -188,6 +190,12 @@ namespace FoxMelee {
             t = new GxTexture { W = (int)raw.W, H = (int)raw.H, Rgba = raw.Rgba, Gen = raw.Gen };
             localError = null;
             return true;
+        }
+        /// The atlas texels changed since the last call (x, y, w, h); false when none did.
+        public bool GxAtlasDirty(out int x, out int y, out int w, out int h) {
+            bool any = gxAtlasDirty(out uint ux, out uint uy, out uint uw, out uint uh) == 1;
+            x = (int)ux; y = (int)uy; w = (int)uw; h = (int)uh;
+            return any;
         }
         /// Melee's sound effect calls since the last read, oldest first (drains them); count, -1 on error.
         public int ReadSfx(McSfx[] o) => sfx(o, o.Length);
