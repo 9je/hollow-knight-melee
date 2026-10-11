@@ -42,7 +42,7 @@ namespace FoxMelee {
                 if (c.OneWay) {
                     double x0 = c.Points.Min(p => p.X), x1 = c.Points.Max(p => p.X), top = c.Points.Max(p => p.Y);
                     if (x1 - x0 > Eps) shapes.Add(Shape(ShapeKind.Platform, new[] { new V2(x0, top), new V2(x1, top) }, t));
-                } else if (c.Closed && c.Points.Length >= 3) {
+                } else if ((c.Closed || EndsMeet(c.Points)) && c.Points.Length >= 3) {   // closed edge loops are solids
                     solids.Add(path);
                 } else {
                     solids.AddRange(Clipper.InflatePaths(new PathsD { path }, EdgeThickness / 2, JoinType.Miter, EndType.Butt, 2, Precision));
@@ -55,6 +55,9 @@ namespace FoxMelee {
             }
             return shapes;
         }
+
+        static bool EndsMeet(V2[] p) =>
+            p.Length >= 4 && System.Math.Abs(p[0].X - p[p.Length - 1].X) < Eps && System.Math.Abs(p[0].Y - p[p.Length - 1].Y) < Eps;
 
         static void Collect(PolyPathD node, List<RoomShape> shapes, RoomTransform t) {
             for (int i = 0; i < node.Count; i++) {

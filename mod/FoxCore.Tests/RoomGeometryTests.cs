@@ -64,6 +64,15 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void ClosedEdgeLoopsAreSolidsNotRings() {
+            // tilemap chunk outlines are EdgeCollider2Ds whose ends meet: one solid, not a ring + hole
+            var loop = new ColliderOutline { Closed = false, Points = new[] { new V2(0, 0), new V2(10, 0), new V2(10, 5), new V2(0, 5), new V2(0, 0) } };
+            var s = Assert.Single(RoomGeometry.Build(new[] { loop }, Unit));
+            Assert.Equal(ShapeKind.Solid, s.Kind);
+            Assert.Equal(8, s.XY.Length);
+        }
+
+        [Fact]
         public void NoCollidersMeansNoShapes() => Assert.Empty(RoomGeometry.Build(new ColliderOutline[0], Unit));
     }
 }

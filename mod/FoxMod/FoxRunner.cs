@@ -17,8 +17,9 @@ namespace FoxMelee {
         State state = State.Waiting;
         MeleeCore core;
         RoomTransform room;
-        string roomScene;
-        bool hkDriving = true;                  // Hollow Knight moves the Knight (transition, hazard respawn, death)
+        readonly FoxSession session = new FoxSession();   // who moves the Knight (pure rules, unit-tested)
+        bool holdingBody;                       // the Knight's body is kinematic because Fox drives it
+        bool needPlace = true;                  // Fox starts where the Knight is once Fox drives again
         float accumulator;
         GameObject placeholder;
         McFighter fox;
@@ -27,9 +28,17 @@ namespace FoxMelee {
         void Fail(string why) {
             FoxMod.Instance.LogError(why);
             state = State.Failed;
-            ReleaseHero();
+            if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
+            holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
         }
+
+        static HeroFlags Flags(HeroController h) => new HeroFlags {
+            Transitioning = h.cState.transitioning,
+            WaitingToTransition = h.transitionState == GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION,
+            HazardRespawning = h.cState.hazardRespawning, HazardDeath = h.cState.hazardDeath, Dead = h.cState.dead,
+            AcceptingInput = h.acceptingInput, ControlRelinquished = h.controlReqlinquished,
+        };
 
         void Update() {
             if (state == State.Failed) return;
@@ -37,19 +46,24 @@ namespace FoxMelee {
             var gm = GameManager.instance;
             if (hero == null || gm == null || !gm.IsGameplayScene()) return;
             if (state == State.Waiting && !Boot()) return;
-            HideKnight(hero);
-            // Transitions, hazard respawns and death are Hollow Knight's: it needs the Knight's normal physics
-            // (entering a room drops him with gravity onto the floor). Fox waits, then starts where the Knight is.
-            if (hero.cState.transitioning || hero.transitionState != GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION
-                || hero.cState.hazardRespawning || hero.cState.dead) {
-                if (!hkDriving) { GiveBodyBack(hero); hkDriving = true; }
+            var f = Flags(hero);
+            // A new room is converted once Hollow Knight has finished bringing the Knight in.
+            if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
+            SetKnightVisible(hero, session.KnightVisible(f));
+            if (session.Owner(f) == HeroOwner.Hollow) {
+                // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
+                // normal physics (entering a room drops him with gravity onto the floor).
+                if (holdingBody && session.ReturnBody(f)) GiveBodyBack(hero);
+                holdingBody = false;
+                needPlace = true;
                 accumulator = 0;
+                if (placeholder) placeholder.SetActive(false);
                 return;
             }
-            if (roomScene != gm.sceneName) { if (!EnterRoom(hero, gm.sceneName)) return; }
-            else if (hkDriving && !PlaceAtKnight(hero)) return;
-            hkDriving = false;
-            TakeHero(hero);
+            if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
+            var take = session.Take(f);
+            TakeHero(hero, take.IgnoreInput, take.Relinquish);
+            holdingBody = true;
             accumulator += Time.deltaTime;        // scaled: pausing Hollow Knight stops Melee
             int frames = 0;
             while (accumulator >= Frame && frames < 4) {
@@ -80,18 +94,20 @@ namespace FoxMelee {
             return true;
         }
 
-        bool EnterRoom(HeroController hero, string scene) {
+        /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played
+        /// as the Knight (FoxSession gives him back) until the next room converts.
+        bool EnterRoom(string scene) {
             var outlines = new List<ColliderOutline>();
             foreach (var c in FindObjectsOfType<Collider2D>()) {
                 if (!c.enabled || c.isTrigger || c.gameObject.layer != TerrainLayer || !c.gameObject.activeInHierarchy) continue;
                 AddOutlines(c, outlines);
             }
-            if (outlines.Count == 0) { Log($"{scene}: no terrain colliders; keeping the previous room"); roomScene = scene; return room != null; }
+            if (outlines.Count == 0) { RoomFailed(scene, "no terrain colliders"); return true; }
             var (min, max) = RoomGeometry.Bounds(outlines);
             var s = FoxMod.Instance.Settings;
             var t = new RoomTransform { Scale = s.WorldScale, Origin = new V2((min.X + max.X) / 2, (min.Y + max.Y) / 2) };
             var shapes = RoomGeometry.Build(outlines, t);
-            if (!core.BuildCollision(shapes, out var col)) { FoxMod.Instance.LogError($"{scene}: room not converted ({core.Error}); keeping the previous room"); roomScene = scene; return room != null; }
+            if (!core.BuildCollision(shapes, out var col)) { RoomFailed(scene, core.Error); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }
             var lo = t.ToMelee(min); var hi = t.ToMelee(max);
             float m = (float)s.CameraMargin;
@@ -99,9 +115,16 @@ namespace FoxMelee {
             var blast = new McBox { Left = cam.Left - FarBlast, Right = cam.Right + FarBlast, Top = cam.Top + FarBlast, Bottom = cam.Bottom - FarBlast };
             if (!core.SetBounds(blast, cam)) { Fail($"{scene}: mc_set_bounds: {core.Error}"); return false; }
             room = t;
-            roomScene = scene;
+            session.RoomConverted(scene, true);
+            needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");
-            return PlaceAtKnight(hero);
+            return true;
+        }
+
+        void RoomFailed(string scene, string why) {
+            FoxMod.Instance.LogError($"{scene}: room not converted ({why}); play it as the Knight");
+            if (session.RoomConverted(scene, false)) ReleaseHero();
+            holdingBody = false;
         }
 
         // Fox keeps his action and velocity; he starts where Hollow Knight put the Knight (feet to feet).
@@ -144,8 +167,9 @@ namespace FoxMelee {
 
         // The Knight follows Fox: no input, no gravity, a kinematic body that still touches static triggers
         // (room exits, hazards: Unity 2D kinematic bodies ignore static colliders unless full contacts are on).
-        static void TakeHero(HeroController hero) {
-            if (hero.acceptingInput) hero.RelinquishControl();
+        static void TakeHero(HeroController hero, bool ignoreInput, bool relinquish) {
+            if (relinquish) hero.RelinquishControl();
+            if (ignoreInput) hero.IgnoreInput();   // FinishedEnteringScene re-enables input after every transition
             hero.AffectedByGravity(false);
             var rb = hero.GetComponent<Rigidbody2D>();
             if (rb != null) { rb.velocity = Vector2.zero; rb.isKinematic = true; rb.useFullKinematicContacts = true; }
@@ -157,9 +181,9 @@ namespace FoxMelee {
             if (rb != null) rb.isKinematic = false;
         }
 
-        static void HideKnight(HeroController hero) {
+        static void SetKnightVisible(HeroController hero, bool visible) {
             var r = hero.GetComponent<MeshRenderer>();
-            if (r != null && FoxMod.Instance.Settings.ShowPlaceholder) r.enabled = false;
+            if (r != null && FoxMod.Instance.Settings.ShowPlaceholder && r.enabled != visible) r.enabled = visible;
         }
 
         static void ReleaseHero() {
@@ -207,10 +231,12 @@ namespace FoxMelee {
             if (placeholder == null) {
                 placeholder = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 Destroy(placeholder.GetComponent<Collider>());
-                placeholder.GetComponent<Renderer>().material.color = new Color(1f, 0.55f, 0.1f);
+                var mat = new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.55f, 0.1f) };   // unlit: HK scenes have few realtime lights
+                placeholder.GetComponent<Renderer>().material = mat;
                 DontDestroyOnLoad(placeholder);
             }
             float h = (float)(16.0 / FoxMod.Instance.Settings.WorldScale), w = h * 0.6f;   // Fox is about 16 Melee units tall
+            placeholder.SetActive(true);
             placeholder.transform.localScale = new Vector3(w * (fox.Facing < 0 ? -1 : 1), h, 1);
             placeholder.transform.position = new Vector3((float)feet.X, (float)feet.Y + h / 2, 0.01f);
         }
