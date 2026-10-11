@@ -10,6 +10,8 @@ namespace FoxMelee {
         public bool GameCubeAdapter = true;         // a GameCube controller through a Wii U / Mayflash adapter, read natively
         public int GameCubePort = 0;                // 1-4: that adapter port; 0: the first port with a controller
         public bool FoxHits = true;
+        public bool MeleeSfx = true;                // Melee's sound effects (melee.sfx, extracted at install); silent if missing
+        public double SfxVolume = 0.8;              // 0..1
         public double FocusSeconds = 1.141;         // Hollow Knight's Focus time for one mask (D-pad down)                 // Fox's Melee hitboxes damage enemies (spec §5.1)
     }
 }

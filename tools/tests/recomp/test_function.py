@@ -11,8 +11,8 @@ from . import asm
 CORE = Path(__file__).resolve().parents[3] / "core"
 
 
-def build_and_run(tmp_path, funcs, data_words, main_body, hle=None, extra="", entries=(), return_offsets=None):
-    prog = Program(funcs, data_words, hle or {}, entries=entries, return_offsets=return_offsets)
+def build_and_run(tmp_path, funcs, data_words, main_body, hle=None, extra="", entries=(), return_offsets=None, taps=None):
+    prog = Program(funcs, data_words, hle or {}, entries=entries, return_offsets=return_offsets, taps=taps)
     defs = "\n".join(prog.emit(e) for e in sorted(prog.entries))
     protos = "\n".join(f"uint32_t {c_name(e)}(Cpu *c);" for e in sorted(prog.entries))
     table = ",\n".join(f"{{0x{e:08X}u, {c_name(e)}}}" for e in sorted(prog.entries))
@@ -176,3 +176,18 @@ def test_return_offsets_land_past_the_call_site(tmp_path):
         st = th_call(c, fn_80001000, &ret);
         printf("%d %u %u %08X\\n", st, c->gpr[3], c->gpr[4], ret);""", return_offsets={0x80001100: {8}})
     assert out.strip() == "0 0 9 80000100"
+
+
+def test_tap_runs_host_function_at_entry_then_original_body(tmp_path):
+    # f calls g (r3 = r3 + 1); g is tapped: tap_g sees g's arguments, then g's own body runs unchanged
+    g = F(0x80006100, [asm.addi(3, 3, 1), asm.blr()], name="g")
+    f = F(0x80006000, [asm.mflr(0), asm.stw(0, 4, 1), asm.bl(0x80006100 - 0x80006008), asm.lwz(0, 4, 1), asm.mtlr(0), asm.blr()])
+    prog = Program([f, g], [], taps={0x80006100: "g"})
+    src = prog.emit(0x80006100)
+    assert src.split("\n")[1].strip() == "tap_g(c);"
+    assert "tap_g" not in prog.emit(0x80006000)
+    out = build_and_run(tmp_path, [f, g], [], """
+        c->gpr[1] = 0x80100000u; c->gpr[3] = 41; LR = 0x80000100u; st = th_call(c, fn_80006000, &ret);
+        printf("%d %u %08X %u\\n", st, c->gpr[3], ret, seen);""",
+        taps={0x80006100: "g"}, extra="static uint32_t seen; void tap_g(Cpu *c) { seen = c->gpr[3]; }")
+    assert out.strip() == "0 42 80000100 41"

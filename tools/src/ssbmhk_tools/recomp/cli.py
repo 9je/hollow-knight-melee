@@ -37,13 +37,16 @@ def recomp_main(argv=None):
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--gecko", type=Path, help="Gecko code file (04/C2 codes) applied before recompiling")
     ap.add_argument("--hle", type=Path, help="file listing guest functions replaced by host hle_<name>")
+    ap.add_argument("--tap", type=Path, help="file listing guest functions whose body first calls host tap_<name>")
     a = ap.parse_args(argv)
     hle_names = a.hle.read_text().split() if a.hle else []
+    tap_names = a.tap.read_text().split() if a.tap else []
     try:
         dol, fns = _inputs(a.config)
     except WrongDol as e:
         raise SystemExit(f"error: {e}")
-    rep = generate(dol, fns, a.out, hle_names=hle_names, gecko=a.gecko.read_text() if a.gecko else "")
+    rep = generate(dol, fns, a.out, hle_names=hle_names, gecko=a.gecko.read_text() if a.gecko else "",
+                   tap_names=tap_names)
     print(rep.summary())
     if rep.unresolved:
         raise SystemExit(f"error: {len(rep.unresolved)} unresolved branches, see {a.out / 'report.txt'}")

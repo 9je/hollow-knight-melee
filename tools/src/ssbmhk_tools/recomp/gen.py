@@ -74,8 +74,9 @@ def _injection_sites(patched: dict[int, int], bodies) -> list[tuple[int, int]]:
     return out
 
 
-def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: str = "") -> Report:
+def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: str = "", tap_names=()) -> Report:
     """hle_names: guest functions replaced by host functions `uint32_t hle_<name>(Cpu *)`.
+    tap_names: guest functions whose body first calls host `void tap_<name>(Cpu *)` (read-only observer).
     gecko: Gecko code text (04/C2) applied to code and to the MEM1 image."""
     out.mkdir(parents=True, exist_ok=True)
     by_name = {s.name: s.addr for s in fns}
@@ -83,6 +84,10 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: s
     if missing:
         raise ValueError(f"unknown HLE functions: {missing}")
     hle = {by_name[n]: n for n in hle_names}
+    missing = [n for n in tap_names if n not in by_name]
+    if missing:
+        raise ValueError(f"unknown tap functions: {missing}")
+    taps = {by_name[n]: n for n in tap_names}
     patched, bodies = apply_codes(gecko) if gecko else ({}, [])
     word = lambda a: patched.get(a, dol.word(a))  # noqa: E731
     funcs = [Func(s.name, s.addr, s.size, tuple(word(a) for a in range(s.addr, s.addr + s.size, 4)))
@@ -98,7 +103,7 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: s
         if host is not None:
             skips.setdefault(host.addr, set()).update(ks)
     prog = Program(funcs, _data_words(dol), hle, entries={t for _, b in bodies for t in branch_targets(b)},
-                   return_offsets=skips)
+                   return_offsets=skips, taps=taps)
     rep = Report(n_funcs=len(funcs), n_entries=len(prog.entries), unresolved={pc: t for pc, t in prog.unresolved.items() if KNOWN_UNRESOLVED.get(pc) != t},
                  jump_table_funcs=len(prog.cases), sda=sda_bases(dol, fns))
     for f in funcs:
@@ -115,7 +120,8 @@ def generate(dol, fns, out: Path, shard_funcs: int = 150, hle_names=(), gecko: s
         by_func.setdefault(prog.func_at(e).addr, []).append(e)
     _write(out / "guest_fns.h",
            "#pragma once\n#include \"cpu.h\"\n" + "".join(f"uint32_t {c_name(e)}(Cpu *c);\n" for e in entries)
-           + "".join(f"uint32_t hle_{n}(Cpu *c);\n" for n in sorted(hle.values())))
+           + "".join(f"uint32_t hle_{n}(Cpu *c);\n" for n in sorted(hle.values()))
+           + "".join(f"void tap_{n}(Cpu *c);\n" for n in sorted(taps.values())))
     for n in range(0, len(funcs), shard_funcs):
         parts = ['#include "cpu.h"', '#include "guest_fns.h"', ""]
         for f in funcs[n:n + shard_funcs]:

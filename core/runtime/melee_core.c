@@ -61,6 +61,7 @@ int mc_init(const char *mem1_path, const char *iso_path) {
   Machine *m = calloc(1, sizeof *m);
   if (!m) return init_fail("out of memory");
   g_m = m;
+  sfx_reset();
   Cpu *c = &m->cpu;
   c->mem = malloc(MEM1_SIZE);
   m->aram = calloc(1, ARAM_SIZE);

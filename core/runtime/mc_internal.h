@@ -54,7 +54,8 @@ uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4);
 void service(Cpu *c);
 void room_boundary_jobs(Cpu *c);
 void worker_call(void (*fn)(void *), void *arg);   /* worker.c: run fn on the core's own thread, wait */
-void worker_stop(void);   /* room.c: pending room loads and placements */
+void worker_stop(void);
+void sfx_reset(void);   /* sfx.c: empty the sound event queue */   /* room.c: pending room loads and placements */
 #define RET return c->spr[SPR_LR]
 
 /* gx.c */

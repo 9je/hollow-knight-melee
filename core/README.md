@@ -72,6 +72,7 @@ make -C core replay-check-tool && (cd tools && .venv/bin/ssbmhk-replay-check)   
 - The core is Slippi's Melee, not bare 1.02: every slippi-ssbm-asm code tagged `[affects-gameplay]` that Slippi's netplay INI enables (UCF 0.84, neutral spawns, wobble limit, ...; list in `runtime/slippi_gameplay.txt`) is applied as Gecko code at generation time (`make -C core gecko`, pinned and verified). The recompiler handles the Slippi asm idioms in those bodies: `bl`/`blrl` data tables, `branch` jumps into the middle of functions, and returns past the caller's return site (UCF Shield Drop).
 - `mc_start_match(..., MC_ONLINE_RNG)` replays an online match: Slippi online re-seeds the RNG every frame (`runtime/online_rng.gecko` plus a host proc).
 - A zero result of `fnmsub`/`fnmsubs`/`ps_nmsub` gets the sign Slippi's deterministic JIT gives it (`b - a*c`), not the hardware's (`gekko_slippi_nmsub`, set by `mc_init`; the difftest keeps the hardware rule).
+- Sound: no audio is produced. Recompiler taps (`runtime/taps.txt`, `--tap`) on `HSD_AudioSFXStartParam` and the key-off calls queue read-only events (`runtime/sfx.c`) that `mc_read_sfx()` drains; the mod plays them from samples read out of the user's ISO (`ssbmhk-extract-sfx`).
 - Replay checking compares action, position, facing, percent, shield, velocities and airborne, bit for bit, on every frame for every fighter. Measured speed on the development machine: 100–125 frames/s on most stages, 66 on Fountain of Dreams (its reflections), so 1.1–2× real time.
 
 ## Rooms (plan 2)

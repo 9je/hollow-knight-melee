@@ -1,0 +1,4 @@
+HSD_AudioSFXStartParam
+HSD_AudioSFXKeyOff
+HSD_AudioSFXKeyOffAll
+HSD_AudioSFXKeyOffTrack
