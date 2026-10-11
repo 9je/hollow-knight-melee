@@ -6,9 +6,10 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 hk="${1:-$HOME/.steam/steam/steamapps/common/Hollow Knight}"
 managed="$hk/hollow_knight_Data/Managed"
 [ -f "$managed/Assembly-CSharp.dll" ] || { echo "not a Hollow Knight folder: $hk" >&2; exit 1; }
-saves="$HOME/.config/unity3d/Team Cherry/Hollow Knight"
+saves="${HK_SAVES:-$HOME/.config/unity3d/Team Cherry/Hollow Knight}"   # overridable for dry runs
+backups="${BACKUP_DIR:-$HOME/Documents}"
 stamp="$(date +%Y%m%d-%H%M%S)"
-if [ -d "$saves" ]; then cp -a "$saves" "$HOME/Documents/hollow-knight-save-backup-$stamp"; echo "saves backed up to ~/Documents/hollow-knight-save-backup-$stamp"; fi
+if [ -d "$saves" ]; then cp -a "$saves" "$backups/hollow-knight-save-backup-$stamp"; echo "saves backed up to $backups/hollow-knight-save-backup-$stamp"; fi
 [ -d "$managed.vanilla" ] || { cp -a "$managed" "$managed.vanilla"; echo "vanilla Managed backed up to $managed.vanilla"; }
 [ -f "$repo/mod/lib/api/Assembly-CSharp.dll" ] || bash "$repo/mod/fetch_api.sh"
 make -s -C "$repo/core" shared
