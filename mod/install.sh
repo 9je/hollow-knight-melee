@@ -33,9 +33,16 @@ else
   echo "fox.model not extracted (no ISO in dev.toml or no tools environment): the mod draws a placeholder"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
-if [ -n "$iso" ] && [ ! -f "$settings" ]; then
+if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting
   mkdir -p "$saves"
-  printf '{\n  "IsoPath": "%s",\n  "WorldScale": 6.0,\n  "CameraMargin": 40.0,\n  "ShowPlaceholder": true,\n  "KeyboardFallback": true\n}\n' "$iso" > "$settings"
-  echo "wrote $settings"
+  python3 - "$settings" "$iso" <<'PY'
+import json, os, sys
+path, iso = sys.argv[1], sys.argv[2]
+s = json.load(open(path)) if os.path.exists(path) else {}
+if not s.get("IsoPath"):
+    s["IsoPath"] = iso
+    json.dump(s, open(path, "w"), indent=2)
+    print("set IsoPath in", path)
+PY
 fi
 echo "installed FoxMelee into $dest"
