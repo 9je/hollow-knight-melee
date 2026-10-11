@@ -15,6 +15,15 @@ namespace FoxMelee.Tests {
         public void GameCubePromptsShowFoxsControls(string action, string button) =>
             Assert.Equal(button, PromptButtons.ForGameCube(action));
 
+        // In the inventory the GameCube buttons are Hollow Knight's own (A confirms, B backs out, X is attack):
+        // Hollow Knight's prompts are right there, Fox's would be wrong ("Unequip X" when A equips)
+        [Theory]
+        [InlineData("JUMP", null)]
+        [InlineData("ATTACK", null)]
+        [InlineData("INVENTORY", "dpadRight")]   // still closes it
+        public void GameCubeMenuPromptsShowHollowKnightsButtons(string action, string button) =>
+            Assert.Equal(button, PromptButtons.ForGameCube(action, menu: true));
+
         [Theory]
         [InlineData("UP", "E")]
         [InlineData("CAST", "F")]

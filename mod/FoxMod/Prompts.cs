@@ -18,7 +18,7 @@ namespace FoxMelee {
         static ButtonSkin Skin(UIButtonSkins skins, HeroActionButton action) {
             if (!Active) return null;
             if (InputManager.ActiveDevice is GcInput.GcDevice && InputHandler.Instance?.lastActiveController == BindingSourceType.DeviceBindingSource) {
-                var name = PromptButtons.ForGameCube(action.ToString());
+                var name = PromptButtons.ForGameCube(action.ToString(), GcInput.InventoryOpen);
                 var sprite = name == null ? null : typeof(UIButtonSkins).GetField(name, BindingFlags.Instance | BindingFlags.Public)?.GetValue(skins) as UnityEngine.Sprite;
                 return sprite == null ? null : new ButtonSkin(sprite, "", ButtonSkinType.BLANK);
             }

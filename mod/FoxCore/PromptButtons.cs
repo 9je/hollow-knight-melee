@@ -2,7 +2,9 @@ namespace FoxMelee {
     /// Hollow Knight's on-screen button prompts (UIButtonSkins, by HeroActionButton name) for what Fox uses instead:
     /// a UIButtonSkins sprite name for the GameCube controller, a key for the keyboard; null keeps Hollow Knight's.
     public static class PromptButtons {
-        public static string ForGameCube(string action) {
+        /// menu: the inventory is open, where the GameCube buttons are Hollow Knight's own (A confirms, X attacks)
+        public static string ForGameCube(string action, bool menu = false) {
+            if (menu && (action == "ATTACK" || action == "JUMP")) return null;
             switch (action) {
                 case "UP": return "dpadLeft";            // interact: D-pad left (HkControls)
                 case "INVENTORY": case "QUICK_MAP": return "dpadRight";   // tap / hold (DPadRight)
