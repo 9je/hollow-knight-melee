@@ -42,7 +42,12 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
     away from Fox (a back air sends an enemy behind him further behind), after the freeze. Grabs do not hurt
     enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail, and Fox can then walk through (ModLog says "terrain changed, collision rebuilt").
 
-11. Shield (hold R/L): a red bubble the size Melee gives it, shrinking as it weakens and fading with a light press. Down-B: a blue hexagon (shine). Neutral B: lasers fly. These are simple shapes standing in for Melee's own effects.
+11. Melee's graphics: Fox, his blaster, lasers and every effect are drawn from Melee's own graphics, as Melee draws
+    them: shield bubble (red, shrinking and fading like Melee's), shine (blue flash and sparkles), Firefox (charge burst,
+    flames), Illusion (streak), lasers (red beam and muzzle ring), smoke and dust. `ModLog.txt` says "drawing Melee's own
+    graphics". Things to look for: parts of Fox drawn in front of / behind the wrong parts, effects in odd places, a
+    stutter when a new effect appears for the first time, frame rate. `MeleeGraphics: false` goes back to the extracted
+    model (fox.model) with simple shapes for the shield, shine and lasers.
 
 12. Sounds: Fox's Melee sound effects (laser, jumps, attacks, landing, shine...) play from your ISO (`melee.sfx`, extracted by `install.sh`; `ModLog.txt` says `Melee sounds: N sounds`, or why Fox is silent). Volume: `SfxVolume` (0-1, default 0.8, also follows Hollow Knight's sound volume); `MeleeSfx: false` turns them off. The announcer and other characters' banks are not included.
 
