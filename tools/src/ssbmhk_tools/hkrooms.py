@@ -50,6 +50,30 @@ def _v(v):
     return (_c(v, "x"), _c(v, "y"), _c(v, "z"))
 
 
+def world_matrix(tid, transforms, cache) -> list:
+    """World matrix of Transform `tid`: parent * child up the m_Father chain, like Unity's TransformPoint."""
+    if tid in cache:
+        return cache[tid]
+    t = transforms[tid]
+    q = t.m_LocalRotation
+    m = trs_matrix(_v(t.m_LocalPosition), (_c(q, 'x'), _c(q, 'y'), _c(q, 'z'), _c(q, 'w')), _v(t.m_LocalScale))
+    father = t.m_Father.path_id
+    if father and father in transforms:
+        m = mat_mul(world_matrix(father, transforms, cache), m)
+    cache[tid] = m
+    return m
+
+
+def active_in_hierarchy(tid, transforms, gos) -> bool:
+    """GameObject.activeInHierarchy: the object and every ancestor active."""
+    while tid in transforms:
+        t = transforms[tid]
+        if not gos[t.m_GameObject.path_id].m_IsActive:
+            return False
+        tid = t.m_Father.path_id
+    return True
+
+
 def extract_scene(data_dir, scene) -> dict:
     env = UnityPy.load(scene_files(data_dir)[scene])
     by_id = {o.path_id: o for o in env.objects}
@@ -63,24 +87,10 @@ def extract_scene(data_dir, scene) -> dict:
     world_cache = {}
 
     def world(tid):
-        if tid in world_cache:
-            return world_cache[tid]
-        t = transforms[tid]
-        q = t.m_LocalRotation
-        m = trs_matrix(_v(t.m_LocalPosition), (_c(q, 'x'), _c(q, 'y'), _c(q, 'z'), _c(q, 'w')), _v(t.m_LocalScale))
-        father = t.m_Father.path_id
-        if father and father in transforms:
-            m = mat_mul(world(father), m)
-        world_cache[tid] = m
-        return m
+        return world_matrix(tid, transforms, world_cache)
 
     def active(tid):
-        while tid in transforms:
-            t = transforms[tid]
-            if not gos[t.m_GameObject.path_id].m_IsActive:
-                return False
-            tid = t.m_Father.path_id
-        return True
+        return active_in_hierarchy(tid, transforms, gos)
 
     def effector(go_id):
         return any(by_id[c.path_id].type.name == "PlatformEffector2D"
