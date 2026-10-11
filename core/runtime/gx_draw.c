@@ -549,8 +549,26 @@ static int32_t baked_slot(void) {
   return ntex++;
 }
 
+/* the TEV is texture x colour (the host's multiply) on sampled texels: baking would change nothing but cost a texture
+ * per frame for an animated colour (lasers, glows) */
+static int tev_is_multiply(const DrawSetup *d, const Vtx *vs, const Tex *src) {
+  C4 one = {1, 1, 1, 1};
+  C4 w = tev(d, vs[0].chan, &one);
+  uint32_t nt = src->w * src->h, step = nt / 31 + 1;
+  for (uint32_t t = 0; t < nt; t += step) {
+    const uint8_t *p = src->rgba + 4 * t;
+    C4 tc = {p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f, p[3] / 255.0f};
+    C4 o = tev(d, vs[0].chan, &tc);
+    if (fabsf(o.r - tc.r * w.r) > 0.008f || fabsf(o.g - tc.g * w.g) > 0.008f || fabsf(o.b - tc.b * w.b) > 0.008f || fabsf(o.a - tc.a * w.a) > 0.008f)
+      return 0;
+  }
+  C4 zero = {0, 0, 0, 0}, o = tev(d, vs[0].chan, &zero);
+  return fabsf(o.r) < 0.008f && fabsf(o.g) < 0.008f && fabsf(o.b) < 0.008f && fabsf(o.a) < 0.008f;
+}
+
 static void bake(DrawSetup *d, Vtx *vs, int n) {
   const Tex *src = &texs[d->tex];
+  if (tev_is_multiply(d, vs, src)) return;
   uint32_t cfg[64]; int k = 0;
   cfg[k++] = (uint32_t)d->tex; cfg[k++] = (uint32_t)d->ntev;
   for (int i = 0; i < 4; i++) cfg[k++] = S.bp[0x28 + i];
@@ -727,6 +745,22 @@ static uint8_t *atlas;
 static uint32_t atlas_gen;
 static int shelf_x, shelf_y, shelf_h;
 
+static int dirty, dirty_x0, dirty_y0, dirty_x1, dirty_y1;   /* atlas texels changed since mc_gx_atlas_dirty */
+static void dirty_mark(int x, int y, int w, int h) {
+  if (!dirty) { dirty = 1; dirty_x0 = x; dirty_y0 = y; dirty_x1 = x + w; dirty_y1 = y + h; return; }
+  if (x < dirty_x0) dirty_x0 = x;
+  if (y < dirty_y0) dirty_y0 = y;
+  if (x + w > dirty_x1) dirty_x1 = x + w;
+  if (y + h > dirty_y1) dirty_y1 = y + h;
+}
+
+int mc_gx_atlas_dirty(uint32_t *x, uint32_t *y, uint32_t *w, uint32_t *h) {
+  if (!dirty) return 0;
+  *x = (uint32_t)dirty_x0; *y = (uint32_t)dirty_y0; *w = (uint32_t)(dirty_x1 - dirty_x0); *h = (uint32_t)(dirty_y1 - dirty_y0);
+  dirty = 0;
+  return 1;
+}
+
 static int wrap_i(int i, int n, int mode) {
   if (mode == 1) return ((i % n) + n) % n;
   if (mode == 2) { int p = ((i % (2 * n)) + 2 * n) % (2 * n); return p < n ? p : 2 * n - 1 - p; }
@@ -748,6 +782,7 @@ static int atlas_place(Tex *t) {
       memcpy(atlas + 4 * ((size_t)(t->ay + y) * ATLAS + (size_t)(t->ax + x)), t->rgba + 4 * ((size_t)sy * (size_t)w + (size_t)sx), 4);
     }
   atlas_gen++;
+  dirty_mark(t->ax, t->ay, cw, ch);
   return 1;
 }
 
@@ -905,7 +940,7 @@ void gx_draw_free(void) {
   for (int i = 0; i < ntex; i++) free(texs[i].rgba);
   free(texs); texs = NULL; ntex = captex = 0;
   live_ready = 0;
-  free(atlas); atlas = NULL; shelf_x = shelf_y = shelf_h = 0; atlas_gen++;
+  free(atlas); atlas = NULL; shelf_x = shelf_y = shelf_h = 0; atlas_gen++; dirty = 0;
   free(tris); tris = NULL; ntris = captris = 0;
   free(out_v); out_v = NULL; cap_v = 0;
   free(out_r); out_r = NULL; cap_r = 0;

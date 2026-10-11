@@ -437,6 +437,10 @@ static void test_gx_decode(void) {
   for (int i = 0; i < nr; i++) atlas += r[i].tex == MC_GX_ATLAS && r[i].p_link == 8;
   McGxTexture t;
   CHECK(atlas >= 1 && mc_gx_texture(MC_GX_ATLAS, &t) == 0 && t.w == 4096 && t.gen > 0);
+  /* the atlas reports what changed since it was last asked: the host uploads only that */
+  uint32_t ax, ay, aw, ah;
+  CHECK(mc_gx_atlas_dirty(&ax, &ay, &aw, &ah) == 1 && aw > 0 && ah > 0 && ax + aw <= 4096 && ay + ah <= 4096);
+  CHECK(mc_gx_atlas_dirty(&ax, &ay, &aw, &ah) == 0);
   CHECK(r[nr - 1].first + r[nr - 1].count == (uint32_t)nv);
   /* shield: a translucent effect around the shield's centre */
   McInput sh = {0}; sh.buttons = 0x0020; sh.trigger_r = 255;

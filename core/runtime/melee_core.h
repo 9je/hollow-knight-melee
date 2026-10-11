@@ -115,6 +115,8 @@ int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const
 /* A texture a run uses (RGBA8, top row first); ids stay the same while the texture does. */
 typedef struct { uint32_t w, h; const uint8_t *rgba; uint32_t gen; } McGxTexture;   /* gen: changes when the id is reused */
 int mc_gx_texture(int32_t id, McGxTexture *out);
+/* The atlas region (texels) changed since the last call, so a host need not upload all 4096x4096 again; 1 if any. */
+int mc_gx_atlas_dirty(uint32_t *x, uint32_t *y, uint32_t *w, uint32_t *h);
 uint32_t mc_gx_size_mismatches(void);
 uint32_t mc_gx_decode_errors(void);   /* draws stepped over: unreadable vertices or no colour written */   /* self-check: vertex sizes computed for skipped draws that a full parse disagreed with */
 /* Melee's sound effects, read-only (no audio is produced: the host plays them). Taps on HSD_AudioSFXStartParam,
