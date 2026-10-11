@@ -26,6 +26,7 @@ namespace FoxMelee {
         readonly Dictionary<object, EnemyFreeze> frozen = new Dictionary<object, EnemyFreeze>();
         readonly GameObject strike;            // each hit's Source: Hollow Knight draws nail effects between it and the target
         readonly CircleCollider2D[] nailTriggers = new CircleCollider2D[4];
+        readonly HutongGames.PlayMaker.FsmFloat[] nailDirections = new HutongGames.PlayMaker.FsmFloat[4];
         RoomTransform room;
         float foxX;
 
@@ -35,12 +36,13 @@ namespace FoxMelee {
             UnityEngine.Object.DontDestroyOnLoad(strike);
             for (int i = 0; i < 4; i++) {
                 var go = new GameObject("FoxNailAttack" + i) { tag = "Nail Attack", layer = AttackLayer };
+                go.SetActive(false);
                 UnityEngine.Object.DontDestroyOnLoad(go);
                 var body = go.AddComponent<Rigidbody2D>();
                 body.isKinematic = true;
                 nailTriggers[i] = go.AddComponent<CircleCollider2D>();
                 nailTriggers[i].isTrigger = true;
-                go.SetActive(false);
+                nailDirections[i] = DamagesEnemy(go);
             }
             if (Evasion == null) FoxMod.Instance.LogWarn("HealthManager.evasionByHitRemaining not found: rapid Melee hits may be ignored");
         }
@@ -53,10 +55,12 @@ namespace FoxMelee {
             hurting.Clear();
             for (int i = 0; i < n; i++) if (HitRules.HurtsEnemies(boxes[i])) hurting.Add(boxes[i]);
             this.room = room;
+            if (hurting.Count > 0) {
+                if (!core.ReadFighter(0, out var fox)) return false;
+                foxX = Hk(fox.X, fox.Y).x;
+            }
             PlaceNailTriggers();
             if (hurting.Count == 0) { tracker.Frame(hurting, null); return true; }
-            if (!core.ReadFighter(0, out var fox)) return false;
-            foxX = Hk(fox.X, fox.Y).x;
             var hits = tracker.Frame(hurting, Overlaps);
             if (hits.Count == 0) return true;
             int nail = PlayerData.instance.GetInt("nailDamage");
@@ -92,12 +96,28 @@ namespace FoxMelee {
             if (frozen.TryGetValue(k, out var f)) { f.Release(); frozen.Remove(k); }
         }
 
+        // Tag-driven objects (lifeblood cocoons, stalactites, geo rocks) read the hit's direction from the nail slash's
+        // "damages_enemy" state machine. This one only carries that value: it has no states and damages nothing.
+        static HutongGames.PlayMaker.FsmFloat DamagesEnemy(GameObject go) {
+            try {
+                var fsm = go.AddComponent<PlayMakerFSM>();
+                fsm.FsmName = "damages_enemy";
+                var dir = new HutongGames.PlayMaker.FsmFloat("direction");
+                fsm.FsmVariables.FloatVariables = new[] { dir };
+                return dir;
+            } catch (Exception e) {
+                FoxMod.Instance.LogWarn("no damages_enemy stand-in (" + e.Message + "): cocoons and rocks may not react to Fox");
+                return null;
+            }
+        }
+
         void PlaceNailTriggers() {
             for (int i = 0; i < 4; i++) {
                 var t = nailTriggers[i];
                 if (i >= hurting.Count) { t.gameObject.SetActive(false); continue; }
                 t.transform.position = Hk(hurting[i].X, hurting[i].Y);
                 t.radius = (float)(hurting[i].Radius / room.Scale);
+                if (nailDirections[i] != null) nailDirections[i].Value = HitRules.Direction(hurting[i].Angle, t.transform.position.x <= foxX);
                 t.gameObject.SetActive(true);
             }
         }
