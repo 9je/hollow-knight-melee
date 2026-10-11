@@ -11,7 +11,7 @@ namespace FoxMelee {
     /// the Unity calls live in FoxRunner.
     public sealed class FoxSession {
         string roomScene;
-        bool roomReady, took;
+        bool roomReady, took, respawn;
 
         /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death).
         public static bool HollowBusy(HeroFlags f) =>
@@ -29,7 +29,18 @@ namespace FoxMelee {
             return true;
         }
 
-        public HeroOwner Owner(HeroFlags f) => roomReady && !HollowBusy(f) ? HeroOwner.Fox : HeroOwner.Hollow;
+        public HeroOwner Owner(HeroFlags f) {
+            if (f.HazardDeath || f.HazardRespawning || f.Dead) respawn = true;
+            return roomReady && !HollowBusy(f) ? HeroOwner.Fox : HeroOwner.Hollow;
+        }
+
+        /// When Fox next takes the Knight: true after spikes or death (Fox comes back still, as the Knight does),
+        /// false after a door or transition (Fox keeps his momentum). Consumed by the call.
+        public bool TakeRespawns() {
+            bool r = respawn;
+            respawn = false;
+            return r;
+        }
 
         /// While Fox drives: block the Knight's input every frame (FinishedEnteringScene calls AcceptInput again
         /// but leaves controlReqlinquished set, so RelinquishControl alone would not), relinquish once.

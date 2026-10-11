@@ -206,10 +206,13 @@ namespace FoxMelee {
         }
 
         // Fox keeps his action and velocity; he starts where Hollow Knight put the Knight (feet to feet).
+        // After spikes or death he comes back still, as the Knight does (no momentum to carry him back in).
         bool PlaceAtKnight(HeroController hero) {
             var feet = (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero));
             var at = room.ToMelee(new V2(feet.x, feet.y));
-            if (core.PlaceFighter(0, (float)at.X, (float)at.Y)) return true;
+            bool respawn = session.TakeRespawns();
+            Log($"Fox takes the Knight at ({feet.x:F2}, {feet.y:F2}) → Melee ({at.X:F1}, {at.Y:F1}){(respawn ? ", respawned" : "")}");
+            if (respawn ? core.RespawnFighter(0, (float)at.X, (float)at.Y) : core.PlaceFighter(0, (float)at.X, (float)at.Y)) return true;
             Fail($"mc_place_fighter: {core.Error}");
             return false;
         }
@@ -238,9 +241,13 @@ namespace FoxMelee {
         }
 
         // The Knight's transform sits above his feet; Fox's position is his feet.
+        // Measured while his collider is on (Hollow Knight turns it off at times, and then its bounds are empty).
+        static float feetOffset = -1f;
         static float HeroFeetOffset(HeroController hero) {
             var col = hero.GetComponent<Collider2D>();
-            return col == null ? 0f : hero.transform.position.y - col.bounds.min.y;
+            if (col != null && col.enabled && col.gameObject.activeInHierarchy && col.bounds.size.y > 0.01f)
+                feetOffset = hero.transform.position.y - col.bounds.min.y;
+            return feetOffset < 0 ? 0f : feetOffset;
         }
 
         // The Knight follows Fox: no input, no gravity, a kinematic body that still touches static triggers

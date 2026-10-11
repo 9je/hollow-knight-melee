@@ -44,4 +44,6 @@ int mc_build_collision(const McShape *shapes, int n_shapes, const McCollision **
 /* Moves the port's fighter to (x, y) at the next frame boundary, keeping its action and velocity.
  * A grounded fighter is snapped to a floor within 10 units (Melee's spawn probe) or becomes airborne. */
 int mc_place_fighter(int port, float x, float y);
+/* As mc_place_fighter, for a respawn: the fighter comes back falling with no velocity, knockback or hitlag. */
+int mc_respawn_fighter(int port, float x, float y);
 

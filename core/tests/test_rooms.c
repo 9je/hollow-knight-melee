@@ -113,6 +113,19 @@ static void test_place(void) {
   CHECK(fox().airborne == 1);
   steps(30, NULL);
   CHECK(fox().y < 120.0f);
+  /* a respawn (Hollow Knight's spikes, death): Fox comes back still, falling, with no momentum */
+  steps(120, NULL);
+  steps(40, &run);
+  CHECK(fox().action == 21);
+  CHECK(mc_respawn_fighter(0, -20.0f, 30.0f) == 0);
+  steps(1, NULL);
+  McFighter r = fox();
+  CHECK(r.airborne == 1 && r.self_vel_x == 0 && r.ground_vel == 0 && r.kb_vel_x == 0 && r.hitlag == 0);
+  CHECK(fabsf(r.x - (-20.0f)) < 0.01f);
+  steps(60, NULL);
+  r = fox();
+  CHECK(r.airborne == 0 && fabsf(r.x - (-20.0f)) < 0.01f && r.action == 14);   /* landed in place: Wait */
+  CHECK(mc_respawn_fighter(4, 0, 0) == -1);
   mc_shutdown();
 }
 

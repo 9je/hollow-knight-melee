@@ -73,3 +73,29 @@ namespace FoxMelee.Tests {
         }
     }
 }
+
+namespace FoxMelee.Tests {
+    public class FoxSessionRespawnTests {
+        static HeroFlags Playing => new HeroFlags { WaitingToTransition = true, AcceptingInput = true };
+
+        [Xunit.Fact]
+        public void SpikesAndDeathBringFoxBackStillButTransitionsKeepMomentum() {
+            var s = new FoxSession();
+            s.RoomConverted("A", true);
+            Xunit.Assert.False(s.TakeRespawns());                          // first placement: keep (nothing to keep)
+            var hazard = Playing; hazard.HazardDeath = true;
+            s.Owner(hazard);
+            Xunit.Assert.True(s.TakeRespawns());
+            Xunit.Assert.False(s.TakeRespawns());                          // once
+            var dead = Playing; dead.Dead = true;
+            s.Owner(dead);
+            Xunit.Assert.True(s.TakeRespawns());
+            var trans = Playing; trans.Transitioning = true;
+            s.Owner(trans);
+            Xunit.Assert.False(s.TakeRespawns());                          // a door keeps Fox's run
+            var respawning = Playing; respawning.HazardRespawning = true;
+            s.Owner(respawning);
+            Xunit.Assert.True(s.TakeRespawns());
+        }
+    }
+}

@@ -133,6 +133,12 @@ int mc_place_fighter(int port, float x, float y) {
   return 0;
 }
 
+int mc_respawn_fighter(int port, float x, float y) {
+  int rc = mc_place_fighter(port, x, y);
+  if (rc == 0) g_m->place_pending[port] = 2;
+  return rc;
+}
+
 /* bool mpCheckFloor(ax, ay, bx, by, y_offset, Vec3 *out, int *line, u32 *flags, Vec3 *normal,
  *                   line_skip, joint_skip, joint_only, cb, gobj): the floor crossed by segment a->b.
  * Nine integer arguments: the ninth goes on the stack, so the call runs on a temporary guest frame
@@ -162,11 +168,16 @@ static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, 
  * - a grounded fighter stands on the floor within 10 units (mpCheckFloor), else becomes airborne.
  * moved == 0 (a fighter not placed after a room load): only the line ids the old room invalidated are
  * renewed; position, ECB and camera stay as they are. */
-static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved) {
+static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int respawn) {
   uint32_t fp = ld32(c, gobj + 0x2C);
   uint32_t action = ld32(c, fp + 0x10);
   call_guest(c, FN_CLEAR_FLOOR_SKIP, fp + 0x6F0u, 0);   /* a drop-through in progress named an old line */
-  if (action >= MS_CLIFF_FIRST && action <= MS_CLIFF_LAST) {
+  if (respawn) {                                        /* falling, still: no momentum, knockback or hitlag */
+    call_guest(c, FN_SET_AIRBORNE, fp, 0);
+    call_guest(c, FN_FALL_ENTER, gobj, 0);
+    static const uint32_t vel[] = {0x80, 0x84, 0x88, 0x8C, 0x90, 0x94, 0xEC, 0x195C};   /* self, kb, ground, hitlag */
+    for (unsigned k = 0; k < sizeof vel / sizeof vel[0]; k++) stf(c, fp + vel[k], 0.0f);
+  } else if (action >= MS_CLIFF_FIRST && action <= MS_CLIFF_LAST) {
     call_guest(c, FN_SET_AIRBORNE, fp, 0);
     call_guest(c, FN_FALL_ENTER, gobj, 0);
   } else if (ld32(c, fp + 0xE0) == 0) {
@@ -207,8 +218,8 @@ void room_boundary_jobs(Cpu *c) {
       uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
       if (!gobj) continue;
       uint32_t fp = ld32(c, gobj + 0x2C);
-      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1);
-      else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0);
+      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] == 2);
+      else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
   for (int p = 0; p < 4; p++) m->place_pending[p] = 0;
 }
