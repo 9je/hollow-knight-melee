@@ -221,6 +221,42 @@ static void test_bones(void) {
   mc_shutdown();
 }
 
+static uint32_t fighter_ptr(void) { return mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu); }
+static float hitlag(void) { uint32_t u = mc_peek32(fighter_ptr() + 0x195Cu); float f; memcpy(&f, &u, 4); return f; }
+
+static void test_hitboxes(void) {
+  McHitbox h[8]; McHurtbox hb[16];
+  solo_fox();
+  steps(180, NULL);
+  CHECK(mc_read_hitboxes(0, 0, h, 8) == 0);               /* standing: nothing active */
+  int nh = mc_read_hurtboxes(0, 0, hb, 16);
+  McFighter f = fox();
+  CHECK(nh >= 5 && nh <= 15);
+  for (int i = 0; i < nh; i++)
+    CHECK(hb[i].radius > 0 && fabsf(hb[i].ax - f.x) < 20 && hb[i].ay > f.y - 5 && hb[i].ay < f.y + 25);
+  McInput a = {0}; a.buttons = 0x0100;                     /* PAD_BUTTON_A: jab */
+  steps(1, &a);
+  int n = 0;
+  for (int i = 0; i < 10 && (n = mc_read_hitboxes(0, 0, h, 8)) == 0; i++) steps(1, NULL);
+  CHECK(n > 0);
+  f = fox();
+  CHECK(h[0].damage > 0 && h[0].radius > 0 && h[0].fresh == 1 && h[0].slot < 4);
+  CHECK(fabsf(h[0].x - f.x) < 20 && fabsf(h[0].y - f.y) < 20 && (h[0].x - f.x) * f.facing > 0);
+  uint32_t crc = mc_mem_crc32();
+  mc_read_hitboxes(0, 0, h, 8); mc_read_hurtboxes(0, 0, hb, 16);
+  CHECK(mc_mem_crc32() == crc);                            /* reading is invisible to the game */
+  CHECK(hitlag() == 0);
+  CHECK(mc_report_hit(0, 0, h[0].group + 77, h[0].damage) == 1);   /* no hitbox in that group */
+  CHECK(mc_mem_crc32() == crc);
+  CHECK(mc_report_hit(0, 0, h[0].group, h[0].damage) == 0);
+  CHECK(mc_read_hitboxes(0, 0, h, 8) == n && h[0].fresh == 0);    /* Melee now remembers a victim */
+  CHECK(mc_report_hit(0, 0, h[0].group, h[0].damage) == 0);       /* the same victim twice: still one */
+  steps(1, NULL);
+  CHECK(hitlag() > 0);                                     /* Melee's own hitlag for the attacker */
+  CHECK(mc_report_hit(1, 0, 0, 1) == 1 && mc_report_hit(7, 0, 0, 1) == -1);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -229,6 +265,7 @@ int main(int argc, char **argv) {
   test_place();
   test_room();
   test_bones();
+  test_hitboxes();
   puts("rooms tests passed");
   return 0;
 }

@@ -41,6 +41,24 @@ int mc_read_bones(int port, int follower, float out[][12], int max);
 /* Mesh parts (DObjs) in the bones' depth-first order: hidden[i] = 1 when part i is hidden this frame, joint[i] =
  * its joint's index. The game appends parts to a joint's list, so (joint, index within the joint) names a part. */
 int mc_read_dobjs(int port, int follower, uint8_t hidden[], uint8_t joint[], int max);
+/* Combat (spec §5.1). Fox's active hitboxes (Fighter+0x914) and hurtboxes (+0x11A0) in Melee units, read-only.
+ * group: hitboxes of one move instance share it and hit a victim once together. fresh: Melee has recorded no
+ * victim since the hitbox was created or its victims were last cleared (a multi-hit move clears them). */
+typedef struct {
+  uint32_t slot, group;
+  float damage, radius;
+  int32_t angle, growth, set_kb, base_kb;
+  uint32_t element;
+  float x, y, prev_x, prev_y;    /* this frame's centre and last frame's: the hitbox sweeps between them */
+  uint32_t fresh;
+} McHitbox;
+typedef struct { float ax, ay, bx, by, radius; uint32_t state; } McHurtbox;   /* state: 0 normal, 1 off, 2 intangible */
+int mc_read_hitboxes(int port, int follower, McHitbox out[], int max);   /* count, -1 error */
+int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max);
+/* Fox's hit in `group` landed on something outside Melee: records a victim on the group's hitboxes (as
+ * lbColl_80008688 does) and raises dmg.x1914, so Melee's next hit-processing phase gives Fox its own attacker
+ * hitlag. Not used by replays. 0 ok, 1 no such fighter or no active hitbox in the group, -1 error. */
+int mc_report_hit(int port, int follower, uint32_t group, float damage);
 #include "room.h"
 
 #ifdef __cplusplus

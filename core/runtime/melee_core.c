@@ -252,3 +252,86 @@ int mc_read_fighter(int port, int follower, McFighter *out) {
   out->airborne = ld32(c, fp + 0xE0);
   return 0;
 }
+
+/* ---- combat (spec §5.1) ---- */
+#define HIT_SENTINEL 0x80002F08u   /* the victim recorded for hits outside Melee: never a GObj, never dereferenced */
+
+static uint32_t fighter_at(Cpu *c, int port, int follower) {
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u));
+  if (!gobj || !in_mem1(gobj, 0x30)) return 0;
+  uint32_t fp = ld32(c, gobj + 0x2C);
+  return in_mem1(fp, 0x2000) ? fp : 0;
+}
+
+static int victim_recorded(Cpu *c, uint32_t hit) {
+  for (uint32_t v = 0; v < 12; v++) if (ld32(c, hit + 0x74 + 8 * v) == HIT_SENTINEL) return 1;
+  return 0;
+}
+
+int mc_read_hitboxes(int port, int follower, McHitbox out[], int max) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t fp = fighter_at(c, port, follower);
+  int n = 0;
+  for (uint32_t s = 0; fp && s < 4 && n < max; s++) {
+    uint32_t h = fp + 0x914 + 0x138 * s;
+    if (ld32(c, h) == 0) continue;                      /* HitCapsule_Disabled */
+    McHitbox *o = &out[n++];
+    o->slot = s; o->group = ld32(c, h + 4);
+    o->damage = f32at(c, h + 0xC); o->radius = f32at(c, h + 0x1C);
+    o->angle = (int32_t)ld32(c, h + 0x20); o->growth = (int32_t)ld32(c, h + 0x24);
+    o->set_kb = (int32_t)ld32(c, h + 0x28); o->base_kb = (int32_t)ld32(c, h + 0x2C);
+    o->element = ld32(c, h + 0x30);
+    o->x = f32at(c, h + 0x4C); o->y = f32at(c, h + 0x50);
+    o->prev_x = f32at(c, h + 0x58); o->prev_y = f32at(c, h + 0x5C);
+    int any = 0;
+    for (uint32_t v = 0; v < 12; v++) any |= ld32(c, h + 0x74 + 8 * v) != 0;
+    o->fresh = !any;
+  }
+  return n;
+}
+
+int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t fp = fighter_at(c, port, follower);
+  if (!fp) return 0;
+  uint32_t count = ld8(c, fp + 0x119E);
+  int n = 0;
+  for (uint32_t i = 0; i < count && i < 15 && n < max; i++) {
+    uint32_t h = fp + 0x11A0 + 0x4C * i;
+    McHurtbox *o = &out[n++];
+    o->state = ld32(c, h); o->radius = f32at(c, h + 0x1C);
+    o->ax = f32at(c, h + 0x28); o->ay = f32at(c, h + 0x2C);
+    o->bx = f32at(c, h + 0x34); o->by = f32at(c, h + 0x38);
+  }
+  return n;
+}
+
+int mc_report_hit(int port, int follower, uint32_t group, float damage) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t fp = fighter_at(c, port, follower);
+  if (!fp) return 1;
+  int found = 0;
+  for (uint32_t s = 0; s < 4; s++) {
+    uint32_t h = fp + 0x914 + 0x138 * s;
+    if (ld32(c, h) == 0 || ld32(c, h + 4) != group) continue;
+    found = 1;
+    if (victim_recorded(c, h)) continue;
+    uint32_t v = 0;
+    while (v < 12 && ld32(c, h + 0x74 + 8 * v) != 0) v++;
+    if (v == 12) v = ld8(c, h + 0x44) % 12;             /* full: overwrite where Melee would */
+    st32(c, h + 0x74 + 8 * v, HIT_SENTINEL);
+    st32(c, h + 0x78 + 8 * v, 0);
+    if (ld8(c, h + 0x44) < 12) st8(c, h + 0x44, ld8(c, h + 0x44) + 1);
+  }
+  if (!found) return 1;
+  /* ftColl_80076ED8: the attacker's dealt damage as an int, at least 1 for any damage */
+  int32_t d = damage != 0 ? ((int32_t)damage ? (int32_t)damage : 1) : 0;
+  if (d > (int32_t)ld32(c, fp + 0x1914)) st32(c, fp + 0x1914, (uint32_t)d);
+  return 0;
+}
