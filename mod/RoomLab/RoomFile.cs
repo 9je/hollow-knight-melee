@@ -10,18 +10,21 @@ namespace FoxMelee.Lab {
     public sealed class RoomFile {
         public string Scene;
         public List<ColliderOutline> Colliders = new List<ColliderOutline>();
+        public List<string> Names = new List<string>();   // each collider's GameObject
         public List<Gate> Gates = new List<Gate>();
 
         public static RoomFile Load(string path) {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var r = doc.RootElement;
             var room = new RoomFile { Scene = r.GetProperty("scene").GetString() };
-            foreach (var c in r.GetProperty("colliders").EnumerateArray())
+            foreach (var c in r.GetProperty("colliders").EnumerateArray()) {
+                room.Names.Add(c.TryGetProperty("name", out var n) ? n.GetString() : "");
                 room.Colliders.Add(new ColliderOutline {
                     Closed = c.GetProperty("closed").GetBoolean(),
                     OneWay = c.GetProperty("one_way").GetBoolean(),
                     Points = c.GetProperty("points").EnumerateArray().Select(p => new V2(p[0].GetDouble(), p[1].GetDouble())).ToArray(),
                 });
+            }
             foreach (var g in r.GetProperty("gates").EnumerateArray())
                 room.Gates.Add(new Gate { Name = g.GetProperty("name").GetString(), X = g.GetProperty("x").GetDouble(), Y = g.GetProperty("y").GetDouble(),
                                           W = g.GetProperty("w").GetDouble(), H = g.GetProperty("h").GetDouble() });

@@ -173,7 +173,7 @@ static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, 
 
 /* Moves one fighter GObj to (x, y), keeping its action and velocity where Melee allows it:
  * - ledge actions (CliffCatch..CliffJumpQuick2) hold a ledge line id from the old room: they become Fall;
- * - a grounded fighter stands on the floor within 10 units (mpCheckFloor), else becomes airborne.
+ * - a grounded fighter stands on the floor within 10 units (mpCheckFloor), else falls.
  * moved == 0 (a fighter not placed after a room load): only the line ids the old room invalidated are
  * renewed; position, ECB and camera stay as they are. */
 static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int respawn) {   /* respawn: 1 Fall, 2 tumbling */
@@ -202,8 +202,10 @@ static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int r
       st32(c, fp + 0x83C, (uint32_t)line);          /* CollData.floor: index, flags, normal */
       st32(c, fp + 0x840, fl);
       for (int k = 0; k < 3; k++) stf(c, fp + 0x844 + 4u * k, n[k]);
-    } else {
+    } else {   /* the floor went (a collapse, a rebuilt room): Fall, as off a ledge. A grounded action left running
+                * would follow its floor line id, now another line of the new room, and carry the fighter onto it */
       call_guest(c, FN_SET_AIRBORNE, fp, 0);
+      call_guest(c, FN_FALL_ENTER, gobj, 0);
     }
   }
   if (!moved) return;

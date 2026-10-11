@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using FoxMelee.Lab;
@@ -68,6 +69,49 @@ namespace FoxMelee.Tests {
             Assert.True(landed > 0, "Fox lands on real terrain");
             Assert.True(trace[^1].X > trace[landed].X + 20, "Fox runs right after landing");
             Assert.Equal(0, trace[^1].Air);
+        }
+    
+        // King's Pass's collapsing floor ("Collapser Tute 01", its "Solid" boxes): Fox stands on it, it goes (the mod
+        // rebuilds Melee's collision without it), and he falls down the shaft below, never inside the rock
+        [Fact]
+        public void FoxFallsWhenKingsPassFloorCollapses() {
+            var file = Path.Combine(DevConfig.Repo, "build/roomlab/rooms/Tutorial_01.json");
+            if (!DevConfig.Available || !File.Exists(file)) return;
+            var room = RoomFile.Load(file);
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            var c = Rooms.Convert(core, room, 6);
+            Assert.True(c.Ok, c.Error);
+            var stand = Rooms.Run(core, c, 124.0, 62.0, Scripts.Get("idle", 60));
+            System.IO.File.WriteAllLines(Path.Combine(DevConfig.Repo, "build/roomlab/collapse/stand.txt"),
+                stand.Select(t => { var h = c.Transform.ToHk(new V2(t.X, t.Y)); return $"{t.Frame}: hk ({h.X:F2}, {h.Y:F2}) action {t.Action} air {t.Air}"; }));
+            Assert.Equal(0, stand[^1].Air);
+            var collapsed = room.Colliders.Where((o, i) => !(room.Names[i] == "Solid" && o.Points.All(q => q.X > 116 && q.X < 132 && q.Y > 58 && q.Y < 63))).ToList();
+            Assert.Equal(room.Colliders.Count - 2, collapsed.Count);
+            var shapes = RoomGeometry.Build(collapsed, c.Transform);
+            Assert.True(core.BuildCollision(shapes, out var col), core.Error);
+            Assert.True(core.LoadCollision(col), core.Error);
+            var log = new List<string>();
+            int inside = 0, worst = 0;
+            for (int f = 0; f < 240; f++) {
+                core.SetInput(0, new McInput());
+                Assert.True(core.Step(), core.Error);
+                core.ReadFighter(0, out var fx);
+                var hk = c.Transform.ToHk(new V2(fx.X, fx.Y));
+                log.Add($"{f}: hk ({hk.X:F2}, {hk.Y:F2}) action {fx.Action} air {fx.Airborne}");
+                inside = StuckGuard.InsideSolid(shapes, fx.X, fx.Y + 6) ? inside + 1 : 0;
+                worst = System.Math.Max(worst, inside);
+            }
+            System.IO.File.WriteAllLines(Path.Combine(DevConfig.Repo, "build/roomlab/collapse/fall.txt"), log);
+            Assert.True(worst < StuckGuard.Frames, $"inside the rock for {worst} frames: " + string.Join(" | ", log.GetRange(0, 40)));
+            core.ReadFighter(0, out var end);
+            var endHk = c.Transform.ToHk(new V2(end.X, end.Y));
+            Assert.True(endHk.Y < 58, $"Fox fell down the shaft (ends at {endHk.X:F2}, {endHk.Y:F2})");
+            Assert.Equal(0u, (uint)end.Airborne);
         }
     }
 }

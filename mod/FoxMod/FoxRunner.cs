@@ -41,6 +41,8 @@ namespace FoxMelee {
         const int ScanFrames = 30;              // how often new terrain (a gate closing) is looked for
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
+        List<RoomShape> roomShapes = new List<RoomShape>();   // Melee's collision, as built (StuckGuard)
+        readonly StuckGuard stuck = new StuckGuard();
         int scanTimer;
         readonly Dictionary<Collider2D, Vector2> terrainAt = new Dictionary<Collider2D, Vector2>();   // where each was last frame
         bool movingLogged;
@@ -198,6 +200,7 @@ namespace FoxMelee {
             Profile();
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             WatchStuck(frames);
+            if (frames > 0 && session.KnightFollowsFox && Unstick()) return;
             if (gx != null) gx.Glow = focusing;
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
@@ -325,6 +328,8 @@ namespace FoxMelee {
             var shapes = RoomGeometry.Build(outlines, t);
             if (!core.BuildCollision(shapes, out var col)) { RoomFailed(scene, core.Error); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }
+            roomShapes = shapes;
+            stuck.Reset();
             var lo = t.ToMelee(min); var hi = t.ToMelee(max);
             float m = (float)s.CameraMargin;
             var cam = new McBox { Left = (float)lo.X - m, Right = (float)hi.X + m, Top = (float)hi.Y + m, Bottom = (float)lo.Y - m };
@@ -385,7 +390,8 @@ namespace FoxMelee {
             var shapes = RoomGeometry.Build(outlines, room);
             if (!core.BuildCollision(shapes, out var col)) { FoxMod.Instance.LogWarn($"{scene}: changed terrain not converted ({core.Error}); keeping the old collision"); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }
-            if (changed) Log($"{scene}: terrain changed, collision rebuilt ({shapes.Count} shapes)");
+            roomShapes = shapes;
+            if (changed) Log($"{scene}: terrain changed, collision rebuilt ({shapes.Count} shapes); Fox at Melee ({fox.X:F1}, {fox.Y:F1}), action {fox.Action}, airborne {fox.Airborne}");
             return true;
         }
 
@@ -512,6 +518,18 @@ namespace FoxMelee {
             if (b == lastBusy) return;
             lastBusy = b;
             Log($"Hollow Knight: {(b.Length == 0 ? "playing" : b.Trim())} (Fox action {fox.Action}, airborne {fox.Airborne})");
+        }
+
+        // Fox inside solid ground (StuckGuard): back to where he last stood, falling still, as after spikes
+        bool Unstick() {
+            const float Middle = 6f;   // Melee units above Fox's feet: inside him, clear of the floor he stands on
+            var to = stuck.Frame(StuckGuard.InsideSolid(roomShapes, fox.X, fox.Y + Middle), fox.Airborne == 0, fox.X, fox.Y);
+            if (to == null) return false;
+            var hk = room.ToHk(new V2(fox.X, fox.Y));
+            Log($"Fox stuck inside the terrain at ({hk.X:F2}, {hk.Y:F2}) (Melee ({fox.X:F1}, {fox.Y:F1}), action {fox.Action}): back to Melee ({to.Value.X:F1}, {to.Value.Y:F1})");
+            if (!core.RespawnFighter(0, (float)to.Value.X, (float)to.Value.Y)) { Fail($"mc_respawn_fighter: {core.Error}"); return true; }
+            session.Placed();
+            return true;
         }
 
         // Fox keeps his action and velocity; he starts where Hollow Knight put the Knight (feet to feet).
