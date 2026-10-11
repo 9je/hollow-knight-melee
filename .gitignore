@@ -9,3 +9,6 @@ spikes/*/dolphin-src/
 spikes/*/build/
 core/build/
 core/difftest/dolphin-src/
+mod/lib/
+mod/**/bin/
+mod/**/obj/
