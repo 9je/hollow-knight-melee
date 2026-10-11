@@ -30,6 +30,7 @@ namespace FoxMelee {
         readonly GameObject strike;            // each hit's Source: Hollow Knight draws nail effects between it and the target
         readonly CircleCollider2D[] nailTriggers = new CircleCollider2D[4];
         readonly HutongGames.PlayMaker.FsmFloat[] nailDirections = new HutongGames.PlayMaker.FsmFloat[4];
+        readonly PlayMakerFSM[] nailFsms = new PlayMakerFSM[4];
         RoomTransform room;
         float foxX;
 
@@ -46,7 +47,7 @@ namespace FoxMelee {
                 body.useFullKinematicContacts = true;   // a kinematic body otherwise ignores static colliders (geo rocks)
                 nailTriggers[i] = go.AddComponent<CircleCollider2D>();
                 nailTriggers[i].isTrigger = true;
-                nailDirections[i] = DamagesEnemy(go);
+                nailDirections[i] = DamagesEnemy(go, out nailFsms[i]);
             }
             if (Evasion == null) FoxMod.Instance.LogWarn("HealthManager.evasionByHitRemaining not found: rapid Melee hits may be ignored");
         }
@@ -105,9 +106,10 @@ namespace FoxMelee {
         // Tag-driven objects (lifeblood cocoons, stalactites, geo rocks) read the hit's direction from the nail slash's
         // "damages_enemy" state machine; geo rocks also need its damageDealt above 0 (ReceivedDamage ignores hitters
         // without) and its attackType 0, the nail (their "Check If Nail" state). This one only carries those values: it has no states and damages nothing.
-        static HutongGames.PlayMaker.FsmFloat DamagesEnemy(GameObject go) {
+        static HutongGames.PlayMaker.FsmFloat DamagesEnemy(GameObject go, out PlayMakerFSM fsm) {
+            fsm = null;
             try {
-                var fsm = go.AddComponent<PlayMakerFSM>();
+                fsm = go.AddComponent<PlayMakerFSM>();
                 fsm.Reset();   // the object is inactive, so Awake (which would create the Fsm) has not run yet; InitFsm keeps ours
                 fsm.FsmName = "damages_enemy";
                 var dir = new HutongGames.PlayMaker.FsmFloat("direction");
@@ -146,7 +148,10 @@ namespace FoxMelee {
                 int k = Physics2D.OverlapCircleNonAlloc(p, r, found, mask);
                 for (int j = 0; j < k; j++) {
                     var responder = Responder(found[j].transform);
-                    if (responder != null && !targets.Contains(responder)) targets.Add(responder);
+                    if (responder != null) { if (!targets.Contains(responder)) targets.Add(responder); continue; }
+                    // no hit responder: an object run by its state machine (geo rocks) hears "TAKE DAMAGE" from the nail
+                    var go = found[j].gameObject;
+                    if (go.GetComponent<PlayMakerFSM>() != null && go.GetComponentInParent<HealthManager>() == null && !targets.Contains(go)) targets.Add(go);
                 }
             }
             return targets;
@@ -159,6 +164,7 @@ namespace FoxMelee {
         }
 
         void Land(HitEvent h, int nail) {
+            if (h.Target is GameObject fsmTarget) { TakeDamage(h, fsmTarget); return; }
             var target = (Component)h.Target;
             if (target == null) return;           // destroyed by an earlier hit this frame
             strike.transform.position = Hk(h.Box.X, h.Box.Y);
@@ -185,6 +191,28 @@ namespace FoxMelee {
             int frames = HitRules.IsItem(h.Box) ? core.HitlagFrames(damage) : -1;
             int at = landed.FindIndex(l => l.go == hm.gameObject);
             if (at < 0) landed.Add((hm.gameObject, dir, frames)); else landed[at] = (hm.gameObject, dir, frames);
+        }
+
+        // What the nail's own damages_enemy state machine does to objects it touches: send them "TAKE DAMAGE". The
+        // sender is what they read the hit from (geo rocks: GetEventSender, then its attackType and direction), so it
+        // is sent from Fox's stand-in with this hit's direction.
+        void TakeDamage(HitEvent h, GameObject target) {
+            if (target == null) return;
+            var fsm = nailFsms[0];
+            if (fsm == null || fsm.Fsm == null) return;
+            float fromX = HitRules.IsItem(h.Box) ? Hk(h.Box.X, h.Box.Y).x : foxX;
+            float direction = HitRules.Direction(h.Box.Angle, target.transform.position.x <= fromX);
+            nailDirections[0].Value = direction;
+            var to = new HutongGames.PlayMaker.FsmEventTarget {
+                target = HutongGames.PlayMaker.FsmEventTarget.EventTarget.GameObject,
+                gameObject = new HutongGames.PlayMaker.FsmOwnerDefault {
+                    OwnerOption = HutongGames.PlayMaker.OwnerDefaultOption.SpecifyGameObject, GameObject = target },
+                excludeSelf = false, sendToChildren = false,
+            };
+            // PlayMaker takes the sender from the state machine executing now, not the one sending: make it Fox's
+            HutongGames.PlayMaker.FsmExecutionStack.PushFsm(fsm.Fsm);
+            try { fsm.Fsm.Event(to, "TAKE DAMAGE"); }
+            finally { HutongGames.PlayMaker.FsmExecutionStack.PopFsm(); }
         }
 
         Vector2 Hk(float x, float y) { var v = room.ToHk(new V2(x, y)); return new Vector2((float)v.X, (float)v.Y); }

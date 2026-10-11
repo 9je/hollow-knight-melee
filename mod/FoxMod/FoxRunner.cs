@@ -366,7 +366,13 @@ namespace FoxMelee {
         }
 
         // Fox not moving for 3 s while the controller is pushed: log what is in the way (once per standstill)
+        float framelessFor; bool framelessLogged;
         void WatchStuck(int frames) {
+            if (frames > 0) { framelessFor = 0; framelessLogged = false; }
+            else if ((framelessFor += Time.unscaledDeltaTime) > 2f && !framelessLogged) {
+                framelessLogged = true;
+                Log($"no Melee frame for 2 s: time scale {Time.timeScale}, game state {GameManager.instance.gameState}, accumulator {accumulator}");
+            }
             bool pushed = rawInput.Buttons != 0 || Math.Abs((int)rawInput.StickX) > 40 || Math.Abs((int)rawInput.StickY) > 40;
             bool moved = Math.Abs(fox.X - lastX) > 0.01f || Math.Abs(fox.Y - lastY) > 0.01f;
             lastX = fox.X; lastY = fox.Y;
