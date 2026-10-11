@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ssbmhk-tools"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["melee==0.47.3"]
+dependencies = ["melee==0.47.3", "UnityPy==1.10.18", "Pillow"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -17,6 +17,8 @@ ssbmhk-oracle-replay = "ssbmhk_tools.cli:oracle_replay_main"
 ssbmhk-recomp-insn-tests = "ssbmhk_tools.recomp.cli:insn_tests_main"
 ssbmhk-recomp = "ssbmhk_tools.recomp.cli:recomp_main"
 ssbmhk-replay-check = "ssbmhk_tools.replaycheck:main"
+ssbmhk-hk-rooms = "ssbmhk_tools.hkrooms:main"
+ssbmhk-room-png = "ssbmhk_tools.roompng:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

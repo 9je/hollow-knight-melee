@@ -12,3 +12,4 @@ core/difftest/dolphin-src/
 mod/lib/
 mod/**/bin/
 mod/**/obj/
+build/
