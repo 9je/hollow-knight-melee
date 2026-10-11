@@ -467,3 +467,72 @@ int mc_read_items(McItem out[], int max) {
   }
   return n;
 }
+
+/* ---- hits from outside Melee (spec 5.2) ---- */
+#define FN_ENV_HIT 0x800C08A0u      /* ftCo_800C08A0(gobj, source, lbColl_80008D30_arg1 *desc, bury type) */
+#define FN_DMG_LOG 0x8007AB48u      /* ftColl_8007AB48(gobj): the damage log -> fp->dmg (direction, angle, knockback) */
+#define ADDR_HIT_DESC 0x80002F40u   /* our descriptor (0x24 bytes), below the OS globals, after the runtime words */
+
+typedef struct { int port; const McHit *hit; int result; } ApplyArgs;
+
+static int intangible(Cpu *c, uint32_t fp) {
+  /* ftColl_80078C70's gate: intangibility/invincibility timers and flag, or no hurtbox that can be hit */
+  if (ld32(c, fp + 0x1988) || ld32(c, fp + 0x198C) || (ld8(c, fp + 0x221D) & 0x02)) return 1;
+  uint32_t n = ld8(c, fp + 0x119E);
+  for (uint32_t i = 0; i < n && i < 15; i++) if (ld32(c, fp + 0x11A0 + 0x4C * i) == 0) return 0;
+  return 1;
+}
+
+static void apply_on_worker(void *arg) {
+  ApplyArgs *a = arg;
+  Machine *m = g_m;
+  Cpu *c = &m->cpu;
+  const McHit *h = a->hit;
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)a->port + 0xB0u);
+  uint32_t fp = fighter_at(c, a->port, 0);
+  if (!fp) { a->result = -1; return; }
+  if (intangible(c, fp)) { a->result = MC_HIT_INTANGIBLE; return; }
+  float x = f32at(c, fp + 0xB0), dir = x > h->from_x ? -1.0f : 1.0f;   /* Melee: -1 sends the victim to +x */
+  int32_t dmg = h->damage != 0 ? ((int32_t)h->damage ? (int32_t)h->damage : 1) : 0;
+  uint32_t action = ld32(c, fp + 0x10);
+  if (!h->unblockable && action >= 178 && action <= 182 && action != 180) {
+    /* the shield, as ftColl takes an item's hit on it: damage taken, source "not a fighter", the strongest hit */
+    int32_t total = dmg + (int32_t)h->shield_damage;
+    st32(c, fp + 0x19A0, (uint32_t)((int32_t)ld32(c, fp + 0x19A0) + (total < 0 ? 0 : total)));
+    st32(c, fp + 0x19BC, 6);
+    if (dmg > (int32_t)ld32(c, fp + 0x19A4)) {
+      st32(c, fp + 0x19A4, (uint32_t)dmg);
+      stf32(c, fp + 0x19AC, dir);                       /* specialn_facing_dir */
+      st32(c, fp + 0x19B0, h->element);
+      st32(c, fp + 0x19A8, 0);
+    }
+    a->result = MC_HIT_SHIELDED;
+    return;
+  }
+  /* Melee's environmental hit: the descriptor (lbColl_80008D30_arg1), logged and processed as procAttackColl does */
+  uint32_t d = ADDR_HIT_DESC;
+  st32(c, d + 0x00, 1); st32(c, d + 0x04, (uint32_t)dmg); st32(c, d + 0x08, (uint32_t)h->angle);
+  st32(c, d + 0x0C, (uint32_t)h->growth); st32(c, d + 0x10, (uint32_t)h->set_kb); st32(c, d + 0x14, (uint32_t)h->base_kb);
+  st32(c, d + 0x18, h->element); st32(c, d + 0x1C, 0); st32(c, d + 0x20, 0);
+  Cpu saved = *c;                                       /* the paused frame's registers survive our calls */
+  unsigned host = _mm_getcsr();
+  _mm_setcsr(m->guest_csr);
+  c->gpr[5] = d; c->gpr[6] = 2;                         /* BuryType_Unk2: no bury timers */
+  call_guest(c, FN_ENV_HIT, gobj, 0);
+  call_guest(c, FN_DMG_LOG, gobj, 0);
+  m->guest_csr = _mm_getcsr();
+  _mm_setcsr(host);
+  uint8_t *mem = c->mem; uint32_t irq = c->irq_pending;
+  *c = saved; c->mem = mem; c->irq_pending = irq;
+  stf32(c, fp + 0x1844, dir);                           /* dmg.facing_dir_1: from the attacker (the env path uses Fox's facing) */
+  a->result = MC_HIT_LANDED;
+}
+
+int mc_apply_hit(int port, const McHit *hit) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3 || !hit) return -1;
+  if (!m->at_hits) { snprintf(m->error, sizeof m->error, "mc_apply_hit: only at the hit pause (mc_step_to_hits)"); return -1; }
+  ApplyArgs a = {port, hit, -1};
+  worker_call(apply_on_worker, &a);
+  return m->dead ? -1 : a.result;
+}

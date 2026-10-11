@@ -519,6 +519,54 @@ static void test_laser_hits(void) {
   mc_shutdown();
 }
 
+/* Enemies hitting Fox (spec 5.2): at the hit pause, a hit from outside Melee goes through Melee's own environmental
+ * hit path (ftCo_800C08A0 + ftColl_8007AB48), so Melee resolves damage, knockback, hitlag, DI and teching; shields and
+ * intangibility are checked as Melee's collision does. */
+static void test_apply_hit(void) {
+  McHit hit = {0};
+  hit.damage = 10; hit.angle = 45; hit.growth = 100; hit.base_kb = 20; hit.element = 0;
+  McInput idle = {0};
+  CHECK(mc_apply_hit(0, &hit) == -1);                      /* no machine */
+  solo_fox(); steps(180, NULL); steps(10, &idle);
+  CHECK(mc_apply_hit(0, &hit) == -1);                      /* only at the hit pause */
+  McFighter f = fox();
+  hit.from_x = f.x - 10; hit.from_y = f.y + 5;            /* the enemy is to Fox's left */
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit(0, &hit) == MC_HIT_LANDED);
+  CHECK(mc_step() == 0);
+  McFighter g = fox();
+  CHECK(fabsf(g.percent - 10) < 0.01f && g.hitlag == mc_hitlag_frames(10));   /* Melee's victim hitlag */
+  for (int i = 0; i < 12; i++) steps(1, &idle);
+  g = fox();
+  CHECK(g.kb_vel_x > 0 && g.x > f.x);                      /* launched away from the enemy */
+  /* intangible: a spot dodge (shield + down) */
+  steps(120, &idle);
+  McInput dodge = {0}; dodge.buttons = 0x0020; dodge.trigger_r = 255; dodge.stick_y = -127;
+  McInput sh = {0}; sh.buttons = 0x0020; sh.trigger_r = 255;
+  steps(4, &sh); mc_set_input(0, &dodge);
+  for (int i = 0; i < 6; i++) CHECK(mc_step() == 0);
+  f = fox();
+  CHECK(mc_step_to_hits() == 0);
+  int r = mc_apply_hit(0, &hit);
+  CHECK(mc_step() == 0);
+  CHECK(r == MC_HIT_INTANGIBLE && fabsf(fox().percent - f.percent) < 0.01f);
+  /* shield */
+  steps(60, &idle); steps(6, &sh);
+  f = fox();
+  mc_set_input(0, &sh);
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit(0, &hit) == MC_HIT_SHIELDED);
+  CHECK(mc_step() == 0);
+  McFighter s1 = fox();
+  CHECK(fabsf(s1.percent - f.percent) < 0.01f && s1.shield < f.shield - 5);   /* the shield took it */
+  /* unblockable: through the shield */
+  hit.unblockable = 1;
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit(0, &hit) == MC_HIT_LANDED);
+  CHECK(mc_step() == 0 && fox().percent > f.percent + 9);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -535,6 +583,7 @@ int main(int argc, char **argv) {
   test_gx_decode();
   test_sfx();
   test_laser_hits();
+  test_apply_hit();
   puts("rooms tests passed");
   return 0;
 }
