@@ -5,7 +5,6 @@
 #include <string.h>
 #include "melee_core.h"
 
-#define TAN30 0.57735026f
 #define TAN60 1.7320508f
 static McVec2 V[MC_MAX_VERTS]; static McLine L[MC_MAX_LINES]; static McJoint J[MC_MAX_JOINTS];
 static McLine raw[MC_MAX_LINES]; static int raw_shape[MC_MAX_LINES];
@@ -13,11 +12,13 @@ static McCollision C;
 
 static int fail(char *why, size_t n, const char *fmt, ...) { va_list ap; va_start(ap, fmt); vsnprintf(why, n, fmt, ap); va_end(ap); return -1; }
 
-/* mpJointUpdateDynamics' rule (mplib.c:4637), in float like the game */
+/* mpJointUpdateDynamics' rule (mplib.c:4637), in float like the game, except ceilings: Melee's stop at 30 degrees, these
+ * at 60 like floors. Hollow Knight's overhangs slope more than Melee's stages do, and as walls (which do not stop a
+ * fighter going up) Fox jumped up through them. */
 static uint16_t classify(McVec2 a, McVec2 b) {
   float dx = b.x - a.x, dy = b.y - a.y;
   if (dx > 0.0f) return dy / dx > TAN60 ? MC_LINE_LEFT_WALL : dy / dx < -TAN60 ? MC_LINE_RIGHT_WALL : MC_LINE_FLOOR;
-  if (dx < 0.0f) return dy / dx > TAN30 ? MC_LINE_RIGHT_WALL : dy / dx < -TAN30 ? MC_LINE_LEFT_WALL : MC_LINE_CEILING;
+  if (dx < 0.0f) return dy / dx > TAN60 ? MC_LINE_RIGHT_WALL : dy / dx < -TAN60 ? MC_LINE_LEFT_WALL : MC_LINE_CEILING;
   return dy > 0.0f ? MC_LINE_LEFT_WALL : MC_LINE_RIGHT_WALL;
 }
 static int group_of(uint16_t kind) { return kind == MC_LINE_FLOOR ? MC_FLOOR : kind == MC_LINE_CEILING ? MC_CEILING : kind == MC_LINE_RIGHT_WALL ? MC_RIGHT_WALL : MC_LEFT_WALL; }

@@ -82,6 +82,15 @@ static void test_builder(void) {
   McVec2 steep[3] = {{0, 0}, {10, 10 * t61}, {10, -10}};
   McShape s = {MC_SOLID, steep, 3, 0};
   CHECK(mc_build_collision(&s, 1, &c, why, sizeof why) == 0 && c->count[MC_FLOOR] == 0);
+  /* undersides: up to 60 degrees is a ceiling, as floors (Melee's rule stops at 30; Hollow Knight's overhangs slope more,
+   * and as walls Fox jumped up through them) */
+  float t45 = 1.0f;
+  McVec2 hang[3] = {{0, 20}, {10, 20 - 10 * t45}, {20, 20}};
+  McShape h = {MC_SOLID, hang, 3, 0};
+  CHECK(mc_build_collision(&h, 1, &c, why, sizeof why) == 0 && c->count[MC_CEILING] == 2 && c->count[MC_FLOOR] == 1);
+  McVec2 spike[3] = {{0, 20}, {10, 20 - 10 * t61}, {20, 20}};
+  McShape sp = {MC_SOLID, spike, 3, 0};
+  CHECK(mc_build_collision(&sp, 1, &c, why, sizeof why) == 0 && c->count[MC_CEILING] == 0);
   /* L-shape: the inner corner (floor meets an upward wall) is concave: no ledge there */
   McVec2 ell[6] = {{-100, 0}, {60, 0}, {60, 100}, {80, 100}, {80, -50}, {-100, -50}};
   McShape l = {MC_SOLID, ell, 6, 0};
