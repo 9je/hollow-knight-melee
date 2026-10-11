@@ -207,6 +207,22 @@ static void test_room(void) {
   mc_shutdown();
 }
 
+/* In a room Melee's camera is never what the player sees: Fox is drawn the frame he is placed, however far its
+ * camera is behind (in Melee an off-screen fighter is not drawn, only shown in the magnifier) */
+static void test_room_draws_fox_offscreen(void) {
+  solo_fox();
+  steps(180, NULL);
+  CHECK(mc_gx_capture(1) == 0);
+  enter_room(3000.0f, 3000.0f, 0);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(1ull << 8, &v, &nv, &r, &nr) == 0);
+  CHECK(nv > 3000);
+  float x0 = 1e9f, x1 = -1e9f;
+  for (int i = 0; i < nv; i++) { x0 = fminf(x0, v[i].x); x1 = fmaxf(x1, v[i].x); }
+  CHECK(x0 > 2985.0f && x1 < 3015.0f);
+  mc_shutdown();
+}
+
 static void test_bones(void) {
   static float b[128][12];
   CHECK(mc_init(g_mem1, g_iso) == 0);
@@ -610,6 +626,7 @@ int main(int argc, char **argv) {
   test_items();
   test_gx_capture();
   test_gx_decode();
+  test_room_draws_fox_offscreen();
   test_sfx();
   test_laser_hits();
   test_apply_hit();

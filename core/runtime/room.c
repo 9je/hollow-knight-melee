@@ -222,6 +222,15 @@ void room_boundary_jobs(Cpu *c) {
       else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
   for (int p = 0; p < 4; p++) m->place_pending[p] = 0;
+  /* In a room Melee's camera is never shown, and it can lag behind a fighter (it glides after a placement): an
+   * off-screen fighter is not drawn (ftLib_UpdateScreenVisibility). Fighter x2229_b3, Master Hand's "never
+   * off-screen, never magnified" flag, has no other effect; Fighter init clears it, so it is set every frame. */
+  if (m->room_guest)
+    for (int p = 0; p < 4; p++)
+      for (int follower = 0; follower < 2; follower++) {
+        uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
+        if (gobj) { uint32_t fp = ld32(c, gobj + 0x2C); st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u)); }
+      }
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u
 
