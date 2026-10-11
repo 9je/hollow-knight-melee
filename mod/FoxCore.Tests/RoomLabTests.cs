@@ -45,5 +45,29 @@ namespace FoxMelee.Tests {
             Assert.False(empty.Ok);
             Assert.Equal("no terrain", empty.Error);
         }
+            [Fact]
+        public void FoxRunsThroughKingsPassWithoutFallingThroughTheWorld() {
+            var file = Path.Combine(DevConfig.Repo, "build/roomlab/rooms/Tutorial_01.json");
+            if (!DevConfig.Available || !File.Exists(file)) return;   // needs ssbmhk-hk-rooms output
+            var room = RoomFile.Load(file);
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            var c = Rooms.Convert(core, room, 6);
+            Assert.True(c.Ok, c.Error);
+            // the game's own entrance: the Knight drops in through top1 (the right exit has a scripted door in front of it)
+            var gate = room.Gates.Find(g => g.Name == "top1");
+            var trace = Rooms.Run(core, c, gate.X, gate.Y - gate.H / 2 + 1, Scripts.Get("drop-run-right", 400));
+            var (min, _) = RoomGeometry.Bounds(room.Colliders);
+            double floorOfWorld = c.Transform.ToMelee(min).Y;
+            Assert.All(trace, t => Assert.True(t.Y > floorOfWorld - 1, $"frame {t.Frame}: y {t.Y} below the room"));
+            var landed = trace.FindIndex(t => t.Frame > 10 && t.Air == 0);
+            Assert.True(landed > 0, "Fox lands on real terrain");
+            Assert.True(trace[^1].X > trace[landed].X + 20, "Fox runs right after landing");
+            Assert.Equal(0, trace[^1].Air);
+        }
     }
 }

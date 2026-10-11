@@ -40,6 +40,25 @@ namespace FoxMelee.Lab {
                     Console.WriteLine($"total: {ok} ok, {fail} failed, {empty} without terrain");
                     return 0;
                 }
+                case "run": {
+                    string iso = OptS(a, "--iso") ?? Environment.GetEnvironmentVariable("MELEE_ISO");
+                    string mem1 = OptS(a, "--mem1") ?? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(CoreSo), "gen-core/mem1.bin"));
+                    if (!core.Init(mem1, iso) || !core.StartSoloFox()) { Console.Error.WriteLine(core.Error); return 1; }
+                    core.SetInput(0, new McInput());
+                    for (int p = 1; p < 4; p++) core.SetInput(p, null);
+                    for (int i = 0; i < 180; i++) core.Step();
+                    var room = RoomFile.Load(a[1]);
+                    var c = Rooms.Convert(core, room, scale);
+                    if (!c.Ok) { Console.Error.WriteLine(c.Error); return 1; }
+                    var gate = room.Gates.Find(g => g.Name == OptS(a, "--at")) ?? room.Gates[0];
+                    double inward = Opt(a, "--inward", 3), centre = (c.Min.X + c.Max.X) / 2;
+                    bool side = gate.Name.StartsWith("left") || gate.Name.StartsWith("right");   // top/bottom gates: drop straight in
+                    double sx = side ? gate.X + (gate.X < centre ? inward : -inward) : gate.X, sy = gate.Y - gate.H / 2 + 1;
+                    var trace = Rooms.Run(core, c, sx, sy, Scripts.Get(OptS(a, "--script") ?? "idle", (int)Opt(a, "--frames", 300)));
+                    File.WriteAllText(OptS(a, "--trace") ?? "trace.json", JsonSerializer.Serialize(trace.Select(t => new { frame = t.Frame, x = t.X, y = t.Y, action = t.Action, air = t.Air })));
+                    Console.WriteLine($"{c.Scene}: {trace.Count} frames from ({sx:F1}, {sy:F1}) via {gate.Name}; end action {trace[^1].Action} at ({trace[^1].X:F1}, {trace[^1].Y:F1})");
+                    return 0;
+                }
                 default:
                     Console.Error.WriteLine($"unknown command {a[0]}");
                     return 2;

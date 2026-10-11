@@ -32,6 +32,7 @@ namespace FoxMelee.Lab {
     public sealed class Conversion {
         public string Scene; public int Colliders, Shapes, Lines; public bool Ok; public string Error;
         public RoomTransform Transform; public System.IntPtr Collision;
+        public V2 Min, Max;   // terrain bounds, Hollow Knight units
     }
 
     public static class Rooms {
@@ -40,6 +41,7 @@ namespace FoxMelee.Lab {
             var c = new Conversion { Scene = room.Scene, Colliders = room.Colliders.Count };
             if (room.Colliders.Count == 0) { c.Error = "no terrain"; return c; }
             c.Transform = RoomTransform.ForRoom(room.Colliders, scale);
+            (c.Min, c.Max) = RoomGeometry.Bounds(room.Colliders);
             var shapes = RoomGeometry.Build(room.Colliders, c.Transform);
             c.Shapes = shapes.Count;
             if (!core.BuildCollision(shapes, out c.Collision)) { c.Error = core.Error; return c; }
@@ -47,5 +49,21 @@ namespace FoxMelee.Lab {
             c.Ok = true;
             return c;
         }
-    }
+            public static List<TracePoint> Run(MeleeCore core, Conversion room, double startX, double startY, McInput[] inputs) {
+            if (!core.LoadCollision(room.Collision)) throw new System.InvalidOperationException(core.Error);
+            var (bmin, bmax) = (room.Transform.ToMelee(room.Min), room.Transform.ToMelee(room.Max));
+            var cam = new McBox { Left = (float)bmin.X - 40, Right = (float)bmax.X + 40, Top = (float)bmax.Y + 40, Bottom = (float)bmin.Y - 40 };
+            core.SetBounds(new McBox { Left = cam.Left - 100000, Right = cam.Right + 100000, Top = cam.Top + 100000, Bottom = cam.Bottom - 100000 }, cam);
+            var lo = room.Transform.ToMelee(new V2(startX, startY));
+            if (!core.PlaceFighter(0, (float)lo.X, (float)lo.Y)) throw new System.InvalidOperationException(core.Error);
+            var trace = new List<TracePoint>();
+            for (int f = 0; f < inputs.Length; f++) {
+                core.SetInput(0, inputs[f]);
+                if (!core.Step()) throw new System.InvalidOperationException(core.Error);
+                core.ReadFighter(0, out var fx);
+                trace.Add(new TracePoint { Frame = f, X = fx.X, Y = fx.Y, Action = fx.Action, Air = (int)fx.Airborne });
+            }
+            return trace;
+        }
+}
 }
