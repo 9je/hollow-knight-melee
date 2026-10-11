@@ -15,6 +15,21 @@ namespace FoxMelee {
         public uint Airborne;
     }
 
+    /// One of Fox's active Melee hitboxes (core McHitbox), in Melee units.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct McHitbox {
+        public uint Slot, Group;
+        public float Damage, Radius;
+        public int Angle, Growth, SetKb, BaseKb;
+        public uint Element;
+        public float X, Y, PrevX, PrevY;   // the hitbox sweeps from last frame's centre to this frame's
+        public uint Fresh;                 // 1 = Melee has recorded no victim since it was created or cleared
+    }
+
+    /// One of Fox's hurtbox capsules (core McHurtbox); State 0 normal, 1 off, 2 intangible.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct McHurtbox { public float Ax, Ay, Bx, By, Radius; public uint State; }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct McBox { public float Left, Right, Top, Bottom; }
 
@@ -44,12 +59,16 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BoundsFn(ref McBox blast, ref McBox cam);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int PlaceFn(int port, float x, float y);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BonesFn(int port, int follower, float[] out12, int max);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HitboxFn(int port, int follower, [Out] McHitbox[] o, int max);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HurtboxFn(int port, int follower, [Out] McHurtbox[] o, int max);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ReportFn(int port, int follower, uint group, float damage);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
 
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step;
         readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place; readonly BonesFn bones; readonly DobjsFn dobjs;
+        readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
 
@@ -68,6 +87,9 @@ namespace FoxMelee {
             place = NativeLib.Symbol<PlaceFn>(lib, "mc_place_fighter");
             bones = NativeLib.Symbol<BonesFn>(lib, "mc_read_bones");
             dobjs = NativeLib.Symbol<DobjsFn>(lib, "mc_read_dobjs");
+            hitboxes = NativeLib.Symbol<HitboxFn>(lib, "mc_read_hitboxes");
+            hurtboxes = NativeLib.Symbol<HurtboxFn>(lib, "mc_read_hurtboxes");
+            report = NativeLib.Symbol<ReportFn>(lib, "mc_report_hit");
         }
 
         public static MeleeCore Load(string libraryPath) {
@@ -98,6 +120,11 @@ namespace FoxMelee {
         public int ReadBones(int port, float[] out12xN) => bones(port, 0, out12xN, out12xN.Length / 12);
         /// Mesh parts (DObjs) in the bones' order: hidden flag and joint index per part; returns the count.
         public int ReadDobjs(int port, byte[] hidden, byte[] joint) => dobjs(port, 0, hidden, joint, Math.Min(hidden.Length, joint.Length));
+        /// Port 0's active hitboxes; returns the count (-1 on error).
+        public int ReadHitboxes(McHitbox[] o) => hitboxes(0, 0, o, o.Length);
+        public int ReadHurtboxes(McHurtbox[] o) => hurtboxes(0, 0, o, o.Length);
+        /// Fox's hit in `group` landed outside Melee: Melee records it and gives Fox its attacker hitlag next frame.
+        public bool ReportHit(uint group, float damage) => Ok(report(0, 0, group, damage));
 
         public bool BuildCollision(IReadOnlyList<RoomShape> shapes, out IntPtr collision) {
             var handles = new List<GCHandle>();

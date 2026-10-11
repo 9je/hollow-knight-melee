@@ -58,5 +58,34 @@ namespace FoxMelee.Tests {
             Assert.Contains(shapes, s => s.Kind == ShapeKind.Hole);
             Assert.True(core.BuildCollision(shapes, out _), core.Error);
         }
+
+        [Fact]
+        public void FoxsJabHasAHitboxAndAReportedHitIsRemembered() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            var boxes = new McHitbox[4]; var hurt = new McHurtbox[15];
+            Assert.Equal(0, core.ReadHitboxes(boxes));
+            Assert.InRange(core.ReadHurtboxes(hurt), 5, 15);
+            Assert.True(hurt[0].Radius > 0);
+            core.SetInput(0, new McInput { Buttons = 0x0100 });   // A: jab
+            Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput());
+            int n = 0;
+            for (int i = 0; i < 10 && (n = core.ReadHitboxes(boxes)) == 0; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(n > 0);
+            Assert.Equal(4f, boxes[0].Damage);
+            Assert.Equal(1u, boxes[0].Fresh);
+            Assert.True(core.ReadFighter(0, out var f));
+            Assert.InRange(boxes[0].X - f.X, 0.1f, 20f);
+            Assert.False(core.ReportHit(boxes[0].Group + 77, 4));
+            Assert.True(core.ReportHit(boxes[0].Group, boxes[0].Damage), core.Error);
+            core.ReadHitboxes(boxes);
+            Assert.Equal(0u, boxes[0].Fresh);
+        }
     }
 }
