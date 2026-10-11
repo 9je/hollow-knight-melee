@@ -65,6 +65,7 @@ namespace FoxMelee {
             if (state == State.Failed) return;
             var hero = HeroController.instance;
             var gm = GameManager.instance;
+            GcInput.HideDPadSides = hero != null && gm != null && gm.IsGameplayScene() && gm.gameState == GlobalEnums.GameState.PLAYING;
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();

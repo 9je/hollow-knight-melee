@@ -25,6 +25,10 @@ namespace FoxMelee {
 
         public McInput? Current() => pads.Current(port);
 
+        /// While playing, D-pad left/right are Fox's interact: Hollow Knight must not read them as walking (an interact
+        /// press hands it the Knight for a few frames). Menus and the pause screen keep them.
+        public static bool HideDPadSides;
+
         /// Fox's input for the next Melee frame, or null when no GameCube controller is plugged in.
         public McInput? Melee() { Poll(); return pads.Melee(port); }
 
@@ -55,8 +59,8 @@ namespace FoxMelee {
                 UpdateRightStickWithValue(new Vector2(v.CStickX / 127f, v.CStickY / 127f), tick, dt);
                 UpdateWithState(InputControlType.DPadUp, B(GcButtons.DUp), tick, dt);
                 UpdateWithState(InputControlType.DPadDown, B(GcButtons.DDown), tick, dt);
-                UpdateWithState(InputControlType.DPadLeft, B(GcButtons.DLeft), tick, dt);
-                UpdateWithState(InputControlType.DPadRight, B(GcButtons.DRight), tick, dt);
+                UpdateWithState(InputControlType.DPadLeft, B(GcButtons.DLeft) && !HideDPadSides, tick, dt);
+                UpdateWithState(InputControlType.DPadRight, B(GcButtons.DRight) && !HideDPadSides, tick, dt);
                 UpdateWithState(InputControlType.Action1, B(GcButtons.A), tick, dt);     // A: confirm / jump
                 UpdateWithState(InputControlType.Action2, B(GcButtons.B), tick, dt);     // B: back
                 UpdateWithState(InputControlType.Action3, B(GcButtons.X), tick, dt);
