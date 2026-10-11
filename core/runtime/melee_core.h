@@ -35,6 +35,7 @@ void mc_set_input(int port, const McInput *in);     /* NULL = no controller */
 int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags);
 void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
+#include "room.h"
 
 #ifdef __cplusplus
 }

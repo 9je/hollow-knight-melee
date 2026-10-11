@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "cpu.h"
 #include "coro.h"
+#include "melee_core.h"
 
 #define TB_HZ 40500000u                 /* Gekko timebase: bus clock / 4 */
 #define TB_PER_FRAME (TB_HZ / 60u)      /* virtual time per frame boundary */
@@ -30,6 +31,11 @@ typedef struct Machine {
   uint32_t seed;
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
+  /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */
+  int room_pending;                     /* a validated room waits in room_* below */
+  McVec2 *room_verts; McLine *room_lines; McJoint *room_joints;   /* host copies, MC_MAX_* each */
+  McCollision room;
+  uint32_t room_guest;                  /* guest block holding the current room (freed on the next load) */
   int dead;
   char error[256];
 } Machine;
@@ -39,4 +45,5 @@ _Noreturn void mc_die(const char *fmt, ...);
 void tb_advance_to(uint64_t t);
 uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4);
 void service(Cpu *c);
+void room_boundary_jobs(Cpu *c);   /* room.c: pending room loads and placements */
 #define RET return c->spr[SPR_LR]

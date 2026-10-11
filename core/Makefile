@@ -89,8 +89,8 @@ runtime-test: | $(B)
 	$(B)/test_runtime
 .PHONY: runtime-test
 CORE_GOBJ := $(B)/guest-core
-RUNTIME_SRCS := hw coro irq hle_io frame melee_core
-RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h $(GUEST_HDRS)
+RUNTIME_SRCS := hw coro irq hle_io frame melee_core room room_check room_build
+RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h runtime/room.h $(GUEST_HDRS)
 $(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS) $(CORE_GEN)/guest_meta.h
 	mkdir -p $(CORE_GOBJ)
 	$(CC) $(GEN_CFLAGS) $(INC) -I$(CORE_GEN) -c $< -o $@
@@ -107,3 +107,12 @@ core-test: core
 replay-check-tool: core
 	$(CC) $(GEN_CFLAGS) $(INC) tools/replay_check.c $(B)/libmelee_core.a -lm -o $(B)/replay_check
 .PHONY: replay-check-tool
+
+# ---- rooms (plan 2) ----
+room-test: | $(B)
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_room.c runtime/room_check.c runtime/room_build.c -lm -o $(B)/test_room
+	$(B)/test_room
+rooms-test: core
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_rooms.c $(B)/libmelee_core.a -lm -o $(B)/test_rooms
+	$(B)/test_rooms $(CORE_GEN)/mem1.bin "$(ISO)"
+.PHONY: room-test rooms-test

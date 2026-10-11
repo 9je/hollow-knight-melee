@@ -46,6 +46,7 @@ uint32_t hle_lb_80019894(Cpu *c) {
   m->frames++;
   coro_yield();
   tb_advance_to(m->frames * (uint64_t)TB_PER_FRAME);
+  room_boundary_jobs(c);
   uint32_t qnum = ld8(c, ADDR_PAD_LIB), qread = ld8(c, ADDR_PAD_LIB + 1);
   if (qnum == 0) mc_die("pad queue not initialised at the frame boundary");
   uint32_t q = ld32(c, ADDR_PAD_LIB + 8) + qread * 0x30u;   /* HSD_PadData: PADStatus stat[4] */

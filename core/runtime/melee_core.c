@@ -104,6 +104,9 @@ void mc_shutdown(void) {
   if (m->iso) fclose(m->iso);
   free(m->cpu.mem);
   free(m->aram);
+  free(m->room_verts);
+  free(m->room_lines);
+  free(m->room_joints);
   free(m);
   g_m = NULL;
 }
