@@ -437,7 +437,12 @@ namespace FoxMelee {
             bool respawn = session.TakeRespawns();
             Log($"Fox takes the Knight at ({feet.x:F2}, {feet.y:F2}) → Melee ({at.X:F1}, {at.Y:F1}){(respawn ? ", respawned" : "")}");
             if (respawn) respawnHold.Arm();
-            if (respawn ? core.RespawnFighter(0, (float)at.X, (float)at.Y) : core.PlaceFighter(0, (float)at.X, (float)at.Y)) return true;
+            // King's Pass's opening drop (the Knight falls in through top1): Fox tumbles in and lands hard unless he techs
+            if (!respawn && GameManager.instance.sceneName == "Tutorial_01" && GameManager.instance.entryGateName == "top1") {
+                Log("the opening drop: Fox tumbles in");
+                if (core.TumbleFighter(0, (float)at.X, (float)at.Y)) return true;
+            }
+            else if (respawn ? core.RespawnFighter(0, (float)at.X, (float)at.Y) : core.PlaceFighter(0, (float)at.X, (float)at.Y)) return true;
             Fail($"mc_place_fighter: {core.Error}");
             return false;
         }
