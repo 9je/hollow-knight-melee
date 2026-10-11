@@ -35,6 +35,7 @@ namespace FoxMelee {
         const uint ActionWait = 14;             // Melee's Wait: Fox standing
         FocusRules focus;
         bool focusing, interactHeld, focusHeld;
+        int focusDrain;                         // soul Focus has used but not yet taken (taken 3 at a time)
         McInput rawInput;                       // the controller this frame, before the respawn hold
         float stillFor; int stillFrames; float lastX, lastY; bool stuckLogged;
         const int ScanFrames = 30;              // how often new terrain (a gate closing) is looked for
@@ -172,6 +173,7 @@ namespace FoxMelee {
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
+            if (gx != null && Input.GetKeyDown(KeyCode.F9)) Log("frame dumped: " + gx.Dump(Path.Combine(FoxMod.ModDir, "dump", DateTime.Now.ToString("HHmmss"))));
             if (gx != null && frames == 0 && room == gxRoom && gx.Shown) return;   // nothing new to draw
             gxRoom = room;
             if (gx != null && gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z)) {
@@ -224,9 +226,13 @@ namespace FoxMelee {
             if (held && !focusHeld && !step.Focusing)
                 Log("focus: " + (FocusRules.WhyNot(still, pd.GetInt("MPCharge"), focus.Cost, pd.GetInt("health"), pd.GetInt("maxHealth")) ?? "not started"));
             focusHeld = held;
-            if (step.Drain > 0) {
-                pd.TakeMP(step.Drain);                                   // a little each frame, as the Knight's focus drains
-                GameCameras.instance.soulOrbFSM.SendEvent("MP SET");     // HeroController.TakeMP tells the orb only for >1
+            // drained in chunks of 3 through HeroController.TakeMP, the path Hollow Knight's own spending takes (it tells
+            // the soul orb, "MP LOSE", only for more than 1 at a time)
+            focusDrain += step.Drain;
+            if (focusDrain >= 3 || (focusDrain > 0 && (step.Heal || !step.Focusing))) {
+                if (focusDrain > 1) hero.TakeMP(focusDrain);
+                else { pd.TakeMP(focusDrain); GameCameras.instance.soulOrbFSM.SendEvent("MP SET"); }
+                focusDrain = 0;
             }
             if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); focusSound.Heal(); }   // Focus heals and resets percent (spec §5.3)
             focusSound.Charging(step.Focusing);

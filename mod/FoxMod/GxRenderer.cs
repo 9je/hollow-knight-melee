@@ -80,6 +80,35 @@ namespace FoxMelee {
             return true;
         }
 
+        /// F9: what was drawn last (each run's texture, blend, wrap, texture coordinates, vertex alpha, bounds; the
+        /// textures as PNGs), for looking at a drawing problem seen in the game.
+        public string Dump(string dir) {
+            System.IO.Directory.CreateDirectory(dir);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"runs {frame.Runs.Count}, vertices {frame.VertexCount}, sorting layer {renderer.sortingLayerName} order {renderer.sortingOrder}");
+            var saved = new HashSet<Texture2D>();
+            for (int r = 0; r < frame.Runs.Count; r++) {
+                var run = frame.Runs[r];
+                float u0 = 1e9f, u1 = -1e9f, v0 = 1e9f, v1 = -1e9f, x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f; int a0 = 255, a1 = 0;
+                for (int k = 0; k < run.Count; k++) {
+                    int i = run.First + k;
+                    u0 = Mathf.Min(u0, frame.Uv[2 * i]); u1 = Mathf.Max(u1, frame.Uv[2 * i]); v0 = Mathf.Min(v0, frame.Uv[2 * i + 1]); v1 = Mathf.Max(v1, frame.Uv[2 * i + 1]);
+                    x0 = Mathf.Min(x0, frame.Pos[3 * i]); x1 = Mathf.Max(x1, frame.Pos[3 * i]); y0 = Mathf.Min(y0, frame.Pos[3 * i + 1]); y1 = Mathf.Max(y1, frame.Pos[3 * i + 1]);
+                    a0 = Mathf.Min(a0, frame.Color[4 * i + 3]); a1 = Mathf.Max(a1, frame.Color[4 * i + 3]);
+                }
+                var mat = r < mats.Length ? mats[r] : null;
+                var tex = mat != null ? mat.mainTexture as Texture2D : null;
+                string texName = tex == null ? "none" : $"tex{run.Tex:X}_{tex.width}x{tex.height}";
+                sb.AppendLine($"run {r}: plink {run.PLink} tex {run.Tex:X} ({texName}) blend {run.Blend} shader {(mat != null ? mat.shader.name : "-")} wrap {run.WrapS}/{run.WrapT} " +
+                              $"tris {run.Count / 3} uv {u0:F2}..{u1:F2},{v0:F2}..{v1:F2} alpha {a0}..{a1} box {x0:F1}..{x1:F1},{y0:F1}..{y1:F1}");
+                if (tex != null && tex != Texture2D.whiteTexture && saved.Add(tex) && tex.width <= 1024)
+                    try { System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, texName + ".png"), ImageConversion.EncodeToPNG(tex)); } catch (Exception e) { sb.AppendLine("  png: " + e.Message); }
+            }
+            var path = System.IO.Path.Combine(dir, "frame.txt");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            return path;
+        }
+
         public void Hide() {
             if (shown) { root.SetActive(false); shown = false; }
         }
