@@ -57,6 +57,8 @@ namespace FoxMelee {
             WaitingToTransition = h.transitionState == GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION,
             HazardRespawning = h.cState.hazardRespawning, HazardDeath = h.cState.hazardDeath, Dead = h.cState.dead,
             AcceptingInput = h.acceptingInput, ControlRelinquished = h.controlReqlinquished,
+            Loading = GameManager.instance.gameState != GlobalEnums.GameState.PLAYING
+                   && GameManager.instance.gameState != GlobalEnums.GameState.PAUSED,
         };
 
         void Update() {

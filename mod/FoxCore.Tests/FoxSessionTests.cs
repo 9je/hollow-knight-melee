@@ -15,7 +15,8 @@ namespace FoxMelee.Tests {
                 new HeroFlags { WaitingToTransition = false },
                 new HeroFlags { WaitingToTransition = true, HazardRespawning = true },
                 new HeroFlags { WaitingToTransition = true, HazardDeath = true },
-                new HeroFlags { WaitingToTransition = true, Dead = true } })
+                new HeroFlags { WaitingToTransition = true, Dead = true },
+                new HeroFlags { WaitingToTransition = true, Loading = true } })   // a save loading: the Knight is parked off-room
                 Assert.Equal(HeroOwner.Hollow, s.Owner(busy));
         }
 

@@ -5,6 +5,7 @@ namespace FoxMelee {
     public struct HeroFlags {
         public bool Transitioning, WaitingToTransition, HazardRespawning, HazardDeath, Dead;
         public bool AcceptingInput, ControlRelinquished;
+        public bool Loading;                    // the game is not playing yet (a save loading, a cutscene)
     }
 
     /// Who moves the Knight, and what FoxRunner must do to him. Pure, so the hand-over rules are unit-tested;
@@ -23,9 +24,10 @@ namespace FoxMelee {
         /// The player pressed interact: the Knight goes back to Hollow Knight, which presses "up" for him.
         public void BeginInteract() { interact = 0; interactStarted = false; }
 
-        /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death).
+        /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death, loading a save:
+        /// until the game plays, the Knight is parked far outside the room).
         public static bool HollowBusy(HeroFlags f) =>
-            f.Transitioning || !f.WaitingToTransition || f.HazardRespawning || f.HazardDeath || f.Dead;
+            f.Loading || f.Transitioning || !f.WaitingToTransition || f.HazardRespawning || f.HazardDeath || f.Dead;
 
         public bool NeedsRoom(string scene) => scene != roomScene;
 
