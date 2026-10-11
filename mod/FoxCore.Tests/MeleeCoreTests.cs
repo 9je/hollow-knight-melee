@@ -157,5 +157,34 @@ namespace FoxMelee.Tests {
             }
             Assert.True(laser);
         }
+
+        [Fact]
+        public void MeleesOwnFrameDecodesToFoxsTriangles() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.GxCapture(true), core.Error);
+            for (int i = 0; i < 3; i++) Assert.True(core.Step(), core.Error);
+            var frame = new GxFrame();
+            Assert.True(core.GxDecode(GxFrame.FoxAndEffects, frame), core.Error);
+            Assert.True(core.ReadFighter(0, out var f));
+            Assert.True(frame.VertexCount > 9000);
+            Assert.Equal(frame.VertexCount, frame.Runs[frame.Runs.Count - 1].First + frame.Runs[frame.Runs.Count - 1].Count);
+            for (int i = 0; i < frame.VertexCount; i++) {
+                Assert.InRange(frame.Pos[3 * i], f.X - 15, f.X + 15);
+                Assert.InRange(frame.Pos[3 * i + 1], f.Y - 2, f.Y + 20);
+            }
+            var atlas = frame.Runs.Find(r => r.Tex == GxFrame.Atlas);
+            Assert.True(atlas.Count > 0);
+            Assert.True(core.GxTexture(GxFrame.Atlas, out var t));
+            Assert.Equal(4096, t.W);
+            Assert.NotEqual(IntPtr.Zero, t.Rgba);
+            Assert.True(t.Gen > 0);
+            Assert.False(core.GxTexture(123456, out _));
+        }
     }
 }

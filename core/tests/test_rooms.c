@@ -443,6 +443,8 @@ static void test_gx_decode(void) {
   steps(1, &b); steps(15, &idle);
   CHECK(mc_gx_decode(ITEM, &v, &nv, &r, &nr) == 0 && nv > 0);
   for (int i = 0; i < nr; i++) CHECK(r[i].p_link == 9);
+  CHECK(mc_gx_decode(EFFECTS, &v, &nv, &r, &nr) == 0);
+  for (int i = 0; i < nv; i++) CHECK(fabsf(v[i].z) < 500);   /* not the stage's background effects */
   CHECK(mc_gx_decode(0, &v, &nv, &r, &nr) == 0 && nv == 0 && nr == 0);
   CHECK(mc_gx_decode(~0ull, &v, &nv, &r, &nr) == 0 && nv > 0);   /* everything (stage, HUD): every draw fully parsed */
   CHECK(mc_gx_size_mismatches() == 0);

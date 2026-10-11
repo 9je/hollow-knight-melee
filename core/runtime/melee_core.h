@@ -79,7 +79,8 @@ int mc_read_items(McItem out[], int max);   /* count, -1 error */
  * (0xCC008000), big-endian, plus marks: from `offset` on, the stream was written by `gobj` (0 = no object), an
  * HSD_GObj with that p_link (8 fighters, 9 items, ...) and gx_link. Display lists, vertex arrays and textures it refers
  * to are in MEM1 (mc_mem1). Capturing changes nothing in the game. */
-typedef struct { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; } McGxMark;   /* view: the camera's (HSD_CObj+0x54) */
+typedef struct { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; uint32_t owner; uint8_t owner_plink, pad[3]; } McGxMark;
+/* view: the camera's (HSD_CObj+0x54). owner: an effect's parent GObj (EF_Effect+8) and its p_link (0xFF none) */
 int mc_gx_capture(int on);
 /* The last complete frame's stream and marks (valid until the next mc_step). */
 int mc_gx_frame(const uint8_t **fifo, uint32_t *len, const McGxMark **marks, int *nmarks);

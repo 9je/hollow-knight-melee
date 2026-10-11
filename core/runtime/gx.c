@@ -54,6 +54,12 @@ void gx_mark(Cpu *c, uint32_t gobj) {
   mk->classifier = gobj ? (uint16_t)ld16(c, gobj) : 0;
   mk->p_link = gobj ? (uint8_t)ld8(c, gobj + 2) : 0;
   mk->gx_link = gobj ? (uint8_t)ld8(c, gobj + 3) : 0;
+  mk->owner = 0; mk->owner_plink = 0xFF;
+  if (gobj && (mk->p_link == 11 || mk->p_link == 12)) {   /* effects: EF_Effect.parent_gobj */
+    uint32_t ef = ld32(c, gobj + 0x2C);
+    uint32_t parent = ef >= 0x80000000u && ef < 0x80000000u + MEM1_SIZE - 0x10 ? ld32(c, ef + 8) : 0;
+    if (parent >= 0x80000000u && parent < 0x80000000u + MEM1_SIZE - 0x30) { mk->owner = parent; mk->owner_plink = (uint8_t)ld8(c, parent + 2); }
+  }
   uint32_t cobj = ld32(c, 0x804D765Cu);                 /* cobj.c `current`: the camera drawing now */
   for (int i = 0; i < 12; i++) {
     uint32_t u = cobj >= 0x80000000u && cobj < 0x80000000u + MEM1_SIZE - 0x90 ? ld32(c, cobj + 0x54 + 4u * (uint32_t)i) : 0;

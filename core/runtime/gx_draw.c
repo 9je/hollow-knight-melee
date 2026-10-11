@@ -41,6 +41,7 @@ static McGxVert *out_v; static int cap_v;
 static McGxRun *out_r; static int cap_r;
 static Tex *texs; static int ntex, captex;
 static int depth_dl;
+#define PLAY_DEPTH 500.0f
 static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_stats) */
 
 /* the object drawing now */
@@ -484,6 +485,9 @@ static void emit_tri(const Vtx *a, const Vtx *b, const Vtx *c, const DrawSetup *
   if (!span_want) return;
   float cross = (b->sx - a->sx) * (c->sy - a->sy) - (b->sy - a->sy) * (c->sx - a->sx);
   if (d->cull == 3) return;
+  /* effects far from the play plane are the stage's 3D background (Final Destination's sit 3200+ deep; Fox's own
+   * effects stay within a few dozen units) */
+  if ((span_plink == 11 || span_plink == 12) && (fabsf(a->wz) > PLAY_DEPTH || fabsf(b->wz) > PLAY_DEPTH || fabsf(c->wz) > PLAY_DEPTH)) return;
   /* BP GENMODE cull (hardware numbering, not the GX API's): 1 back, 2 front; with y up on screen, front faces wind
    * clockwise (cross < 0): Melee's camera-facing shield quad must survive back culling */
   if (d->cull == 1 && cross > 0) return;

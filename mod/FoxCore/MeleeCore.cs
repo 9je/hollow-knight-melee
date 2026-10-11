@@ -73,6 +73,9 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HurtboxFn(int port, int follower, [Out] McHurtbox[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ShieldFn(int port, int follower, out McShield o);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ItemsFn([Out] McItem[] o, int max);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxCaptureFn(int on);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ReportFn(int port, int follower, uint group, float damage);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SfxFn([Out] McSfx[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
@@ -82,7 +85,8 @@ namespace FoxMelee {
         readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
-        readonly ShieldFn shield; readonly ItemsFn items; readonly SfxFn sfx;
+        readonly ShieldFn shield; readonly ItemsFn items;
+        readonly GxCaptureFn gxCapture; readonly GxDecodeFn gxDecode; readonly GxTextureFn gxTexture; readonly SfxFn sfx;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
 
@@ -108,6 +112,9 @@ namespace FoxMelee {
             report = NativeLib.Symbol<ReportFn>(lib, "mc_report_hit");
             shield = NativeLib.Symbol<ShieldFn>(lib, "mc_read_shield");
             items = NativeLib.Symbol<ItemsFn>(lib, "mc_read_items");
+            gxCapture = NativeLib.Symbol<GxCaptureFn>(lib, "mc_gx_capture");
+            gxDecode = NativeLib.Symbol<GxDecodeFn>(lib, "mc_gx_decode");
+            gxTexture = NativeLib.Symbol<GxTextureFn>(lib, "mc_gx_texture");
             sfx = NativeLib.Symbol<SfxFn>(lib, "mc_read_sfx");
         }
 
@@ -154,6 +161,21 @@ namespace FoxMelee {
         public bool ReadShield(out McShield s) => Ok(shield(0, 0, out s));
         /// Melee's items (lasers...); returns the count, -1 on error.
         public int ReadItems(McItem[] o) => items(o, o.Length);
+        /// Capture Melee's graphics each frame (off by default; it changes nothing in the game).
+        public bool GxCapture(bool on) => Ok(gxCapture(on ? 1 : 0));
+        /// Decodes the last frame's drawing by the objects in `plinkMask` (GxFrame.FoxAndEffects) into `frame`.
+        public unsafe bool GxDecode(ulong plinkMask, GxFrame frame) {
+            if (gxDecode(plinkMask, out var v, out int nv, out var r, out int nr) != 0) return Ok(-1);
+            frame.Fill((GxFrame.Vert*)v, nv, (GxFrame.Run*)r, nr);
+            return Ok(0);
+        }
+        public bool GxTexture(int id, out GxTexture t) {
+            t = default;
+            if (gxTexture(id, out var raw) != 0) { localError = "no such texture"; return false; }
+            t = new GxTexture { W = (int)raw.W, H = (int)raw.H, Rgba = raw.Rgba, Gen = raw.Gen };
+            localError = null;
+            return true;
+        }
         /// Melee's sound effect calls since the last read, oldest first (drains them); count, -1 on error.
         public int ReadSfx(McSfx[] o) => sfx(o, o.Length);
 

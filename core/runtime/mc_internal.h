@@ -31,7 +31,7 @@ typedef struct Machine {
   uint32_t seed;
   int gx_on;                            /* mc_gx_capture */
   uint8_t *gx_fifo[2]; uint32_t gx_len[2], gx_cap[2];   /* [cur]: this frame's stream; [!cur]: the last complete one */
-  struct McGxMarkI { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; } *gx_marks[2];
+  struct McGxMarkI { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; uint32_t owner; uint8_t owner_plink, pad[3]; } *gx_marks[2];
   int gx_nmarks[2], gx_capmarks[2], gx_cur;
   int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
   int at_hits;                          /* paused there, mid-frame */

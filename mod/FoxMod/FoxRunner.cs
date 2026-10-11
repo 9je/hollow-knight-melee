@@ -22,7 +22,8 @@ namespace FoxMelee {
         bool needPlace = true;                  // Fox starts where the Knight is once Fox drives again
         float accumulator;
         GameObject placeholder;
-        EffectsRenderer effects;                // shield, shine and lasers
+        EffectsRenderer effects;                // shield, shine and lasers (stand-ins when Melee's frame is not drawn)
+        GxRenderer gx;                          // Melee's own frame: its models, effects and art
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
@@ -43,7 +44,7 @@ namespace FoxMelee {
             if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
             holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
-            model?.Hide(); effects?.Hide();
+            model?.Hide(); effects?.Hide(); gx?.Hide();
             combat?.ReleaseAll();
             sfx?.StopAll();
         }
@@ -62,7 +63,7 @@ namespace FoxMelee {
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
-                    model?.Hide(); effects?.Hide();
+                    model?.Hide(); effects?.Hide(); gx?.Hide();
                 }
                 combat?.ReleaseAll();
                 return;
@@ -80,7 +81,7 @@ namespace FoxMelee {
                 needPlace = true;
                 accumulator = 0;
                 if (placeholder) placeholder.SetActive(false);
-                model?.Hide(); effects?.Hide();
+                model?.Hide(); effects?.Hide(); gx?.Hide();
                 combat?.ReleaseAll();
                 return;
             }
@@ -118,6 +119,12 @@ namespace FoxMelee {
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
+            // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
+            if (gx != null && gx.Draw(core, room)) {
+                model?.Hide(); effects?.Hide();
+                if (placeholder) placeholder.SetActive(false);
+                return;
+            }
             if (model != null && !model.Draw(core, bones, room)) {
                 FoxMod.Instance.LogError("Fox's skeleton does not match fox.model; drawing the placeholder");
                 model.Hide();
@@ -166,6 +173,13 @@ namespace FoxMelee {
             }
             if (s.FoxHits) combat = new CombatBridge();
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
+            if (s.MeleeGraphics) {
+                try {
+                    if (!core.GxCapture(true)) throw new Exception(core.Error);
+                    gx = new GxRenderer();
+                    Log("drawing Melee's own graphics");
+                } catch (Exception e) { Log("Melee's graphics not drawn (" + e.Message + "): fox.model instead"); gx = null; }
+            }
             try { sfx = SfxPlayer.Create(core, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
             focus = new FocusRules(Math.Max(1, (int)Math.Round(s.FocusSeconds * 60)), 33);
             state = State.Running;
