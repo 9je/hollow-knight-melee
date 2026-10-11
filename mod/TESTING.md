@@ -30,7 +30,8 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
     damage / 5 (old nail: Fox's jab = 4), gives Soul like a nail hit, and both Fox and the enemy freeze for Melee's
     hitlag (jab: 4 frames; bigger hits longer), then the enemy is knocked back. Down-air hits
     several times (as in Melee); a single hitbox never hits the same enemy twice. Enemies get Hollow Knight's knockback
-    in the hit's direction. Also try the King's Pass breakable walls (may not break yet).
+    away from Fox (a back air sends an enemy behind him further behind), after the freeze. Grabs do not hurt
+    enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail.
 
 Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
 To turn Fox's hits off, set `FoxHits` to false in FoxMelee.GlobalSettings.json.

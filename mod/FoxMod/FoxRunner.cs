@@ -82,12 +82,14 @@ namespace FoxMelee {
                 accumulator -= Frame;
                 frames++;
                 core.SetInput(0, InputMapper.Map(ReadPad()));
+                int at = 0;
                 if (combat != null) {
-                    int at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
+                    at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
                     if (at < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
                     if (at == 0 && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
                 }
-                if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
+                if ((combat == null || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast

@@ -297,6 +297,8 @@ int mc_read_hitboxes(int port, int follower, McHitbox out[], int max) {
     int any = 0;
     for (uint32_t v = 0; v < 12; v++) any |= ld32(c, h + 0x74 + 8 * v) != 0;
     o->fresh = !any;
+    uint32_t b40 = ld8(c, h + 0x40), b42 = ld8(c, h + 0x42);   /* big-endian bitfields: b0 is the top bit */
+    o->flags = (b40 & 0x20 ? MC_HIT_AIRBORNE : 0) | (b40 & 0x10 ? MC_HIT_GROUNDED : 0) | (b42 & 0x04 ? MC_HIT_FIGHTERS : 0);
   }
   return n;
 }
@@ -333,10 +335,11 @@ int mc_report_hit(int port, int follower, uint32_t group, float damage) {
     if (victim_recorded(c, h)) continue;
     uint32_t v = 0;
     while (v < 12 && ld32(c, h + 0x74 + 8 * v) != 0) v++;
-    if (v == 12) v = ld8(c, h + 0x44) % 12;             /* full: overwrite where Melee would */
+    int full = v == 12;
+    if (full) v = ld8(c, h + 0x44);                     /* full: overwrite at Melee's ring cursor and advance it */
     st32(c, h + 0x74 + 8 * v, HIT_SENTINEL);
     st32(c, h + 0x78 + 8 * v, 0);
-    if (ld8(c, h + 0x44) < 12) st8(c, h + 0x44, ld8(c, h + 0x44) + 1);
+    if (full) st8(c, h + 0x44, v + 1 >= 12 ? 0 : v + 1);
   }
   if (!found) return 1;
   /* ftColl_80076ED8: the attacker's dealt damage as an int, at least 1 for any damage */

@@ -241,6 +241,7 @@ static void test_hitboxes(void) {
   CHECK(n > 0);
   f = fox();
   CHECK(h[0].damage > 0 && h[0].radius > 0 && h[0].fresh == 1 && h[0].slot < 4);
+  CHECK(h[0].element == 0 && (h[0].flags & MC_HIT_FIGHTERS) && (h[0].flags & MC_HIT_GROUNDED) && (h[0].flags & MC_HIT_AIRBORNE));
   CHECK(fabsf(h[0].x - f.x) < 20 && fabsf(h[0].y - f.y) < 20 && (h[0].x - f.x) * f.facing > 0);
   uint32_t crc = mc_mem_crc32();
   mc_read_hitboxes(0, 0, h, 8); mc_read_hurtboxes(0, 0, hb, 16);
@@ -254,6 +255,13 @@ static void test_hitboxes(void) {
   steps(1, NULL);
   CHECK(hitlag() > 0);                                     /* Melee's own hitlag for the attacker */
   CHECK(mc_report_hit(1, 0, 0, 1) == 1 && mc_report_hit(7, 0, 0, 1) == -1);
+  /* a grab's hitbox is Melee's Catch element and does no damage */
+  steps(60, NULL);
+  McInput z = {0}; z.buttons = 0x0010;                    /* PAD_TRIGGER_Z: grab */
+  steps(1, &z);
+  n = 0;
+  for (int i = 0; i < 15 && (n = mc_read_hitboxes(0, 0, h, 8)) == 0; i++) steps(1, NULL);
+  CHECK(n > 0 && h[0].element == 8 && h[0].damage == 0);
   mc_shutdown();
 }
 

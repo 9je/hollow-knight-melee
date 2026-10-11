@@ -7,15 +7,22 @@ namespace FoxMelee {
         const int Sakurai = 361;
         const float SakuraiForward = 40f;   // Hollow Knight only uses the cardinal direction: forward
 
-        /// melee_damage × (nail damage / 5), at least 1.
-        public static int HkDamage(float meleeDamage, int nailDamage) =>
-            Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0, MidpointRounding.AwayFromZero));
+        const uint Catch = 8, Inert = 11;
+        const uint HitsFighters = 4;   // MC_HIT_FIGHTERS
 
-        /// The launch angle as Hollow Knight's attack direction (degrees, 0 = right, counter-clockwise),
-        /// mirrored when Fox faces left.
-        public static float Direction(int angle, float facing) {
+        /// Melee lets this hitbox damage a fighter (not a grab, not inert, not one that skips fighters, has damage).
+        public static bool HurtsEnemies(McHitbox b) =>
+            b.Damage > 0 && b.Element != Catch && b.Element != Inert && (b.Flags & HitsFighters) != 0;
+
+        /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.
+        public static int HkDamage(float meleeDamage, int nailDamage) =>
+            meleeDamage <= 0 ? 0 : Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0, MidpointRounding.AwayFromZero));
+
+        /// The launch angle as Hollow Knight's attack direction (degrees, 0 = right, counter-clockwise). As in Melee
+        /// (ftColl_8007A06C) the victim goes away from Fox: mirrored when it is left of him (or level with him).
+        public static float Direction(int angle, bool victimLeftOfFox) {
             float a = angle == Sakurai ? SakuraiForward : angle;
-            if (facing < 0) a = 180f - a;
+            if (victimLeftOfFox) a = 180f - a;
             a %= 360f;
             return a < 0 ? a + 360f : a;
         }

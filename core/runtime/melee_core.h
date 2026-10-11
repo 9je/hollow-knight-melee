@@ -56,7 +56,11 @@ typedef struct {
   uint32_t element;
   float x, y, prev_x, prev_y;    /* this frame's centre and last frame's: the hitbox sweeps between them */
   uint32_t fresh;
+  uint32_t flags;                /* MC_HIT_*: whom Melee lets it hit */
 } McHitbox;
+#define MC_HIT_AIRBORNE 1u       /* HitCapsule x40_b2: hits airborne fighters */
+#define MC_HIT_GROUNDED 2u       /* x40_b3: hits grounded fighters */
+#define MC_HIT_FIGHTERS 4u       /* x42_b5: hits fighters at all */
 typedef struct { float ax, ay, bx, by, radius; uint32_t state; } McHurtbox;   /* state: 0 normal, 1 off, 2 intangible */
 int mc_read_hitboxes(int port, int follower, McHitbox out[], int max);   /* count, -1 error */
 int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max);

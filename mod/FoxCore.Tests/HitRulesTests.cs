@@ -11,18 +11,30 @@ namespace FoxMelee.Tests {
         public void DamageScalesWithTheNail() {
             Assert.Equal(4, HitRules.HkDamage(4, 5));      // old nail: Melee % as is
             Assert.Equal(17, HitRules.HkDamage(8.5f, 10));  // 17
-            Assert.Equal(1, HitRules.HkDamage(0.3f, 5));    // any hit does at least 1
+            Assert.Equal(1, HitRules.HkDamage(0.3f, 5));    // any damaging hit does at least 1
+            Assert.Equal(0, HitRules.HkDamage(0f, 5));
             Assert.Equal(3, HitRules.HkDamage(2.5f, 5));    // halves round away from zero
         }
 
         [Fact]
-        public void DirectionIsTheLaunchAngleMirroredWhenFacingLeft() {
-            Assert.Equal(80f, HitRules.Direction(80, 1));
-            Assert.Equal(100f, HitRules.Direction(80, -1));
-            Assert.Equal(270f, HitRules.Direction(270, -1));   // straight down stays down
-            Assert.Equal(180f, HitRules.Direction(0, -1));
-            Assert.Equal(40f, HitRules.Direction(361, 1));     // Sakurai angle: forward
-            Assert.Equal(140f, HitRules.Direction(361, -1));
+        public void DirectionLaunchesAwayFromFoxWhateverHisFacing() {
+            // Melee (ftColl_8007A06C) mirrors by where the victim is, not by the attacker's facing
+            Assert.Equal(80f, HitRules.Direction(80, victimLeftOfFox: false));
+            Assert.Equal(100f, HitRules.Direction(80, victimLeftOfFox: true));
+            Assert.Equal(270f, HitRules.Direction(270, victimLeftOfFox: true));   // straight down stays down
+            Assert.Equal(180f, HitRules.Direction(0, victimLeftOfFox: true));
+            Assert.Equal(40f, HitRules.Direction(361, victimLeftOfFox: false));    // Sakurai angle: away
+            Assert.Equal(140f, HitRules.Direction(361, victimLeftOfFox: true));    // a back air sends a victim behind Fox further behind
+        }
+
+        [Fact]
+        public void OnlyHitboxesThatHurtFightersHurtEnemies() {
+            var jab = new McHitbox { Damage = 3, Element = 0, Flags = 7 };
+            Assert.True(HitRules.HurtsEnemies(jab));
+            Assert.False(HitRules.HurtsEnemies(new McHitbox { Damage = 0, Element = 8, Flags = 7 }));   // grab (Catch)
+            Assert.False(HitRules.HurtsEnemies(new McHitbox { Damage = 3, Element = 11, Flags = 7 }));  // Inert
+            Assert.False(HitRules.HurtsEnemies(new McHitbox { Damage = 3, Element = 0, Flags = 3 }));   // not against fighters
+            Assert.False(HitRules.HurtsEnemies(new McHitbox { Damage = 0, Element = 0, Flags = 7 }));   // no damage
         }
 
         [Fact]

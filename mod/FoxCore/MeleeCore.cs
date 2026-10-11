@@ -25,6 +25,7 @@ namespace FoxMelee {
         public uint Element;
         public float X, Y, PrevX, PrevY;   // the hitbox sweeps from last frame's centre to this frame's
         public uint Fresh;                 // 1 = Melee has recorded no victim since it was created or cleared
+        public uint Flags;                 // core MC_HIT_*: 1 hits airborne, 2 hits grounded, 4 hits fighters
     }
 
     /// One of Fox's hurtbox capsules (core McHurtbox); State 0 normal, 1 off, 2 intangible.
