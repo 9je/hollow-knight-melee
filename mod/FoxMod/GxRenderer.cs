@@ -43,8 +43,18 @@ namespace FoxMelee {
 
         /// False when the core could not decode a frame (the caller falls back to fox.model). `like`: the Knight's
         /// renderer, whose sorting Fox takes; `z`: the Knight's depth.
+        // profiling (FoxRunner logs it): milliseconds in decode, mesh building, texture uploads; uploads and their bytes
+        public double DecodeMs, MeshMs, UploadMs; public int Uploads, Runs; public long UploadBytes;
+        readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+
         public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z) {
-            if (!core.GxDecode(GxFrame.FoxAndEffects, frame) || frame.VertexCount == 0) { Hide(); return false; }
+            watch.Restart();
+            bool ok = core.GxDecode(GxFrame.FoxAndEffects, frame);
+            DecodeMs += watch.Elapsed.TotalMilliseconds;
+            if (!ok || frame.VertexCount == 0) { Hide(); return false; }
+            Runs += frame.Runs.Count;
+            double up0 = UploadMs;
+            watch.Restart();
             float inv = (float)(1.0 / room.Scale);
             float ox = (float)room.Origin.X, oy = (float)room.Origin.Y;
             var runs = frame.Runs;
@@ -72,6 +82,7 @@ namespace FoxMelee {
             }
             mesh.RecalculateBounds();
             renderer.sharedMaterials = mats;
+            MeshMs += watch.Elapsed.TotalMilliseconds - (UploadMs - up0);
             if (like != null) { renderer.sortingLayerID = like.sortingLayerID; renderer.sortingOrder = like.sortingOrder; }
             float g = Glow ? 1.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 10f) : 1f;
             block.SetColor("_Color", new Color(g, g, g, 1f));
@@ -132,8 +143,10 @@ namespace FoxMelee {
                     filterMode = FilterMode.Bilinear,
                     wrapModeU = Wrap(ws), wrapModeV = Wrap(wt),
                 };
+            var upWatch = System.Diagnostics.Stopwatch.StartNew();
             tex.LoadRawTextureData(t.Rgba, t.W * t.H * 4);   // top row first: v = 0 is the first row, as the core's
             tex.Apply(false, false);
+            UploadMs += upWatch.Elapsed.TotalMilliseconds; Uploads++; UploadBytes += (long)t.W * t.H * 4;
             if (run.Tex == GxFrame.Atlas) core.GxAtlasDirty(out _, out _, out _, out _);   // all of it is up to date
             textures[key] = (t.Gen, tex);
             return tex;
@@ -143,6 +156,8 @@ namespace FoxMelee {
         Texture2D regionTex;
         bool UploadRegion(Texture2D atlas, GxTexture t, int x, int y, int w, int h) {
             if (w <= 0 || h <= 0 || x + w > t.W || y + h > t.H) return false;
+            var upWatch = System.Diagnostics.Stopwatch.StartNew();
+            Uploads++; UploadBytes += (long)w * h * 4;
             if (region.Length != w * h * 4) region = new byte[w * h * 4];   // LoadRawTextureData(byte[]) wants the exact size
             for (int row = 0; row < h; row++)
                 System.Runtime.InteropServices.Marshal.Copy(t.Rgba + ((y + row) * t.W + x) * 4, region, row * w * 4, w * 4);
@@ -153,6 +168,7 @@ namespace FoxMelee {
             regionTex.LoadRawTextureData(region);
             regionTex.Apply(false, false);
             Graphics.CopyTexture(regionTex, 0, 0, 0, 0, w, h, atlas, 0, 0, x, y);
+            UploadMs += upWatch.Elapsed.TotalMilliseconds;
             return true;
         }
 

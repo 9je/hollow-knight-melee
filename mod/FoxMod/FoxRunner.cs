@@ -136,6 +136,7 @@ namespace FoxMelee {
             // real time, stopped only by Hollow Knight's pause: its time scale can be left low or at 0 after a death
             accumulator += gm.gameState == GlobalEnums.GameState.PAUSED ? 0f : Time.unscaledDeltaTime;
             int frames = 0;
+            profWatch.Restart();
             while (accumulator >= Frame && frames < 4) {
                 accumulator -= Frame;
                 frames++;
@@ -157,18 +158,26 @@ namespace FoxMelee {
                 if (pause) {
                     at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
                     if (at < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
+                    var bt = profWatch.Elapsed.TotalMilliseconds;
                     if (at == 0 && combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                    profBridgeMs += profWatch.Elapsed.TotalMilliseconds - bt;
                     if (at == 0 && combat != null && enemies != null) foreach (var go in combat.Struck) enemies.Guard(go);
                     if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position)) { Fail("applying a hit to Fox: " + core.Error); return; }
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
                 if ((!pause || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
                 session.Stepped();
+                var st = profWatch.Elapsed.TotalMilliseconds;
                 sfx?.Frame(core);
+                profSfxMs += profWatch.Elapsed.TotalMilliseconds - st;
+                st = profWatch.Elapsed.TotalMilliseconds;
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
+                profBridgeMs += profWatch.Elapsed.TotalMilliseconds - st;
                 enemies?.AfterFrame(hero);
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
+            profMeleeMs += profWatch.Elapsed.TotalMilliseconds; profMeleeFrames += frames;
+            Profile();
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             WatchStuck(frames);
             if (gx != null) gx.Glow = focusing;
@@ -431,6 +440,21 @@ namespace FoxMelee {
             Log($"Fox not moving for 3 s: action {fox.Action}, airborne {fox.Airborne}, Melee frames run {stillFrames}, time scale {Time.timeScale}, " +
                 $"game state {GameManager.instance.gameState}, respawn hold {respawnHold.Armed}, focusing {focusing}, interacting {session.Interacting}, " +
                 $"stick ({rawInput.StickX}, {rawInput.StickY}), buttons {rawInput.Buttons:X4}");
+        }
+
+        // Every 5 s while Fox plays: where the time goes (frame rate, Melee's frames, decoding and drawing Melee's frame)
+        readonly System.Diagnostics.Stopwatch profWatch = new System.Diagnostics.Stopwatch();
+        double profMeleeMs, profBridgeMs, profSfxMs; int profMeleeFrames, profUnityFrames; float profClock, profWorst;
+        void Profile() {
+            profUnityFrames++;
+            profClock += Time.unscaledDeltaTime;
+            profWorst = Mathf.Max(profWorst, Time.unscaledDeltaTime);
+            if (profClock < 5f) return;
+            int n = Math.Max(1, profUnityFrames), m = Math.Max(1, profMeleeFrames);
+            string g = gx == null ? "" : $", decode {gx.DecodeMs / n:F1} ms, mesh {gx.MeshMs / n:F1} ms, uploads {gx.Uploads} ({gx.UploadBytes / 1048576.0:F1} MB, {gx.UploadMs / n:F1} ms/frame), runs {gx.Runs / n}";
+            Log($"perf: {n / profClock:F0} fps (worst frame {profWorst * 1000:F0} ms), Melee {(profMeleeMs - profBridgeMs - profSfxMs) / m:F1} ms/frame, hits {profBridgeMs / m:F1}, sound {profSfxMs / m:F1}{g}");
+            profClock = 0; profWorst = 0; profMeleeMs = 0; profBridgeMs = 0; profSfxMs = 0; profMeleeFrames = 0; profUnityFrames = 0;
+            if (gx != null) { gx.DecodeMs = gx.MeshMs = gx.UploadMs = 0; gx.Uploads = gx.Runs = 0; gx.UploadBytes = 0; }
         }
 
         // What Hollow Knight is doing with the Knight, logged when it changes (deaths, spikes, respawns, loading).
