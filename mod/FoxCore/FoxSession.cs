@@ -12,6 +12,16 @@ namespace FoxMelee {
     public sealed class FoxSession {
         string roomScene;
         bool roomReady, took, respawn;
+        int interact = -1;                      // frames since BeginInteract; -1 = not interacting
+        bool interactStarted;                   // Hollow Knight took control (a tablet, an NPC, a bench)
+
+        /// How long Hollow Knight gets to react to an interact press before Fox carries on.
+        public const int InteractWaitFrames = 10;
+
+        public bool Interacting => interact >= 0;
+
+        /// The player pressed interact: the Knight goes back to Hollow Knight, which presses "up" for him.
+        public void BeginInteract() { interact = 0; interactStarted = false; }
 
         /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death).
         public static bool HollowBusy(HeroFlags f) =>
@@ -31,6 +41,12 @@ namespace FoxMelee {
 
         public HeroOwner Owner(HeroFlags f) {
             if (f.HazardDeath || f.HazardRespawning || f.Dead) respawn = true;
+            if (interact >= 0) {
+                if (f.ControlRelinquished || !f.AcceptingInput) interactStarted = true;
+                bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= InteractWaitFrames;
+                if (!done) { interact++; return HeroOwner.Hollow; }
+                interact = -1;
+            }
             return roomReady && !HollowBusy(f) ? HeroOwner.Fox : HeroOwner.Hollow;
         }
 

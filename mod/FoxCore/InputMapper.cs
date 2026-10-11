@@ -5,6 +5,7 @@ namespace FoxMelee {
         public float LeftX, LeftY, RightX, RightY;
         public float LeftTrigger, RightTrigger;
         public bool South, East, West, North, LeftBumper, RightBumper;
+        public bool DPadUp, DPadDown, DPadLeft, DPadRight;
     }
 
     public static class GcButtons {
@@ -12,8 +13,8 @@ namespace FoxMelee {
                             A = 0x0100, B = 0x0200, X = 0x0400, Y = 0x0800, Start = 0x1000;
     }
 
-    /// A modern controller (or the keyboard mapped onto one) as GameCube PADStatus values. The D-pad and
-    /// Start stay with Hollow Knight (spec §3.2).
+    /// A modern controller (or the keyboard mapped onto one) as GameCube PADStatus values. D-pad up is Melee's
+    /// taunt; the rest of the D-pad and Start stay with Hollow Knight (spec §3.2, HkControls).
     public static class InputMapper {
         public const int StickRange = 80;
         public const int TriggerRange = 140;
@@ -29,6 +30,7 @@ namespace FoxMelee {
             if (p.West) b |= GcButtons.X;
             if (p.North) b |= GcButtons.Y;
             if (p.RightBumper) b |= GcButtons.Z;
+            if (p.DPadUp) b |= GcButtons.DUp;
             float l = p.LeftTrigger, r = p.LeftBumper ? 1f : p.RightTrigger;
             if (l >= Click) b |= GcButtons.L;
             if (r >= Click) b |= GcButtons.R;
@@ -37,6 +39,42 @@ namespace FoxMelee {
                 StickX = Axis(p.LeftX), StickY = Axis(p.LeftY), CStickX = Axis(p.RightX), CStickY = Axis(p.RightY),
                 TriggerL = Trigger(l), TriggerR = Trigger(r),
             };
+        }
+    }
+
+    /// Hollow Knight's own actions while Fox plays: D-pad left/right interact (inspect, talk, benches), D-pad down
+    /// focuses. D-pad up stays Melee's taunt.
+    public struct HkControls {
+        public bool Interact, Focus;
+        const ushort Hollow = GcButtons.DLeft | GcButtons.DRight | GcButtons.DDown;
+
+        public static HkControls FromGameCube(McInput gc) => new HkControls {
+            Interact = (gc.Buttons & (GcButtons.DLeft | GcButtons.DRight)) != 0, Focus = (gc.Buttons & GcButtons.DDown) != 0,
+        };
+
+        public static HkControls FromPad(PadState p) => new HkControls { Interact = p.DPadLeft || p.DPadRight, Focus = p.DPadDown };
+
+        /// The GameCube controller's input for Melee without the buttons Hollow Knight uses.
+        public static McInput ForMelee(McInput gc) { gc.Buttons &= unchecked((ushort)~Hollow); return gc; }
+    }
+
+    public struct FocusStep { public bool Focusing, Heal; public int Drain; }
+
+    /// Hollow Knight's Focus for Fox (spec §5.3): held while Fox can focus (grounded and still), it drains `cost`
+    /// Soul over `frames` frames, then heals a mask, and goes on while held. Letting go early loses the Soul spent.
+    public sealed class FocusRules {
+        readonly int frames, cost;
+        int frame;
+
+        public FocusRules(int frames, int cost) { this.frames = frames; this.cost = cost; }
+
+        public FocusStep Tick(bool held, bool canFocus, int soul, int health, int maxHealth) {
+            if (!held || !canFocus || health >= maxHealth || (frame == 0 && soul < cost)) { frame = 0; return default; }
+            int drain = cost * (frame + 1) / frames - cost * frame / frames;
+            frame++;
+            bool heal = frame >= frames;
+            if (heal) frame = 0;
+            return new FocusStep { Focusing = true, Drain = drain, Heal = heal };
         }
     }
 }

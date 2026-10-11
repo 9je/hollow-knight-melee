@@ -21,6 +21,7 @@ namespace FoxMelee {
             var go = new GameObject("FoxMelee");
             Object.DontDestroyOnLoad(go);
             if (Settings.GameCubeAdapter) GameCube = new GcInput(Settings.GameCubePort);
+            HkPulse.Attach();
             go.AddComponent<FoxRunner>();
         }
     }

@@ -26,6 +26,9 @@ namespace FoxMelee {
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         readonly float[] bones = new float[128 * 12];
         McFighter fox;
+        const uint ActionWait = 14;             // Melee's Wait: Fox standing
+        FocusRules focus;
+        bool focusing, interactHeld;
         const int ScanFrames = 30;              // how often new terrain (a gate closing) is looked for
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
@@ -54,8 +57,10 @@ namespace FoxMelee {
             var hero = HeroController.instance;
             var gm = GameManager.instance;
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
-                if (placeholder) placeholder.SetActive(false);
-                model?.Hide();
+                if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
+                    if (placeholder) placeholder.SetActive(false);
+                    model?.Hide();
+                }
                 combat?.ReleaseAll();
                 return;
             }
@@ -87,7 +92,14 @@ namespace FoxMelee {
                 accumulator -= Frame;
                 frames++;
                 // a GameCube controller on the adapter plays natively; otherwise the gamepad/keyboard mapping
-                core.SetInput(0, FoxMod.Instance.GameCube?.Melee() ?? InputMapper.Map(ReadPad()));
+                var gc = FoxMod.Instance.GameCube?.Melee();
+                var pad = gc == null ? ReadPad() : default;
+                var hkc = gc is McInput g ? HkControls.FromGameCube(g) : HkControls.FromPad(pad);
+                var input = gc is McInput g2 ? HkControls.ForMelee(g2) : InputMapper.Map(pad);
+                if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
+                interactHeld = hkc.Interact;
+                if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
+                core.SetInput(0, input);
                 int at = 0;
                 if (combat != null) {
                     at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
@@ -110,6 +122,28 @@ namespace FoxMelee {
             if (model == null) DrawPlaceholder(hk);
         }
 
+        // D-pad left/right: Hollow Knight gets the Knight back and presses "up" for him; FoxSession keeps him there
+        // while a tablet, NPC or bench has him, then Fox carries on from where he stands.
+        void Interact(HeroController hero) {
+            session.BeginInteract();
+            hero.RegainControl();
+            hero.AcceptInput();
+            hero.cState.onGround = true;
+            HkPulse.PressUp();
+            Log("interact");
+        }
+
+        // D-pad down: Hollow Knight's Focus while Fox stands (spec §5.3). True while focusing.
+        bool Focus(HeroController hero, bool held) {
+            var pd = PlayerData.instance;
+            bool still = fox.Airborne == 0 && (fox.Action == ActionWait || focusing);
+            var step = focus.Tick(held, still, pd.GetInt("MPCharge"), pd.GetInt("health"), pd.GetInt("maxHealth"));
+            if (step.Drain > 0) hero.TakeMP(step.Drain);
+            if (step.Heal) hero.AddHealth(1);
+            focusing = step.Focusing;
+            return focusing;
+        }
+
         bool Boot() {
             var s = FoxMod.Instance.Settings;
             string dir = FoxMod.ModDir, so = Path.Combine(dir, "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
@@ -126,6 +160,7 @@ namespace FoxMelee {
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
             if (s.FoxHits) combat = new CombatBridge();
+            focus = new FocusRules(Math.Max(1, (int)Math.Round(s.FocusSeconds * 60)), 33);
             state = State.Running;
             Log("libmelee_core running");
             return true;
@@ -290,6 +325,7 @@ namespace FoxMelee {
                 p.LeftTrigger = d.LeftTrigger.Value; p.RightTrigger = d.RightTrigger.Value;
                 p.South = d.Action1.IsPressed; p.East = d.Action2.IsPressed; p.West = d.Action3.IsPressed; p.North = d.Action4.IsPressed;
                 p.LeftBumper = d.LeftBumper.IsPressed; p.RightBumper = d.RightBumper.IsPressed;
+                p.DPadUp = d.DPadUp.IsPressed; p.DPadDown = d.DPadDown.IsPressed; p.DPadLeft = d.DPadLeft.IsPressed; p.DPadRight = d.DPadRight.IsPressed;
             }
             if (FoxMod.Instance.Settings.KeyboardFallback) Keyboard(ref p);
             return p;
@@ -309,6 +345,9 @@ namespace FoxMelee {
             p.West |= Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.L);
             p.LeftBumper |= Input.GetKey(KeyCode.I);
             p.RightBumper |= Input.GetKey(KeyCode.U);
+            p.DPadUp |= Input.GetKey(KeyCode.T);       // taunt
+            p.DPadLeft |= Input.GetKey(KeyCode.E);     // interact
+            p.DPadDown |= Input.GetKey(KeyCode.F);     // focus
         }
 
         void DrawPlaceholder(V2 feet) {

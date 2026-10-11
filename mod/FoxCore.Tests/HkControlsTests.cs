@@ -1,0 +1,88 @@
+using Xunit;
+
+namespace FoxMelee.Tests {
+    public class HkControlsTests {
+        [Fact]
+        public void DPadUpTauntsInMeleeTheRestIsHollowKnights() {
+            var gc = new McInput { Buttons = (ushort)(GcButtons.DUp | GcButtons.DLeft | GcButtons.DDown | GcButtons.A) };
+            var hk = HkControls.FromGameCube(gc);
+            Assert.True(hk.Interact); Assert.True(hk.Focus);
+            Assert.Equal(GcButtons.DUp | GcButtons.A, HkControls.ForMelee(gc).Buttons);   // D-pad up: taunt
+            Assert.True(HkControls.FromGameCube(new McInput { Buttons = GcButtons.DRight }).Interact);
+            Assert.False(HkControls.FromGameCube(new McInput { Buttons = GcButtons.DUp }).Interact);
+            // a modern pad: same D-pad split
+            var pad = new PadState { DPadUp = true, DPadRight = true };
+            Assert.Equal(GcButtons.DUp, InputMapper.Map(pad).Buttons);
+            Assert.True(HkControls.FromPad(pad).Interact);
+            Assert.True(HkControls.FromPad(new PadState { DPadDown = true }).Focus);
+        }
+
+        [Fact]
+        public void FocusDrainsSoulOverTheFocusTimeThenHealsAMask() {
+            var f = new FocusRules(frames: 10, cost: 33);
+            int drained = 0, heals = 0;
+            for (int i = 0; i < 10; i++) {
+                var s = f.Tick(held: true, canFocus: true, soul: 99 - drained, health: 3, maxHealth: 5);
+                Assert.True(s.Focusing);
+                drained += s.Drain; if (s.Heal) heals++;
+            }
+            Assert.Equal(33, drained);
+            Assert.Equal(1, heals);
+            // keeps going while held: a second mask
+            for (int i = 0; i < 10; i++) { var s = f.Tick(true, true, 99 - drained, 4, 5); drained += s.Drain; if (s.Heal) heals++; }
+            Assert.Equal(66, drained); Assert.Equal(2, heals);
+        }
+
+        [Fact]
+        public void FocusNeedsSoulAMissingMaskAndAStillFox() {
+            var f = new FocusRules(10, 33);
+            Assert.False(f.Tick(true, true, soul: 32, health: 3, maxHealth: 5).Focusing);
+            Assert.False(f.Tick(true, true, 99, 5, 5).Focusing);                // full health
+            Assert.False(f.Tick(true, canFocus: false, 99, 3, 5).Focusing);     // airborne or busy
+            Assert.False(f.Tick(false, true, 99, 3, 5).Focusing);
+        }
+
+        [Fact]
+        public void LettingGoEarlyLosesTheSoulSpent() {
+            var f = new FocusRules(10, 33);
+            int drained = 0;
+            for (int i = 0; i < 5; i++) drained += f.Tick(true, true, 99, 3, 5).Drain;
+            var s = f.Tick(false, true, 99, 3, 5);
+            Assert.False(s.Focusing); Assert.False(s.Heal);
+            Assert.InRange(drained, 15, 18);
+            // starting again starts over
+            int again = 0; bool healed = false;
+            for (int i = 0; i < 10; i++) { var t = f.Tick(true, true, 99, 3, 5); again += t.Drain; healed |= t.Heal; }
+            Assert.Equal(33, again); Assert.True(healed);
+        }
+    }
+
+    public class FoxSessionInteractTests {
+        static HeroFlags Playing => new HeroFlags { WaitingToTransition = true, AcceptingInput = true };
+
+        [Fact]
+        public void AnInteractionKeepsTheKnightWithHollowKnightUntilItHandsControlBack() {
+            var s = new FoxSession();
+            s.RoomConverted("A", true);
+            Assert.Equal(HeroOwner.Fox, s.Owner(Playing));
+            s.BeginInteract();
+            Assert.True(s.Interacting);
+            Assert.Equal(HeroOwner.Hollow, s.Owner(Playing));                // HK gets a chance to react
+            var reading = Playing; reading.ControlRelinquished = true; reading.AcceptingInput = false;
+            for (int i = 0; i < 100; i++) Assert.Equal(HeroOwner.Hollow, s.Owner(reading));   // a tablet, a bench...
+            Assert.Equal(HeroOwner.Fox, s.Owner(Playing));                   // control back: Fox again
+            Assert.False(s.Interacting);
+            Assert.False(s.TakeRespawns());
+        }
+
+        [Fact]
+        public void NothingToInteractWithGivesFoxBackQuickly() {
+            var s = new FoxSession();
+            s.RoomConverted("A", true);
+            s.BeginInteract();
+            int frames = 0;
+            while (s.Owner(Playing) == HeroOwner.Hollow) { frames++; Assert.True(frames < 30); }
+            Assert.Equal(FoxSession.InteractWaitFrames, frames);
+        }
+    }
+}
