@@ -28,6 +28,8 @@ namespace FoxMelee {
         /// While playing, D-pad left/right are Fox's interact: Hollow Knight must not read them as walking (an interact
         /// press hands it the Knight for a few frames). Menus and the pause screen keep them.
         public static bool HideDPadSides;
+        public static bool InventoryOpen;       // FoxRunner: Hollow Knight's inventory is open (D-pad right moves right)
+        public static bool QuickMapHeld;        // D-pad right held: the quick map (Fox stands still)
 
         /// Fox's input for the next Melee frame, or null when no GameCube controller is plugged in.
         public McInput? Melee() { Poll(); return pads.Melee(port); }
@@ -36,6 +38,7 @@ namespace FoxMelee {
 
         internal sealed class GcDevice : InputDevice {
             readonly GcInput gc;
+            readonly DPadRight dpadRight = new DPadRight();
 
             public GcDevice(GcInput gc) : base("GameCube Controller (adapter)") {
                 this.gc = gc;
@@ -46,7 +49,7 @@ namespace FoxMelee {
                     InputControlType.RightStickLeft, InputControlType.RightStickRight, InputControlType.RightStickUp, InputControlType.RightStickDown,
                     InputControlType.DPadUp, InputControlType.DPadDown, InputControlType.DPadLeft, InputControlType.DPadRight,
                     InputControlType.Action1, InputControlType.Action2, InputControlType.Action3, InputControlType.Action4,
-                    InputControlType.LeftTrigger, InputControlType.RightTrigger, InputControlType.RightBumper,
+                    InputControlType.LeftTrigger, InputControlType.RightTrigger, InputControlType.RightBumper, InputControlType.LeftBumper,
                     InputControlType.Start, InputControlType.Command, InputControlType.View, InputControlType.Back,
                 }) AddControl(t, t.ToString());
             }
@@ -59,20 +62,25 @@ namespace FoxMelee {
                 UpdateRightStickWithValue(new Vector2(v.CStickX / 127f, v.CStickY / 127f), tick, dt);
                 UpdateWithState(InputControlType.DPadUp, B(GcButtons.DUp), tick, dt);
                 UpdateWithState(InputControlType.DPadDown, B(GcButtons.DDown), tick, dt);
+                var right = dpadRight.Update(B(GcButtons.DRight), dt, InventoryOpen);
+                QuickMapHeld = right.QuickMap;
                 UpdateWithState(InputControlType.DPadLeft, B(GcButtons.DLeft) && !HideDPadSides, tick, dt);
-                UpdateWithState(InputControlType.DPadRight, B(GcButtons.DRight) && !HideDPadSides, tick, dt);
+                UpdateWithState(InputControlType.DPadRight, right.Right || (B(GcButtons.DRight) && !HideDPadSides && !InventoryOpen), tick, dt);
                 UpdateWithState(InputControlType.Action1, B(GcButtons.A), tick, dt);     // A: confirm / jump
                 UpdateWithState(InputControlType.Action2, B(GcButtons.B), tick, dt);     // B: back
                 UpdateWithState(InputControlType.Action3, B(GcButtons.X), tick, dt);
                 UpdateWithState(InputControlType.Action4, B(GcButtons.Y), tick, dt);
-                UpdateWithValue(InputControlType.LeftTrigger, B(GcButtons.L) ? 1f : v.TriggerL / 255f, tick, dt);
-                UpdateWithValue(InputControlType.RightTrigger, B(GcButtons.R) ? 1f : v.TriggerR / 255f, tick, dt);
+                // only a full press: a trigger at rest reads a little above 0, and Hollow Knight turns the inventory's
+                // pages (paneLeft / paneRight) on any trigger value
+                UpdateWithState(InputControlType.LeftTrigger, B(GcButtons.L), tick, dt);
+                UpdateWithState(InputControlType.RightTrigger, B(GcButtons.R), tick, dt);
                 UpdateWithState(InputControlType.RightBumper, B(GcButtons.Z), tick, dt);
                 UpdateWithState(InputControlType.Start, B(GcButtons.Start), tick, dt);
                 UpdateWithState(InputControlType.Command, B(GcButtons.Start), tick, dt);
-                // no Select on a GameCube pad: D-pad right opens the inventory (charms at a bench, map, journal)
-                UpdateWithState(InputControlType.View, B(GcButtons.DRight), tick, dt);
-                UpdateWithState(InputControlType.Back, B(GcButtons.DRight), tick, dt);
+                // no Select or LB on a GameCube pad: D-pad right tapped opens the inventory, held shows the quick map
+                UpdateWithState(InputControlType.View, right.Inventory, tick, dt);
+                UpdateWithState(InputControlType.Back, right.Inventory, tick, dt);
+                UpdateWithState(InputControlType.LeftBumper, right.QuickMap, tick, dt);
             }
         }
     }

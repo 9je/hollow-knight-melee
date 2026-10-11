@@ -84,7 +84,9 @@ namespace FoxMelee {
             if (state == State.Failed) return;
             var hero = HeroController.instance;
             var gm = GameManager.instance;
-            GcInput.HideDPadSides = hero != null && gm != null && gm.IsGameplayScene() && gm.gameState == GlobalEnums.GameState.PLAYING;
+            var invState = gm != null && gm.inventoryFSM != null ? gm.inventoryFSM.ActiveStateName : null;
+            GcInput.InventoryOpen = invState != null && invState != "Closed" && !invState.StartsWith("Init");
+            GcInput.HideDPadSides = hero != null && gm != null && gm.IsGameplayScene() && gm.gameState == GlobalEnums.GameState.PLAYING && !GcInput.InventoryOpen;
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();
@@ -137,10 +139,12 @@ namespace FoxMelee {
                 var gc = FoxMod.Instance.GameCube?.Melee();
                 var pad = gc == null ? ReadPad() : default;
                 var hkc = gc is McInput g ? HkControls.FromGameCube(g) : HkControls.FromPad(pad);
+                if (GcInput.InventoryOpen) hkc = default;   // the D-pad navigates the inventory: no interact or Focus
                 var input = gc is McInput g2 ? HkControls.ForMelee(g2) : InputMapper.Map(pad);
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
                 if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
+                if (GcInput.InventoryOpen || GcInput.QuickMapHeld) input = new McInput();   // the controller is Hollow Knight's menu's
                 rawInput = input;
                 input = respawnHold.Filter(input);
                 core.SetInput(0, input);

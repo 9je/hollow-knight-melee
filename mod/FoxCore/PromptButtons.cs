@@ -5,7 +5,7 @@ namespace FoxMelee {
         public static string ForGameCube(string action) {
             switch (action) {
                 case "UP": return "dpadLeft";            // interact: D-pad left (HkControls)
-                case "INVENTORY": return "dpadRight";
+                case "INVENTORY": case "QUICK_MAP": return "dpadRight";   // tap / hold (DPadRight)
                 case "CAST": case "QUICK_CAST": return "dpadDown";   // Focus
                 case "ATTACK": return "a";
                 case "JUMP": return "x";

@@ -84,3 +84,24 @@ namespace FoxMelee {
         }
     }
 }
+
+namespace FoxMelee {
+    /// The GameCube D-pad right, which stands in for the buttons the pad lacks: a tap opens the inventory (Select),
+    /// a hold shows the quick map while held (LB); in the inventory it moves right.
+    public sealed class DPadRight {
+        public const float HoldSeconds = 0.3f;
+        public struct State { public bool Inventory, QuickMap, Right; }
+        float held = -1f;                       // seconds held; -1: up
+
+        public State Update(bool down, float dt, bool inInventory) {
+            if (inInventory) { held = -1f; return new State { Right = down }; }
+            if (down) {
+                held = held < 0 ? dt : held + dt;
+                return new State { QuickMap = held >= HoldSeconds };
+            }
+            bool tap = held >= 0 && held < HoldSeconds;
+            held = -1f;
+            return new State { Inventory = tap };
+        }
+    }
+}

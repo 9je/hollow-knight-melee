@@ -9,7 +9,8 @@ namespace FoxMelee.Tests {
         [InlineData("ATTACK", "a")]             // Fox's attacks and jump, as Melee has them
         [InlineData("JUMP", "x")]
         [InlineData("INVENTORY", "dpadRight")]
-        [InlineData("QUICK_MAP", null)]         // Hollow Knight's own buttons stay as they are
+        [InlineData("QUICK_MAP", "dpadRight")]  // held
+        [InlineData("DREAM_NAIL", null)]        // Hollow Knight's own buttons stay as they are
         [InlineData("MENU_SUBMIT", null)]
         public void GameCubePromptsShowFoxsControls(string action, string button) =>
             Assert.Equal(button, PromptButtons.ForGameCube(action));

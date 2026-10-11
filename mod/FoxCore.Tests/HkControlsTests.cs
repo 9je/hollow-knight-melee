@@ -87,3 +87,33 @@ namespace FoxMelee.Tests {
         }
     }
 }
+
+namespace FoxMelee.Tests {
+    public class DPadRightTests {
+        const float F = 1f / 60f;
+
+        [Fact]
+        public void ATapOpensTheInventoryAHoldShowsTheQuickMap() {
+            var d = new DPadRight();
+            var s = d.Update(true, F, false);
+            Assert.False(s.Inventory || s.QuickMap);                 // undecided while it is short
+            s = d.Update(false, F, false);
+            Assert.True(s.Inventory);                                 // released quickly: a tap
+            Assert.False(d.Update(false, F, false).Inventory);        // one press, not held
+            for (int i = 0; i < 30; i++) s = d.Update(true, F, false);
+            Assert.True(s.QuickMap && !s.Inventory);                  // held: the quick map, while held
+            s = d.Update(false, F, false);
+            Assert.False(s.QuickMap || s.Inventory);                  // let go after a hold: nothing opens
+        }
+
+        [Fact]
+        public void InTheInventoryItMovesRight() {
+            var d = new DPadRight();
+            var s = d.Update(true, F, true);
+            Assert.True(s.Right && !s.Inventory && !s.QuickMap);
+            for (int i = 0; i < 30; i++) s = d.Update(true, F, true);
+            Assert.True(s.Right && !s.QuickMap);
+            Assert.False(d.Update(false, F, true).Inventory);
+        }
+    }
+}
