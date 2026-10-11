@@ -74,6 +74,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ShieldFn(int port, int follower, out McShield o);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ItemsFn([Out] McItem[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ReportFn(int port, int follower, uint group, float damage);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SfxFn([Out] McSfx[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
 
         const int StartSize = 0x138;
@@ -81,7 +82,7 @@ namespace FoxMelee {
         readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
-        readonly ShieldFn shield; readonly ItemsFn items;
+        readonly ShieldFn shield; readonly ItemsFn items; readonly SfxFn sfx;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
 
@@ -107,6 +108,7 @@ namespace FoxMelee {
             report = NativeLib.Symbol<ReportFn>(lib, "mc_report_hit");
             shield = NativeLib.Symbol<ShieldFn>(lib, "mc_read_shield");
             items = NativeLib.Symbol<ItemsFn>(lib, "mc_read_items");
+            sfx = NativeLib.Symbol<SfxFn>(lib, "mc_read_sfx");
         }
 
         public static MeleeCore Load(string libraryPath) {
@@ -152,6 +154,8 @@ namespace FoxMelee {
         public bool ReadShield(out McShield s) => Ok(shield(0, 0, out s));
         /// Melee's items (lasers...); returns the count, -1 on error.
         public int ReadItems(McItem[] o) => items(o, o.Length);
+        /// Melee's sound effect calls since the last read, oldest first (drains them); count, -1 on error.
+        public int ReadSfx(McSfx[] o) => sfx(o, o.Length);
 
         public bool BuildCollision(IReadOnlyList<RoomShape> shapes, out IntPtr collision) {
             var handles = new List<GCHandle>();
