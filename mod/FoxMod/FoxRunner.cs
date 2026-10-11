@@ -22,6 +22,8 @@ namespace FoxMelee {
         bool needPlace = true;                  // Fox starts where the Knight is once Fox drives again
         float accumulator;
         GameObject placeholder;
+        FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
+        readonly float[] bones = new float[128 * 12];
         McFighter fox;
 
         static void Log(string m) => FoxMod.Instance.Log(m);
@@ -31,6 +33,7 @@ namespace FoxMelee {
             if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
             holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
+            model?.Hide();
         }
 
         static HeroFlags Flags(HeroController h) => new HeroFlags {
@@ -58,6 +61,7 @@ namespace FoxMelee {
                 needPlace = true;
                 accumulator = 0;
                 if (placeholder) placeholder.SetActive(false);
+                model?.Hide();
                 return;
             }
             if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
@@ -76,7 +80,8 @@ namespace FoxMelee {
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
-            DrawPlaceholder(hk);
+            if (model != null) model.Draw(bones, core.ReadBones(0, bones), room);
+            else DrawPlaceholder(hk);
         }
 
         bool Boot() {
@@ -89,6 +94,11 @@ namespace FoxMelee {
             core.SetInput(0, new McInput());
             for (int p = 1; p < 4; p++) core.SetInput(p, null);
             for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
+            if (s.ShowModel) {
+                var path = Path.Combine(dir, "fox.model");
+                try { model = FoxRenderer.Create(FoxModel.Load(path)); Log("drawing Fox's model"); }
+                catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
+            }
             state = State.Running;
             Log("libmelee_core running");
             return true;

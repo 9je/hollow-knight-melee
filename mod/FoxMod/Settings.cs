@@ -5,6 +5,7 @@ namespace FoxMelee {
         public double WorldScale = 6.0;             // Melee units per Hollow Knight unit (calibrate: Fox's jump ≈ the Knight's)
         public double CameraMargin = 40.0;          // Melee units beyond the room's terrain (Melee's camera box)
         public bool ShowPlaceholder = true;
+        public bool ShowModel = true;               // Fox's Melee model (fox.model, extracted at install); placeholder if missing
         public bool KeyboardFallback = true;
     }
 }

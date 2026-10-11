@@ -21,6 +21,12 @@ out="$repo/mod/FoxMod/bin/Release/net472"
 cp -f "$out/FoxMod.dll" "$out/FoxCore.dll" "$out/Clipper2Lib.dll" "$dest/"
 cp -f "$repo/core/build/libmelee_core.so" "$repo/core/build/gen-core/mem1.bin" "$dest/"
 iso="$(python3 -c "import tomllib;print(tomllib.load(open('$repo/dev.toml','rb'))['iso'])" 2>/dev/null || true)"
+[ -x "$repo/tools/.venv/bin/ssbmhk-extract-fox" ] || (cd "$repo/tools" && .venv/bin/pip install -q -e .)
+if [ -n "$iso" ] && [ -f "$iso" ]; then
+  "$repo/tools/.venv/bin/ssbmhk-extract-fox" "$iso" --out "$dest" || echo "fox.model not extracted: the mod draws a placeholder"
+else
+  echo "Melee ISO not found (dev.toml): fox.model not extracted, the mod draws a placeholder"
+fi
 settings="$saves/FoxMelee.GlobalSettings.json"
 if [ -n "$iso" ] && [ ! -f "$settings" ]; then
   mkdir -p "$saves"

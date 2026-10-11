@@ -16,7 +16,7 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 
 ## Checklist (King's Pass)
 
-1. Load a save (or a new game). After 2-3 s the Knight disappears and an orange box (Fox) appears. Check `ModLog.txt` for `libmelee_core running` and `<scene>: N shapes from M colliders`.
+1. Load a save (or a new game). After 2-3 s the Knight disappears and Fox (his Melee model, posed by Melee's own animation) appears. If `ModLog.txt` says `fox.model not used`, an orange box stands in. Check `ModLog.txt` for `libmelee_core running` and `<scene>: N shapes from M colliders`.
 2. Stand, walk, dash, run, turn around: the box moves like Fox and the camera follows.
 3. Jump, double jump, fast fall. Compare Fox's full jump with the Knight's (WorldScale, default 6.0). Write down what feels right. If Fox's jump is too small for the rooms, lower WorldScale (the world gets smaller in Melee units); if he clears everything too easily, raise it.
 4. Wavedash (jump, air dodge diagonally into the floor), waveland onto a ledge-top.
