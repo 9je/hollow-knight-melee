@@ -9,6 +9,7 @@ namespace FoxMelee {
     public class FoxMod : Mod, IGlobalSettings<Settings> {
         public static FoxMod Instance;
         public Settings Settings = new Settings();
+        internal GcInput GameCube;                  // null when the GameCube adapter is off in settings
         public FoxMod() : base("FoxMelee") { Instance = this; }
         public override string GetVersion() => "0.1.0-checkpoint-a";
         public void OnLoadGlobal(Settings s) => Settings = s;
@@ -19,6 +20,7 @@ namespace FoxMelee {
         public override void Initialize() {
             var go = new GameObject("FoxMelee");
             Object.DontDestroyOnLoad(go);
+            if (Settings.GameCubeAdapter) GameCube = new GcInput(Settings.GameCubePort);
             go.AddComponent<FoxRunner>();
         }
     }

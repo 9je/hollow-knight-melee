@@ -81,7 +81,8 @@ namespace FoxMelee {
             while (accumulator >= Frame && frames < 4) {
                 accumulator -= Frame;
                 frames++;
-                core.SetInput(0, InputMapper.Map(ReadPad()));
+                // a GameCube controller on the adapter plays natively; otherwise the gamepad/keyboard mapping
+                core.SetInput(0, FoxMod.Instance.GameCube?.Melee() ?? InputMapper.Map(ReadPad()));
                 int at = 0;
                 if (combat != null) {
                     at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame

@@ -11,6 +11,11 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 
 ## Controls
 
+- **GameCube controller (Wii U / Mayflash adapter, in Wii U mode): native.** The mod reads the adapter over USB the way
+  Slippi Dolphin does, so Melee gets your controller's values unmapped. Close Slippi Dolphin first, since only one
+  program can hold the adapter. Start opens Hollow Knight's pause menu; in menus A confirms, B goes back and the stick
+  or D-pad moves. `ModLog.txt` shows "GameCube adapter: reading" when it works. Settings: `GameCubePort` (0 = first
+  controller found, 1-4 = that port), `GameCubeAdapter: false` to turn it off.
 - Gamepad (Xbox layout): left stick = control stick, right stick = C-stick, A = A, B = B, X/Y = jump, RB = Z, LT/RT = analog L/R (click past 90%), LB = full shield. The D-pad and Start stay Hollow Knight's.
 - Keyboard: WASD stick (Left Shift = half tilt), arrows = C-stick, J = A, K = B, Space or L = jump, I = shield, U = Z.
 
