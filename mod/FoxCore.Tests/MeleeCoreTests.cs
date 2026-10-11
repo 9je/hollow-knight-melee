@@ -186,5 +186,29 @@ namespace FoxMelee.Tests {
             Assert.True(t.Gen > 0);
             Assert.False(core.GxTexture(123456, out _));
         }
+
+        [Fact]
+        public void FoxsLaserHasAHitboxAndMeleesHitlagFormulaIsExposed() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.Equal(4, core.HitlagFrames(3));
+            Assert.Equal(20, core.HitlagFrames(500));
+            core.SetInput(0, new McInput { Buttons = 0x0200 });
+            Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput());
+            var boxes = new McHitbox[16];
+            bool laser = false;
+            for (int i = 0; i < 40 && !laser; i++) {
+                Assert.True(core.Step(), core.Error);
+                int n = core.ReadHitboxes(boxes);
+                for (int k = 0; k < n; k++) laser |= HitRules.IsItem(boxes[k]) && HitRules.HurtsEnemies(boxes[k]);
+            }
+            Assert.True(laser);
+        }
     }
 }

@@ -68,6 +68,9 @@ int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max);
  * lbColl_80008688 does) and raises dmg.x1914, so Melee's next hit-processing phase gives Fox its own attacker
  * hitlag. Not used by replays. 0 ok, 1 no such fighter or no active hitbox in the group, -1 error. */
 int mc_report_hit(int port, int follower, uint32_t group, float damage);
+/* Items the fighter owns (his lasers) are read with his hitboxes: slot 4..7, group = the item's GObj (>= 0x80000000).
+ * Reporting such a hit ends the item as Melee ends a laser on a wall (life timer 1) and gives no hitlag. */
+int mc_hitlag_frames(int damage);   /* Melee's hitlag for a hit of `damage` (ftCommon_CalcHitlag, capped); -1 error */
 /* Fox's shield bubble, read-only: Melee draws it as an effect on the fighter's shield joint, which it scales by the
  * shield's size (ftCo_80091D58). hard: Melee's lightshield_amount, 0 lightest .. 1 a full press (opaque). */
 typedef struct { uint32_t active; float x, y, radius, hard; } McShield;

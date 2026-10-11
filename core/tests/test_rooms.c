@@ -485,6 +485,40 @@ static void test_sfx(void) {
   CHECK(mc_read_sfx(ev, 64) == -1);
 }
 
+/* Fox's lasers: their hitboxes are read with his (an item's group is the item); a reported hit ends the laser the way
+ * Melee ends one that hits a wall (life timer to 1), and gives Fox no hitlag. mc_hitlag_frames: Melee's formula. */
+static void test_laser_hits(void) {
+  McHitbox h[16]; McItem it[16];
+  CHECK(mc_hitlag_frames(4) == -1);                        /* no machine */
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_hitlag_frames(4) == 4 && mc_hitlag_frames(3) == 4 && mc_hitlag_frames(0) == 3 && mc_hitlag_frames(30) == 13);
+  CHECK(mc_hitlag_frames(200) == 20);                      /* Melee's cap */
+  McInput b = {0}; b.buttons = 0x0200;
+  steps(1, &b);
+  int laser = -1, n = 0;
+  for (int i = 0; i < 40 && laser < 0; i++) {
+    steps(1, NULL);
+    n = mc_read_hitboxes(0, 0, h, 16);
+    for (int k = 0; k < n; k++) if (h[k].group >= 0x80000000u) laser = k;
+  }
+  CHECK(laser >= 0 && h[laser].damage > 0 && h[laser].fresh && h[laser].slot >= 4);
+  int ni = mc_read_items(it, 16), seen = 0;
+  for (int k = 0; k < ni; k++) seen |= it[k].kind == 54 && fabsf(it[k].x - h[laser].x) < 15;
+  CHECK(seen);                                             /* the hitbox is on the laser */
+  CHECK(mc_report_hit(0, 0, h[laser].group, h[laser].damage) == 0);
+  n = mc_read_hitboxes(0, 0, h, 16);
+  int fresh = 1;
+  for (int k = 0; k < n; k++) if (h[k].group >= 0x80000000u) fresh = h[k].fresh;
+  CHECK(!fresh);
+  steps(1, NULL);
+  CHECK(hitlag() == 0);                                    /* lasers give Fox no hitlag */
+  steps(2, NULL);
+  ni = mc_read_items(it, 16);
+  for (int k = 0; k < ni; k++) CHECK(it[k].kind != 54);   /* the laser is gone */
+  CHECK(mc_report_hit(0, 0, 0x80000000u, 3) == 1);        /* not an item of Fox's */
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -500,6 +534,7 @@ int main(int argc, char **argv) {
   test_gx_capture();
   test_gx_decode();
   test_sfx();
+  test_laser_hits();
   puts("rooms tests passed");
   return 0;
 }

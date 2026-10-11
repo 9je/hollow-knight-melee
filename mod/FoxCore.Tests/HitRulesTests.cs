@@ -84,5 +84,11 @@ namespace FoxMelee.Tests {
             };
             Assert.Equal(new[] { (0u, 6f), (2u, 3f) }, HitTracker.Reports(hits).OrderBy(r => r.group));
         }
+
+        [Fact]
+        public void AnItemsHitboxesAreTheirOwnGroup() {
+            Assert.True(HitRules.IsItem(new McHitbox { Group = 0x80123450, Slot = 4 }));
+            Assert.False(HitRules.IsItem(new McHitbox { Group = 2, Slot = 1 }));
+        }
     }
 }

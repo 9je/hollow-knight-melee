@@ -51,7 +51,9 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 
 12. Sounds: Fox's Melee sound effects (laser, jumps, attacks, landing, shine...) play from your ISO (`melee.sfx`, extracted by `install.sh`; `ModLog.txt` says `Melee sounds: N sounds`, or why Fox is silent). Volume: `SfxVolume` (0-1, default 0.8, also follows Hollow Knight's sound volume); `MeleeSfx: false` turns them off. The announcer and other characters' banks are not included.
 
-Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
+Lasers hit enemies too (3 damage with the old nail, Melee's 4-frame hitlag on the enemy, none on Fox) and vanish on hit, as in Melee.
+
+Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks.
 To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 ## What to send back

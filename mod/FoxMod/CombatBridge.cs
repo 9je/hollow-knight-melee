@@ -21,7 +21,8 @@ namespace FoxMelee {
         readonly Collider2D[] found = new Collider2D[64];
         readonly List<object> targets = new List<object>();
         readonly List<HitEvent> real = new List<HitEvent>();               // hits on live enemies: Melee hears of these
-        readonly List<(GameObject go, int dir)> landed = new List<(GameObject, int)>();
+        readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
+        MeleeCore core;
         readonly HitlagTimers hitlag = new HitlagTimers();
         readonly Dictionary<object, EnemyFreeze> frozen = new Dictionary<object, EnemyFreeze>();
         readonly GameObject strike;            // each hit's Source: Hollow Knight draws nail effects between it and the target
@@ -64,6 +65,7 @@ namespace FoxMelee {
             var hits = tracker.Frame(hurting, Overlaps);
             if (hits.Count == 0) return true;
             int nail = PlayerData.instance.GetInt("nailDamage");
+            this.core = core;
             real.Clear();
             foreach (var h in hits) Land(h, nail);
             foreach (var (group, damage) in HitTracker.Reports(real)) core.ReportHit(group, damage);   // 1 = it just ended: harmless
@@ -76,9 +78,9 @@ namespace FoxMelee {
             foreach (var k in hitlag.Tick()) Thaw(k);
             if (landed.Count == 0) return true;
             if (!core.ReadFighter(0, out var fox)) return false;
-            foreach (var (go, dir) in landed) {
+            foreach (var (go, dir, frames) in landed) {
                 if (go == null) continue;
-                if (hitlag.Freeze(go, (int)fox.Hitlag)) frozen[go] = new EnemyFreeze(go, dir);
+                if (hitlag.Freeze(go, frames >= 0 ? frames : (int)fox.Hitlag)) frozen[go] = new EnemyFreeze(go, dir);
                 else if (frozen.TryGetValue(go, out var f)) f.Rehit(dir);
             }
             landed.Clear();
@@ -153,7 +155,9 @@ namespace FoxMelee {
             var hm = target.GetComponentInParent<HealthManager>();
             bool enemy = hm != null && !hm.GetIsDead();   // grass, corpses and scenery: hit, but no Melee hitlag
             if (enemy && Evasion != null) Evasion.SetValue(hm, 0f);
-            float direction = HitRules.Direction(h.Box.Angle, target.transform.position.x <= foxX);
+            // away from the attacker (ftColl_8007A06C): Fox, or the laser itself
+            float fromX = HitRules.IsItem(h.Box) ? Hk(h.Box.X, h.Box.Y).x : foxX;
+            float direction = HitRules.Direction(h.Box.Angle, target.transform.position.x <= fromX);
             HitTaker.Hit(target.gameObject, new HitInstance {
                 Source = strike,
                 AttackType = AttackTypes.Nail,    // Soul and nail effects, as the nail gives
@@ -165,8 +169,11 @@ namespace FoxMelee {
             if (!enemy) return;
             real.Add(h);
             int dir = DirectionUtils.GetCardinalDirection(direction);
+            // a laser gives Fox no hitlag, so the victim's comes from Melee's formula for the laser's damage
+            int damage = h.Box.Damage > 0 && (int)h.Box.Damage == 0 ? 1 : (int)h.Box.Damage;
+            int frames = HitRules.IsItem(h.Box) ? core.HitlagFrames(damage) : -1;
             int at = landed.FindIndex(l => l.go == hm.gameObject);
-            if (at < 0) landed.Add((hm.gameObject, dir)); else landed[at] = (hm.gameObject, dir);
+            if (at < 0) landed.Add((hm.gameObject, dir, frames)); else landed[at] = (hm.gameObject, dir, frames);
         }
 
         Vector2 Hk(float x, float y) { var v = room.ToHk(new V2(x, y)); return new Vector2((float)v.X, (float)v.Y); }

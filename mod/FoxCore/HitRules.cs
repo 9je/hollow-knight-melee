@@ -14,6 +14,9 @@ namespace FoxMelee {
         public static bool HurtsEnemies(McHitbox b) =>
             b.Damage > 0 && b.Element != Catch && b.Element != Inert && (b.Flags & HitsFighters) != 0;
 
+        /// A hitbox on one of Fox's items (a laser): its group is the item (core mc_read_hitboxes).
+        public static bool IsItem(McHitbox b) => b.Group >= 0x80000000u;
+
         /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.
         public static int HkDamage(float meleeDamage, int nailDamage) =>
             meleeDamage <= 0 ? 0 : Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0, MidpointRounding.AwayFromZero));

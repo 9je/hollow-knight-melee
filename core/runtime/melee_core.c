@@ -195,6 +195,7 @@ void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
 }
 
 static float f32at(Cpu *c, uint32_t ea) { uint32_t v = ld32(c, ea); float f; memcpy(&f, &v, 4); return f; }
+static void stf32(Cpu *c, uint32_t ea, float f) { uint32_t v; memcpy(&v, &f, 4); st32(c, ea, v); }
 /* Fox's (any fighter's) joint world matrices, as Melee's render pass leaves them every frame. */
 static int bones_walk(Cpu *c, uint32_t j, float (*out)[12], int max, int n, int depth) {
   for (; j && n < max && depth < 64; j = ld32(c, j + 0x08)) {
@@ -281,6 +282,25 @@ static int victim_recorded(Cpu *c, uint32_t hit) {
   return 0;
 }
 
+/* Melee's items owned by a fighter (its lasers): Item+0x518 owner, hitboxes ItemHitbox[4] at +0x5D4 (0x13C each) */
+#define ADDR_PLINK_HEADS_ 0x804D782Cu
+#define ITEM_OWNER 0x518u
+#define ITEM_HITBOXES 0x5D4u
+#define ITEM_HITBOX_SIZE 0x13Cu
+#define ITEM_LIFE 0xD44u
+static uint32_t owned_item(Cpu *c, uint32_t gobj, uint32_t owner) {   /* the Item if `gobj` is an item of `owner`'s */
+  uint32_t heads = ld32(c, ADDR_PLINK_HEADS_);
+  if (!in_mem1(heads, 4 * 10)) return 0;
+  for (uint32_t g = ld32(c, heads + 4 * 9), guard = 0; g && guard < 4096; g = ld32(c, g + 8), guard++) {
+    if (!in_mem1(g, 0x30)) return 0;
+    uint32_t it = ld32(c, g + 0x2C);
+    if ((gobj == 0 || g == gobj) && in_mem1(it, ITEM_HITBOXES + 4 * ITEM_HITBOX_SIZE) && ld32(c, it + ITEM_OWNER) == owner) return it;
+  }
+  return 0;
+}
+
+static void read_capsule(Cpu *c, uint32_t h, uint32_t slot, uint32_t group, McHitbox *o);
+
 int mc_read_hitboxes(int port, int follower, McHitbox out[], int max) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;
@@ -290,8 +310,28 @@ int mc_read_hitboxes(int port, int follower, McHitbox out[], int max) {
   for (uint32_t s = 0; fp && s < 4 && n < max; s++) {
     uint32_t h = fp + 0x914 + 0x138 * s;
     if (ld32(c, h) == 0) continue;                      /* HitCapsule_Disabled */
-    McHitbox *o = &out[n++];
-    o->slot = s; o->group = ld32(c, h + 4);
+    read_capsule(c, h, s, ld32(c, h + 4), &out[n++]);
+  }
+  /* the fighter's items (lasers): an item's hitboxes share one group, the item's GObj address (>= 0x80000000) */
+  uint32_t gobj = fp ? ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u)) : 0;
+  uint32_t heads = ld32(c, ADDR_PLINK_HEADS_);
+  if (gobj && in_mem1(heads, 4 * 10))
+    for (uint32_t g = ld32(c, heads + 4 * 9), guard = 0; g && n < max && guard < 4096; g = ld32(c, g + 8), guard++) {
+      if (!in_mem1(g, 0x30)) break;
+      uint32_t it = ld32(c, g + 0x2C);
+      if (!in_mem1(it, ITEM_HITBOXES + 4 * ITEM_HITBOX_SIZE) || ld32(c, it + ITEM_OWNER) != gobj) continue;
+      for (uint32_t s = 0; s < 4 && n < max; s++) {
+        uint32_t h = it + ITEM_HITBOXES + ITEM_HITBOX_SIZE * s;
+        if (ld32(c, h) == 0) continue;
+        read_capsule(c, h, 4 + s, g, &out[n++]);
+      }
+    }
+  return n;
+}
+
+static void read_capsule(Cpu *c, uint32_t h, uint32_t slot, uint32_t group, McHitbox *o) {
+  {
+    o->slot = slot; o->group = group;
     o->damage = f32at(c, h + 0xC); o->radius = f32at(c, h + 0x1C);
     o->angle = (int32_t)ld32(c, h + 0x20); o->growth = (int32_t)ld32(c, h + 0x24);
     o->set_kb = (int32_t)ld32(c, h + 0x28); o->base_kb = (int32_t)ld32(c, h + 0x2C);
@@ -304,7 +344,6 @@ int mc_read_hitboxes(int port, int follower, McHitbox out[], int max) {
     uint32_t b40 = ld8(c, h + 0x40), b42 = ld8(c, h + 0x42);   /* big-endian bitfields: b0 is the top bit */
     o->flags = (b40 & 0x20 ? MC_HIT_AIRBORNE : 0) | (b40 & 0x10 ? MC_HIT_GROUNDED : 0) | (b42 & 0x04 ? MC_HIT_FIGHTERS : 0);
   }
-  return n;
 }
 
 int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max) {
@@ -325,18 +364,40 @@ int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max) {
   return n;
 }
 
+static void record_victim(Cpu *c, uint32_t h);
 int mc_report_hit(int port, int follower, uint32_t group, float damage) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;
   Cpu *c = &m->cpu;
   uint32_t fp = fighter_at(c, port, follower);
   if (!fp) return 1;
+  if (group >= 0x80000000u) {   /* one of the fighter's items (a laser): it ends as on a wall, Fox gets no hitlag */
+    uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u));
+    uint32_t it = owned_item(c, group, gobj);
+    if (!it) return 1;
+    for (uint32_t s = 0; s < 4; s++) record_victim(c, it + ITEM_HITBOXES + ITEM_HITBOX_SIZE * s);
+    float half = f32at(c, ld32(c, 0x804D6D28u) + 0x4C);  /* it_80275158(item, 1): life 1, half-life 1 x it_804D6D28->x4C */
+    stf32(c, it + ITEM_LIFE, 1.0f); stf32(c, it + ITEM_LIFE + 4, 1.0f * half);
+    return 0;
+  }
   int found = 0;
   for (uint32_t s = 0; s < 4; s++) {
     uint32_t h = fp + 0x914 + 0x138 * s;
     if (ld32(c, h) == 0 || ld32(c, h + 4) != group) continue;
     found = 1;
-    if (victim_recorded(c, h)) continue;
+    record_victim(c, h);
+  }
+  if (!found) return 1;
+  /* ftColl_80076ED8: the attacker's dealt damage as an int, at least 1 for any damage */
+  int32_t d = damage != 0 ? ((int32_t)damage ? (int32_t)damage : 1) : 0;
+  if (d > (int32_t)ld32(c, fp + 0x1914)) st32(c, fp + 0x1914, (uint32_t)d);
+  return 0;
+}
+
+/* lbColl_80008688: the sentinel victim on one hitbox (if active and not recorded yet) */
+static void record_victim(Cpu *c, uint32_t h) {
+  {
+    if (ld32(c, h) == 0 || victim_recorded(c, h)) return;
     uint32_t v = 0;
     while (v < 12 && ld32(c, h + 0x74 + 8 * v) != 0) v++;
     int full = v == 12;
@@ -345,11 +406,18 @@ int mc_report_hit(int port, int follower, uint32_t group, float damage) {
     st32(c, h + 0x78 + 8 * v, 0);
     if (full) st8(c, h + 0x44, v + 1 >= 12 ? 0 : v + 1);
   }
-  if (!found) return 1;
-  /* ftColl_80076ED8: the attacker's dealt damage as an int, at least 1 for any damage */
-  int32_t d = damage != 0 ? ((int32_t)damage ? (int32_t)damage : 1) : 0;
-  if (d > (int32_t)ld32(c, fp + 0x1914)) st32(c, fp + 0x1914, (uint32_t)d);
-  return 0;
+}
+
+/* ftCommon_CalcHitlag: (int)((int)(damage x ftCommonData+0x198 + +0x19C) x 1), capped at +0x194 */
+int mc_hitlag_frames(int damage) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t cd = ld32(c, 0x804D6554u);
+  if (!in_mem1(cd, 0x1A0)) return -1;
+  int frames = (int)(float)(int)((float)damage * f32at(c, cd + 0x198) + f32at(c, cd + 0x19C));
+  float cap = f32at(c, cd + 0x194);
+  return frames > cap ? (int)cap : frames;
 }
 
 /* ---- shield bubble ---- */
