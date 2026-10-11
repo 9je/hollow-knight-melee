@@ -45,11 +45,12 @@ namespace FoxMelee {
     /// Hollow Knight's own actions while Fox plays: D-pad left/right interact (inspect, talk, benches), D-pad down
     /// focuses. D-pad up stays Melee's taunt.
     public struct HkControls {
-        public bool Interact, Focus;
+        public bool Interact, Focus, Inventory;   // Inventory: GameCube D-pad right (it has no Select button)
         const ushort Hollow = GcButtons.DLeft | GcButtons.DRight | GcButtons.DDown;
 
         public static HkControls FromGameCube(McInput gc) => new HkControls {
-            Interact = (gc.Buttons & (GcButtons.DLeft | GcButtons.DRight)) != 0, Focus = (gc.Buttons & GcButtons.DDown) != 0,
+            Interact = (gc.Buttons & GcButtons.DLeft) != 0, Focus = (gc.Buttons & GcButtons.DDown) != 0,
+            Inventory = (gc.Buttons & GcButtons.DRight) != 0,
         };
 
         public static HkControls FromPad(PadState p) => new HkControls { Interact = p.DPadLeft || p.DPadRight, Focus = p.DPadDown };

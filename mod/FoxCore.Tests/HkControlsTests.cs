@@ -8,7 +8,8 @@ namespace FoxMelee.Tests {
             var hk = HkControls.FromGameCube(gc);
             Assert.True(hk.Interact); Assert.True(hk.Focus);
             Assert.Equal(GcButtons.DUp | GcButtons.A, HkControls.ForMelee(gc).Buttons);   // D-pad up: taunt
-            Assert.True(HkControls.FromGameCube(new McInput { Buttons = GcButtons.DRight }).Interact);
+            var right = HkControls.FromGameCube(new McInput { Buttons = GcButtons.DRight });
+            Assert.False(right.Interact); Assert.True(right.Inventory);   // no Select on a GameCube pad: D-pad right opens it
             Assert.False(HkControls.FromGameCube(new McInput { Buttons = GcButtons.DUp }).Interact);
             // a modern pad: same D-pad split
             var pad = new PadState { DPadUp = true, DPadRight = true };

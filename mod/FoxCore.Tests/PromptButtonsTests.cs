@@ -3,12 +3,13 @@ using Xunit;
 namespace FoxMelee.Tests {
     public class PromptButtonsTests {
         [Theory]
-        [InlineData("UP", "dpadLeft")]          // interact (Listen, Rest, Enter): D-pad left or right
+        [InlineData("UP", "dpadLeft")]          // interact (Listen, Rest, Enter): D-pad left
         [InlineData("CAST", "dpadDown")]        // Focus
         [InlineData("QUICK_CAST", "dpadDown")]
         [InlineData("ATTACK", "a")]             // Fox's attacks and jump, as Melee has them
         [InlineData("JUMP", "x")]
-        [InlineData("INVENTORY", null)]         // Hollow Knight's own buttons stay as they are
+        [InlineData("INVENTORY", "dpadRight")]
+        [InlineData("QUICK_MAP", null)]         // Hollow Knight's own buttons stay as they are
         [InlineData("MENU_SUBMIT", null)]
         public void GameCubePromptsShowFoxsControls(string action, string button) =>
             Assert.Equal(button, PromptButtons.ForGameCube(action));

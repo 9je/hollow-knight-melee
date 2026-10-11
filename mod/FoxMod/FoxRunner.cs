@@ -41,7 +41,8 @@ namespace FoxMelee {
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
         int scanTimer;
-        readonly RespawnHold respawnHold = new RespawnHold();   // after a respawn: wait for the controller to be let go
+        readonly RespawnHold respawnHold = new RespawnHold();
+        readonly FocusSound focusSound = new FocusSound();   // after a respawn: wait for the controller to be let go
         string lastBusy = "";                   // Hollow Knight's busy flags last logged
 
         // Hollow Knight's respawn routines clear dead / hazardDeath first, then reload, place and wake the Knight:
@@ -219,8 +220,12 @@ namespace FoxMelee {
             if (held && !focusHeld && !step.Focusing)
                 Log("focus: " + (FocusRules.WhyNot(still, pd.GetInt("MPCharge"), focus.Cost, pd.GetInt("health"), pd.GetInt("maxHealth")) ?? "not started"));
             focusHeld = held;
-            if (step.Drain > 0) hero.TakeMP(step.Drain);
-            if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); }   // Focus heals and resets percent (spec §5.3)
+            if (step.Drain > 0) {
+                pd.TakeMP(step.Drain);                                   // a little each frame, as the Knight's focus drains
+                GameCameras.instance.soulOrbFSM.SendEvent("MP SET");     // HeroController.TakeMP tells the orb only for >1
+            }
+            if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); focusSound.Heal(); }   // Focus heals and resets percent (spec §5.3)
+            focusSound.Charging(step.Focusing);
             focusing = step.Focusing;
             return focusing;
         }

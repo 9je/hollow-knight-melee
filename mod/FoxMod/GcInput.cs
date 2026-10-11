@@ -47,7 +47,7 @@ namespace FoxMelee {
                     InputControlType.DPadUp, InputControlType.DPadDown, InputControlType.DPadLeft, InputControlType.DPadRight,
                     InputControlType.Action1, InputControlType.Action2, InputControlType.Action3, InputControlType.Action4,
                     InputControlType.LeftTrigger, InputControlType.RightTrigger, InputControlType.RightBumper,
-                    InputControlType.Start, InputControlType.Command,
+                    InputControlType.Start, InputControlType.Command, InputControlType.View, InputControlType.Back,
                 }) AddControl(t, t.ToString());
             }
 
@@ -70,6 +70,9 @@ namespace FoxMelee {
                 UpdateWithState(InputControlType.RightBumper, B(GcButtons.Z), tick, dt);
                 UpdateWithState(InputControlType.Start, B(GcButtons.Start), tick, dt);
                 UpdateWithState(InputControlType.Command, B(GcButtons.Start), tick, dt);
+                // no Select on a GameCube pad: D-pad right opens the inventory (charms at a bench, map, journal)
+                UpdateWithState(InputControlType.View, B(GcButtons.DRight), tick, dt);
+                UpdateWithState(InputControlType.Back, B(GcButtons.DRight), tick, dt);
             }
         }
     }
