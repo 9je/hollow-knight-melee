@@ -94,6 +94,7 @@ namespace FoxMelee {
             // A new room is converted once Hollow Knight has finished bringing the Knight in.
             if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
             SetKnightVisible(hero, session.KnightVisible(f));
+            HideKnightDeaths(hero, !session.KnightVisible(f));
             if (f.Dead) sawDeath = true;
             if (PlayerData.instance.GetBool("atBench")) sawBench = true;
             if (session.Owner(f) == HeroOwner.Hollow) {
@@ -323,6 +324,34 @@ namespace FoxMelee {
             FoxMod.Instance.LogError($"{scene}: room not converted ({why}); play it as the Knight");
             if (session.RoomConverted(scene, false)) ReleaseHero();
             holdingBody = false;
+        }
+
+        // The Knight's death effects (shattering on spikes, acid, lava; the death animation) are their own objects:
+        // while Fox plays they keep their logic (the death one leaves the shade) but draw nothing.
+        bool deathsHidden;
+        GameObject[] deathShown, deathHiddenCopies;
+        void HideKnightDeaths(HeroController hero, bool hide) {
+            if (hide == deathsHidden) return;
+            deathsHidden = hide;
+            if (hero.heroDeathPrefab != null)
+                foreach (var r in hero.heroDeathPrefab.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = hide;
+            if (deathShown == null) {
+                deathShown = new[] { hero.spikeDeathPrefab, hero.acidDeathPrefab, hero.lavaDeathPrefab };
+                deathHiddenCopies = Array.ConvertAll(deathShown, HiddenCopy);
+            }
+            var use = hide ? deathHiddenCopies : deathShown;
+            hero.spikeDeathPrefab = use[0]; hero.acidDeathPrefab = use[1]; hero.lavaDeathPrefab = use[2];
+        }
+
+        static GameObject HiddenCopy(GameObject prefab) {
+            if (prefab == null) return null;
+            bool was = prefab.activeSelf;
+            prefab.SetActive(false);                 // the copy starts inactive: it plays nothing where it is made
+            var copy = Instantiate(prefab);
+            prefab.SetActive(was);
+            DontDestroyOnLoad(copy);
+            foreach (var r in copy.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = true;
+            return copy;
         }
 
         // What Hollow Knight is doing with the Knight, logged when it changes (deaths, spikes, respawns, loading).
