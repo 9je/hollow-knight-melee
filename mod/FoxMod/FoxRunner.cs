@@ -91,10 +91,15 @@ namespace FoxMelee {
             var invState = gm != null && gm.inventoryFSM != null ? gm.inventoryFSM.ActiveStateName : null;
             GcInput.InventoryOpen = invState != null && invState != "Closed" && !invState.StartsWith("Init");
             GcInput.HideDPadSides = hero != null && gm != null && gm.IsGameplayScene() && gm.gameState == GlobalEnums.GameState.PLAYING && !GcInput.InventoryOpen;
-            if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
+            // menus (and quitting to them: Quit_To_Menu is a gameplay scene to Hollow Knight, but Fox holding the Knight
+            // there stalled the quit on a black screen): nothing of Fox lingers
+            if (hero == null || gm == null || !gm.IsGameplayScene() || gm.sceneName == "Quit_To_Menu") {
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();
                 combat?.ReleaseAll();
+                if (holdingBody && hero != null) { GiveBodyBack(hero); hero.AffectedByGravity(true); }   // Hollow Knight's body again
+                holdingBody = false;
+                needPlace = true;
                 return;
             }
             if (state == State.Waiting && !Boot()) return;
@@ -186,9 +191,9 @@ namespace FoxMelee {
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
             if (gx != null && Input.GetKeyDown(KeyCode.F9)) Log("frame dumped: " + gx.Dump(Path.Combine(FoxMod.ModDir, "dump", DateTime.Now.ToString("HHmmss"))));
-            if (gx != null && frames == 0 && room == gxRoom && gx.Shown) return;   // nothing new to draw
+            bool fresh = frames > 0 || room != gxRoom || !(gx?.Shown ?? false);   // a new Melee frame (or room) to decode
             gxRoom = room;
-            if (gx != null && gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z)) {
+            if (gx != null && gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z, fresh)) {
                 model?.Hide(); effects?.Hide();
                 if (placeholder) placeholder.SetActive(false);
                 return;
@@ -419,13 +424,13 @@ namespace FoxMelee {
                 frames++;
             }
             if (restClock > Frame) restClock = 0;
-            if (frames > 0 && core.ReadFighter(0, out fox)) gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z);
+            if (core.ReadFighter(0, out fox)) gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z, frames > 0);
         }
 
         // Fox not moving for 3 s while the controller is pushed: log what is in the way (once per standstill)
         float framelessFor; bool framelessLogged;
         void WatchStuck(int frames) {
-            if (frames > 0) { framelessFor = 0; framelessLogged = false; }
+            if (frames > 0 || GameManager.instance.gameState == GlobalEnums.GameState.PAUSED) { framelessFor = 0; framelessLogged = false; }
             else if ((framelessFor += Time.unscaledDeltaTime) > 2f && !framelessLogged) {
                 framelessLogged = true;
                 Log($"no Melee frame for 2 s: time scale {Time.timeScale}, game state {GameManager.instance.gameState}, accumulator {accumulator}");
@@ -451,7 +456,7 @@ namespace FoxMelee {
             profWorst = Mathf.Max(profWorst, Time.unscaledDeltaTime);
             if (profClock < 5f) return;
             int n = Math.Max(1, profUnityFrames), m = Math.Max(1, profMeleeFrames);
-            string g = gx == null ? "" : $", decode {gx.DecodeMs / n:F1} ms, mesh {gx.MeshMs / n:F1} ms, uploads {gx.Uploads} ({gx.UploadBytes / 1048576.0:F1} MB, {gx.UploadMs / n:F1} ms/frame), runs {gx.Runs / n}";
+            string g = gx == null ? "" : $", decode wait {gx.DecodeMs / n:F1} ms, mesh {gx.MeshMs / n:F1} ms, uploads {gx.Uploads} ({gx.UploadBytes / 1048576.0:F1} MB, {gx.UploadMs / n:F1} ms/frame), runs {gx.Runs / n}";
             Log($"perf: {n / profClock:F0} fps (worst frame {profWorst * 1000:F0} ms), Melee {(profMeleeMs - profBridgeMs - profSfxMs) / m:F1} ms/frame, hits {profBridgeMs / m:F1}, sound {profSfxMs / m:F1}{g}");
             profClock = 0; profWorst = 0; profMeleeMs = 0; profBridgeMs = 0; profSfxMs = 0; profMeleeFrames = 0; profUnityFrames = 0;
             if (gx != null) { gx.DecodeMs = gx.MeshMs = gx.UploadMs = 0; gx.Uploads = gx.Runs = 0; gx.UploadBytes = 0; }

@@ -188,6 +188,28 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void ADecodeOnAnotherThreadSeesTheFrameItStartedOn() {
+            // Melee's next frame waits for a decode still running (it reads Melee's memory)
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput { StickX = 127 });
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.GxCapture(true), core.Error);
+            for (int i = 0; i < 20; i++) Assert.True(core.Step(), core.Error);
+            var now = new GxFrame();
+            Assert.True(core.GxDecode(GxFrame.FoxAndEffects, now), core.Error);
+            var later = new GxFrame();
+            var task = core.GxDecodeAsync(GxFrame.FoxAndEffects, later);
+            for (int i = 0; i < 5; i++) Assert.True(core.Step(), core.Error);   // running: Fox moves on
+            Assert.True(task.Result);
+            Assert.Equal(now.VertexCount, later.VertexCount);
+            for (int i = 0; i < 3 * now.VertexCount; i += 997) Assert.Equal(now.Pos[i], later.Pos[i]);
+        }
+
+        [Fact]
         public void FoxsLaserHasAHitboxAndMeleesHitlagFormulaIsExposed() {
             if (!DevConfig.Available) return;
             using var core = MeleeCore.Load(DevConfig.CoreSo);

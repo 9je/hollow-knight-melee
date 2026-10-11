@@ -11,7 +11,7 @@ namespace FoxMelee {
     sealed class GxRenderer {
         static readonly Color AdditiveTint = new Color(0.5f, 0.5f, 0.5f, 0.5f);   // Particles/Additive doubles colour x tint
 
-        readonly GxFrame frame = new GxFrame();
+        GxFrame frame = new GxFrame();
         readonly List<Vector3> v = new List<Vector3>();
         readonly List<Color32> c = new List<Color32>();
         readonly List<Vector2> u = new List<Vector2>();
@@ -47,11 +47,30 @@ namespace FoxMelee {
         public double DecodeMs, MeshMs, UploadMs; public int Uploads, Runs; public long UploadBytes;
         readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
 
-        public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z) {
-            watch.Restart();
-            bool ok = core.GxDecode(GxFrame.FoxAndEffects, frame);
-            DecodeMs += watch.Elapsed.TotalMilliseconds;
-            if (!ok || frame.VertexCount == 0) { Hide(); return false; }
+        // Decoding Melee's frame takes milliseconds: it runs on another thread while Unity draws, and the mesh is built
+        // from it on a later call (Fox's picture is a Unity frame behind his position at most). `back` is decoded into;
+        // `frame` is what is shown.
+        GxFrame back = new GxFrame();
+        System.Threading.Tasks.Task<bool> decoding;
+        bool failed;
+
+        /// Each Unity frame: shows a decode that finished, and starts one when Melee has a new frame (`fresh`). False
+        /// when the core could not decode a frame (the caller falls back to fox.model).
+        public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z, bool fresh) {
+            if (decoding != null && (decoding.IsCompleted || fresh)) {
+                watch.Restart();
+                bool ok = decoding.Result;   // done, or nearly: Melee's next frame needs it finished anyway
+                DecodeMs += watch.Elapsed.TotalMilliseconds;   // the main thread's wait, not the decode itself
+                decoding = null;
+                var t = frame; frame = back; back = t;
+                failed = !ok || frame.VertexCount == 0;
+                if (failed) Hide(); else Build(core, room, like, z);
+            }
+            if (fresh) decoding = core.GxDecodeAsync(GxFrame.FoxAndEffects, back);
+            return !failed;
+        }
+
+        void Build(MeleeCore core, RoomTransform room, Renderer like, float z) {
             Runs += frame.Runs.Count;
             double up0 = UploadMs;
             watch.Restart();
@@ -88,7 +107,6 @@ namespace FoxMelee {
             block.SetColor("_Color", new Color(g, g, g, 1f));
             renderer.SetPropertyBlock(block);
             if (!shown) { root.SetActive(true); shown = true; }
-            return true;
         }
 
         /// F9: what was drawn last (each run's texture, blend, wrap, texture coordinates, vertex alpha, bounds; the
