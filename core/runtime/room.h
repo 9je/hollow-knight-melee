@@ -46,4 +46,6 @@ int mc_build_collision(const McShape *shapes, int n_shapes, const McCollision **
 int mc_place_fighter(int port, float x, float y);
 /* As mc_place_fighter, for a respawn: the fighter comes back falling with no velocity, knockback or hitlag. */
 int mc_respawn_fighter(int port, float x, float y);
+/* Like mc_respawn_fighter, but tumbling (DamageFall): he lands in a knockdown unless he techs. */
+int mc_tumble_fighter(int port, float x, float y);
 

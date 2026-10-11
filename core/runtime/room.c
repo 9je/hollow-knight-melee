@@ -121,6 +121,7 @@ static void free_islands(Cpu *c) {
 #define PLAYER_BLOCK(p) (0x80453080u + 0xE90u * (uint32_t)(p))
 #define FN_SET_AIRBORNE 0x8007D5D4u      /* ftCommon_8007D5D4(fp) */
 #define FN_CAMERA_SNAP 0x80076064u       /* ftCamera_80076064(fp) */
+#define FN_DAMAGEFALL_ENTER 0x80090780u /* ftCo_80090780(gobj): DamageFall, tumbling */
 #define FN_HITLAG_EXIT 0x8006D10Cu       /* Fighter_8006D10C(gobj): leave hitlag (post-hitlag callback, clears x2219_b5) */
 
 int mc_place_fighter(int port, float x, float y) {
@@ -137,6 +138,12 @@ int mc_place_fighter(int port, float x, float y) {
 int mc_respawn_fighter(int port, float x, float y) {
   int rc = mc_place_fighter(port, x, y);
   if (rc == 0) g_m->place_pending[port] = 2;
+  return rc;
+}
+
+int mc_tumble_fighter(int port, float x, float y) {
+  int rc = mc_place_fighter(port, x, y);
+  if (rc == 0) g_m->place_pending[port] = 3;
   return rc;
 }
 
@@ -169,7 +176,7 @@ static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, 
  * - a grounded fighter stands on the floor within 10 units (mpCheckFloor), else becomes airborne.
  * moved == 0 (a fighter not placed after a room load): only the line ids the old room invalidated are
  * renewed; position, ECB and camera stay as they are. */
-static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int respawn) {
+static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int respawn) {   /* respawn: 1 Fall, 2 tumbling */
   uint32_t fp = ld32(c, gobj + 0x2C);
   uint32_t action = ld32(c, fp + 0x10);
   call_guest(c, FN_CLEAR_FLOOR_SKIP, fp + 0x6F0u, 0);   /* a drop-through in progress named an old line */
@@ -181,7 +188,7 @@ static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int r
       call_guest(c, FN_HITLAG_EXIT, gobj, 0);
     }
     call_guest(c, FN_SET_AIRBORNE, fp, 0);
-    call_guest(c, FN_FALL_ENTER, gobj, 0);
+    call_guest(c, respawn == 2 ? FN_DAMAGEFALL_ENTER : FN_FALL_ENTER, gobj, 0);
     static const uint32_t vel[] = {0x80, 0x84, 0x88, 0x8C, 0x90, 0x94, 0xEC, 0x195C};   /* self, kb, ground, hitlag */
     for (unsigned k = 0; k < sizeof vel / sizeof vel[0]; k++) stf(c, fp + vel[k], 0.0f);
   } else if (action >= MS_CLIFF_FIRST && action <= MS_CLIFF_LAST) {
@@ -225,7 +232,7 @@ void room_boundary_jobs(Cpu *c) {
       uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
       if (!gobj) continue;
       uint32_t fp = ld32(c, gobj + 0x2C);
-      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] == 2);
+      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] - 1);
       else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
   for (int p = 0; p < 4; p++) m->place_pending[p] = 0;

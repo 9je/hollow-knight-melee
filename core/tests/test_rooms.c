@@ -576,6 +576,19 @@ static void test_respawn_after_hit(void) {
   mc_shutdown();
 }
 
+/* Hollow Knight's opening drop: Fox enters tumbling (DamageFall) and lands in a knockdown unless he techs */
+static void test_tumble_fighter(void) {
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_tumble_fighter(4, 0, 0) == -1);
+  CHECK(mc_tumble_fighter(0, 0.0f, 60.0f) == 0);
+  steps(1, NULL);
+  CHECK(fox().action == 38 && fox().airborne == 1);   /* DamageFall */
+  int down = 0;
+  for (int i = 0; i < 90 && !down; i++) { steps(1, NULL); down = fox().action >= 183 && fox().action <= 198; }
+  CHECK(down);                                        /* DownBound..: landed hard */
+  mc_shutdown();
+}
+
 static void test_apply_hit(void) {
   McHit hit = {0};
   hit.damage = 10; hit.angle = 45; hit.growth = 100; hit.base_kb = 20; hit.element = 0;
@@ -657,6 +670,7 @@ int main(int argc, char **argv) {
   test_laser_hits();
   test_apply_hit();
   test_respawn_after_hit();
+  test_tumble_fighter();
   puts("rooms tests passed");
   return 0;
 }
