@@ -28,6 +28,19 @@ static float cross(McVec2 a, McVec2 b, McVec2 c) { return (b.x - a.x) * (c.y - b
  * (several wall segments count as one). */
 #define MIN_LEDGE_DROP 18.0f    /* Melee units: about the Knight's height at the default scale */
 #define MIN_LEDGE_WIDTH 6.0f    /* a floor narrower than this (a thin pillar's top) has no ledges */
+/* the x-extent of the run of connected floor lines a line belongs to (a wide floor may end in a short bevel) */
+static float floor_width(const McLine *raw, const McVec2 *V, int floor) {
+  float lo = fminf(V[raw[floor].v0].x, V[raw[floor].v1].x), hi = fmaxf(V[raw[floor].v0].x, V[raw[floor].v1].x);
+  for (int dir = -1; dir <= 1; dir += 2) {
+    int k = dir < 0 ? raw[floor].prev0 : raw[floor].next0;
+    for (int n = 0; k >= 0 && k != floor && n < MC_MAX_LINES && raw[k].hi_flags == MC_LINE_FLOOR; n++) {
+      lo = fminf(lo, fminf(V[raw[k].v0].x, V[raw[k].v1].x)); hi = fmaxf(hi, fmaxf(V[raw[k].v0].x, V[raw[k].v1].x));
+      k = dir < 0 ? raw[k].prev0 : raw[k].next0;
+    }
+  }
+  return hi - lo;
+}
+
 static float drop(const McLine *raw, const McVec2 *V, int floor, int dir) {
   float top = dir < 0 ? V[raw[floor].v0].y : V[raw[floor].v1].y, low = top;
   int k = dir < 0 ? raw[floor].prev0 : raw[floor].next0;
@@ -84,7 +97,7 @@ int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *
     if (closed)   /* ledges: floor ends at a convex corner whose neighbour is not a floor */
       for (int i = l0; i < nl; i++) {
         McLine *l = &raw[i];
-        if (l->hi_flags != MC_LINE_FLOOR || fabsf(V[l->v1].x - V[l->v0].x) < MIN_LEDGE_WIDTH) continue;
+        if (l->hi_flags != MC_LINE_FLOOR || floor_width(raw, V, i) < MIN_LEDGE_WIDTH) continue;
         const McLine *p = &raw[l->prev0], *q = &raw[l->next0];
         int left = p->hi_flags != MC_LINE_FLOOR && cross(V[p->v0], V[l->v0], V[l->v1]) < 0 && drop(raw, V, i, -1) >= MIN_LEDGE_DROP;
         int right = q->hi_flags != MC_LINE_FLOOR && cross(V[l->v0], V[l->v1], V[q->v1]) < 0 && drop(raw, V, i, 1) >= MIN_LEDGE_DROP;

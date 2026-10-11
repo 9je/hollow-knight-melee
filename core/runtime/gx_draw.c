@@ -43,7 +43,8 @@ static Tex *texs; static int ntex, captex;
 static int depth_dl;
 static uint32_t state_epoch = 1;   /* bumped by every state load: cached vertices are only valid within one epoch */
 #define PLAY_DEPTH 500.0f
-static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_stats) */
+static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_size_mismatches) */
+static uint32_t decode_errors;
 
 /* the object drawing now */
 static uint64_t want_mask;
@@ -55,7 +56,7 @@ static uint16_t be16(const uint8_t *p) { return (uint16_t)(p[0] << 8 | p[1]); }
 static float u2f32(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
 static const uint8_t *phys(uint32_t addr, uint32_t n) {
   addr &= 0x01FFFFFFu;
-  return addr + n <= MEM1_SIZE ? M + addr : NULL;
+  return n <= MEM1_SIZE && addr <= MEM1_SIZE - n ? M + addr : NULL;
 }
 
 /* ---- matrices ---- */
@@ -164,12 +165,19 @@ static C4 light_channel(int ch, const float *pv, const float *nv, int has_n, con
         float L[3] = {lp[0] - pv[0], lp[1] - pv[1], lp[2] - pv[2]};
         float d2 = L[0] * L[0] + L[1] * L[1] + L[2] * L[2], d = sqrtf(d2);
         if (d > 0) { L[0] /= d; L[1] /= d; L[2] /= d; }
-        float diff = has_n ? nv[0] * L[0] + nv[1] * L[1] + nv[2] * L[2] : 1.0f;
-        if (dfn == 0) diff = 1.0f; else if (dfn == 2 && diff < 0) diff = 0;
+        float ndl = has_n ? nv[0] * L[0] + nv[1] * L[1] + nv[2] * L[2] : 1.0f;
+        float diff = dfn == 0 ? 1.0f : dfn == 2 && ndl < 0 ? 0 : ndl;
         float att = 1.0f;
-        if (attn == 3) {   /* spot: cos and distance attenuation */
-          float dir[3] = {xfm(b + 13), xfm(b + 14), xfm(b + 15)};
-          float cs = -(L[0] * dir[0] + L[1] * dir[1] + L[2] * dir[2]);
+        float dir[3] = {xfm(b + 13), xfm(b + 14), xfm(b + 15)};
+        if (attn == 1) {          /* specular (GX_AF_SPEC): the light's dir field holds the half-angle vector */
+          float a = ndl >= 0 && has_n ? nv[0] * dir[0] + nv[1] * dir[1] + nv[2] * dir[2] : 0;
+          if (a < 0) a = 0;
+          float ca = xfm(b + 4) + xfm(b + 5) * a + xfm(b + 6) * a * a;
+          float da = xfm(b + 7) + xfm(b + 8) * a + xfm(b + 9) * a * a;
+          att = (ca > 0 ? ca : 0) / (fabsf(da) > 1e-6f ? da : 1e-6f);
+        } else if (attn == 3) {   /* spot: cos and distance attenuation (the direction is stored negated) */
+          float cs = L[0] * dir[0] + L[1] * dir[1] + L[2] * dir[2];
+          if (cs < 0) cs = 0;
           float ca = xfm(b + 4) + xfm(b + 5) * cs + xfm(b + 6) * cs * cs;
           float da = xfm(b + 7) + xfm(b + 8) * d + xfm(b + 9) * d2;
           att = (ca > 0 ? ca : 0) / (da > 1e-6f ? da : 1e-6f);
@@ -576,6 +584,14 @@ static void bake(DrawSetup *d, Vtx *vs, int n) {
   for (int i = 0; i < n; i++) vs[i].col = (C4){1, 1, 1, 1};
 }
 
+/* a draw whose vertices cannot be read (or that writes no colour) is stepped over by its vertex size */
+static int skip_draw(Rd *r, const uint8_t *first, uint32_t vsz, int n, int error) {
+  if (error) decode_errors++;
+  if (!first || (size_t)vsz * (size_t)n > (size_t)(r->end - first)) return 0;
+  r->p = first + vsz * (uint32_t)n;
+  return 1;
+}
+
 #define VCACHE 4096
 typedef struct { uint32_t epoch, hash, size; uint8_t bytes[64]; Vtx v; } VCacheEntry;
 static VCacheEntry vcache[VCACHE];
@@ -595,6 +611,8 @@ static int draw(Rd *r, int op) {
   static Vtx *vs; static int capvs;
   if (n > capvs) { Vtx *p = realloc(vs, (size_t)n * sizeof *p); if (!p) return 0; vs = p; capvs = n; }
   uint32_t vsz = vertex_size(vat);
+  const uint8_t *first = r->p;
+  if ((S.bp[0x41] & 0x18) == 0) return skip_draw(r, first, vsz, n, 0);   /* colour and alpha updates off: draws nothing */
   for (int i = 0; i < n; i++) {
     const uint8_t *at = r->p;
     if (vsz && vsz <= 64 && rd_ok(r, vsz)) {   /* the same vertex bytes under the same state give the same vertex */
@@ -603,12 +621,12 @@ static int draw(Rd *r, int op) {
       if (e->epoch == state_epoch && e->hash == h && e->size == vsz && memcmp(e->bytes, at, vsz) == 0) {
         vs[i] = e->v; r->p += vsz; continue;
       }
-      if (!read_vertex(r, vat, &d, &vs[i])) return 0;
+      if (!read_vertex(r, vat, &d, &vs[i])) return skip_draw(r, first, vsz, n, 1);
       if ((uint32_t)(r->p - at) != vsz) { size_mismatches++; continue; }   /* the skip path must agree */
       e->epoch = state_epoch; e->hash = h; e->size = vsz; memcpy(e->bytes, at, vsz); e->v = vs[i];
       continue;
     }
-    if (!read_vertex(r, vat, &d, &vs[i])) return 0;
+    if (!read_vertex(r, vat, &d, &vs[i])) return skip_draw(r, first, vsz, n, 1);
     if ((uint32_t)(r->p - at) != vsz) size_mismatches++;
   }
   if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
@@ -731,15 +749,27 @@ static int atlas_place(Tex *t) {
   return 1;
 }
 
+/* a triangle's texture coordinates moved by whole wrap periods into the atlas cell's -1..2 (repeat: 1, mirror: 2);
+ * false when they span more than the cell (it keeps its own texture) */
+static int fit_cell(float *c0, float *c1, float *c2, int wrap) {
+  float lo = fminf(*c0, fminf(*c1, *c2)), hi = fmaxf(*c0, fmaxf(*c1, *c2));
+  if (wrap == 1 || wrap == 2) {
+    float period = wrap == 1 ? 1.0f : 2.0f, shift = floorf(lo / period) * period;
+    *c0 -= shift; *c1 -= shift; *c2 -= shift; lo -= shift; hi -= shift;
+  }
+  return wrap == 0 || (lo >= -1 && hi <= 2);
+}
+
 static void to_atlas(Tri *tr) {
-  if (tr->tex < 0) return;
+  if (tr->tex < 0 || tr->p_link != 8) return;   /* fighters' bodies: effects keep their own (few, changing) textures */
   Tex *t = &texs[tr->tex];
   if (t->baked) return;
   if (t->atlas == 0) t->atlas = atlas_place(t);
   if (t->atlas != 1) return;
+  float us[3] = {tr->v[0].u, tr->v[1].u, tr->v[2].u}, vs[3] = {tr->v[0].v, tr->v[1].v, tr->v[2].v};
+  if (!fit_cell(&us[0], &us[1], &us[2], (int)(t->wrap & 3)) || !fit_cell(&vs[0], &vs[1], &vs[2], (int)((t->wrap >> 2) & 3))) return;
   for (int i = 0; i < 3; i++) {
-    float u = tr->v[i].u, v = tr->v[i].v;
-    u = u < -1 ? -1 : u > 2 ? 2 : u; v = v < -1 ? -1 : v > 2 ? 2 : v;
+    float u = clampf(us[i], -1, 2), v = clampf(vs[i], -1, 2);   /* clamp wrap: the cell's border copies hold the edge */
     tr->v[i].u = (t->ax + 1 + (u + 1) * t->w) / ATLAS;
     tr->v[i].v = (t->ay + 1 + (v + 1) * t->h) / ATLAS;
   }
@@ -771,8 +801,16 @@ void gx_track_frame(const uint8_t *fifo, uint32_t len, const uint8_t *mem) {
   memcpy(&start, &live, sizeof start);
   memcpy(&S, &live, sizeof S);
   span_want = 0;
-  Rd r = {fifo, fifo + len};
-  run(&r);
+  /* in the same pieces as a decode (each object's part), so one unreadable command loses only the rest of its piece */
+  Machine *m = g_m;
+  int k = m->gx_cur, nmk = m->gx_nmarks[k];
+  uint32_t at = 0;
+  for (int i = -1; i < nmk; i++) {
+    uint32_t end = i + 1 < nmk ? m->gx_marks[k][i + 1].offset : len;
+    if (end > len) end = len;
+    if (end > at) { Rd r = {fifo + at, fifo + end}; run(&r); }
+    if (end > at) at = end;
+  }
   memcpy(&live, &S, sizeof live);
 }
 
@@ -794,7 +832,7 @@ int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const
     if (i >= 0) {
       span_gobj = mk[i].gobj; span_plink = mk[i].p_link;
       span_want = mk[i].gobj && mk[i].p_link < 64 && ((plink_mask >> mk[i].p_link) & 1);
-      if (span_want) invert_view(mk[i].view, inv_view);
+      if (span_want) { invert_view(mk[i].view, inv_view); state_epoch++; }   /* cached vertices are in world space */
     } else span_want = 0;
     if (end > at) { Rd r = {fifo + at, fifo + end}; run(&r); }
     at = end > at ? end : at;
@@ -846,4 +884,6 @@ void gx_draw_free(void) {
 }
 
 uint32_t mc_gx_size_mismatches(void) { return size_mismatches; }
+
+uint32_t mc_gx_decode_errors(void) { return decode_errors; }
 

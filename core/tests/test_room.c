@@ -115,6 +115,15 @@ static void test_builder(void) {
   CHECK(mc_build_collision(&ps, 1, &c, why, sizeof why) == 0);
   for (int i = 0; i < c->n_lines; i++)
     if ((c->lines[i].hi_flags & 0xF) == MC_LINE_FLOOR && c->verts[c->lines[i].v0].y == 40) CHECK(!(c->lines[i].lo_flags & MC_LO_LEDGE));
+  /* a wide floor ending in a short bevel segment (Hollow Knight's colliders do this) still has its ledge: the width
+   * is the floor's, not its last segment's */
+  McVec2 bevel[6] = {{-50, 0}, {47, 0}, {50, -0.5f}, {50, -40}, {-50, -40}, {-50, -20}};
+  McShape bv = {MC_SOLID, bevel, 6, 0};
+  CHECK(mc_build_collision(&bv, 1, &c, why, sizeof why) == 0);
+  int bevel_ledge = 0;
+  for (int i = 0; i < c->n_lines; i++)
+    if ((c->lines[i].hi_flags & 0xF) == MC_LINE_FLOOR && c->verts[c->lines[i].v1].x == 50) bevel_ledge = c->lines[i].lo_flags & MC_LO_LEDGE;
+  CHECK(bevel_ledge);
   /* platform drawn right to left, plus a repeated point */
   McVec2 plat[3] = {{20, 30}, {20, 30}, {-40, 30}};
   McShape p = {MC_PLATFORM, plat, 3, 7};

@@ -26,6 +26,7 @@ namespace FoxMelee {
         readonly Shader sprite, additive;
         readonly GameObject root;
         int shown;
+        public bool Shown => shown > 0;
 
         public GxRenderer() {
             sprite = Shader.Find("Sprites/Default") ?? throw new InvalidOperationException("Sprites/Default shader not found");
@@ -89,11 +90,13 @@ namespace FoxMelee {
             if (!core.GxTexture(run.Tex, out var t)) return null;
             var key = (run.Tex, ws, wt);
             if (textures.TryGetValue(key, out var have) && have.gen == t.Gen) return have.tex;
-            if (have.tex != null) Forget(have.tex);
-            var tex = new Texture2D(t.W, t.H, TextureFormat.RGBA32, false) {
-                filterMode = FilterMode.Bilinear,
-                wrapModeU = Wrap(ws), wrapModeV = Wrap(wt),
-            };
+            var tex = have.tex;
+            if (tex != null && (tex.width != t.W || tex.height != t.H)) { Forget(tex); tex = null; }
+            if (tex == null)   // a recycled id of the same size reuses its texture (and materials): no churn
+                tex = new Texture2D(t.W, t.H, TextureFormat.RGBA32, false) {
+                    filterMode = FilterMode.Bilinear,
+                    wrapModeU = Wrap(ws), wrapModeV = Wrap(wt),
+                };
             tex.LoadRawTextureData(t.Rgba, t.W * t.H * 4);   // top row first: v = 0 is the first row, as the core's
             tex.Apply(false, false);
             textures[key] = (t.Gen, tex);

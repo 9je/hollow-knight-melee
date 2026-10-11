@@ -103,6 +103,7 @@ namespace FoxMelee {
         static HutongGames.PlayMaker.FsmFloat DamagesEnemy(GameObject go) {
             try {
                 var fsm = go.AddComponent<PlayMakerFSM>();
+                fsm.Reset();   // the object is inactive, so Awake (which would create the Fsm) has not run yet; InitFsm keeps ours
                 fsm.FsmName = "damages_enemy";
                 var dir = new HutongGames.PlayMaker.FsmFloat("direction");
                 fsm.FsmVariables.FloatVariables = new[] { dir };

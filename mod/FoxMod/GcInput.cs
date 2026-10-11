@@ -35,6 +35,8 @@ namespace FoxMelee {
 
             public GcDevice(GcInput gc) : base("GameCube Controller (adapter)") {
                 this.gc = gc;
+                // a style Hollow Knight knows (it re-maps and logs an error for unknown ones); A confirms, B goes back
+                DeviceStyle = InputDeviceStyle.XboxOne;
                 foreach (var t in new[] {
                     InputControlType.LeftStickLeft, InputControlType.LeftStickRight, InputControlType.LeftStickUp, InputControlType.LeftStickDown,
                     InputControlType.RightStickLeft, InputControlType.RightStickRight, InputControlType.RightStickUp, InputControlType.RightStickDown,

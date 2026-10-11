@@ -24,6 +24,7 @@ namespace FoxMelee {
         GameObject placeholder;
         EffectsRenderer effects;                // shield, shine and lasers (stand-ins when Melee's frame is not drawn)
         GxRenderer gx;                          // Melee's own frame: its models, effects and art
+        RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
@@ -61,10 +62,8 @@ namespace FoxMelee {
             var hero = HeroController.instance;
             var gm = GameManager.instance;
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
-                if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
-                    if (placeholder) placeholder.SetActive(false);
-                    model?.Hide(); effects?.Hide(); gx?.Hide();
-                }
+                if (placeholder) placeholder.SetActive(false);
+                model?.Hide(); effects?.Hide(); gx?.Hide();
                 combat?.ReleaseAll();
                 return;
             }
@@ -80,8 +79,10 @@ namespace FoxMelee {
                 holdingBody = false;
                 needPlace = true;
                 accumulator = 0;
-                if (placeholder) placeholder.SetActive(false);
-                model?.Hide(); effects?.Hide(); gx?.Hide();
+                if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
+                    if (placeholder) placeholder.SetActive(false);
+                    model?.Hide(); effects?.Hide(); gx?.Hide();
+                }
                 combat?.ReleaseAll();
                 return;
             }
@@ -120,6 +121,8 @@ namespace FoxMelee {
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
+            if (gx != null && frames == 0 && room == gxRoom && gx.Shown) return;   // nothing new to draw
+            gxRoom = room;
             if (gx != null && gx.Draw(core, room)) {
                 model?.Hide(); effects?.Hide();
                 if (placeholder) placeholder.SetActive(false);
@@ -141,8 +144,25 @@ namespace FoxMelee {
             hero.RegainControl();
             hero.AcceptInput();
             hero.cState.onGround = true;
-            HkPulse.PressUp();
-            Log("interact");
+            int heard = PressUp(hero);
+            Log($"interact ({heard} listening)");
+        }
+
+        // What Hollow Knight's ListenForUp does when "up" is pressed: send its wasPressed event, for every state machine
+        // listening right now (a tablet, an NPC or a bench the Knight stands at). No input device is involved, so
+        // Hollow Knight's own controller (and keyboard prompts) stay as they are.
+        static int PressUp(HeroController hero) {
+            int n = 0;
+            foreach (var fsm in new List<PlayMakerFSM>(PlayMakerFSM.FsmList)) {
+                if (fsm == null || fsm.gameObject == hero.gameObject || fsm.Fsm?.ActiveState == null) continue;
+                foreach (var a in fsm.Fsm.ActiveState.Actions)
+                    if (a is HutongGames.PlayMaker.Actions.ListenForUp up && up.Enabled && up.wasPressed != null) {
+                        fsm.Fsm.Event(up.wasPressed);
+                        n++;
+                        break;
+                    }
+            }
+            return n;
         }
 
         // D-pad down: Hollow Knight's Focus while Fox stands (spec §5.3). True while focusing.
