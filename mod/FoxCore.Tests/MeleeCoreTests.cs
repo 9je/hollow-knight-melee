@@ -40,5 +40,23 @@ namespace FoxMelee.Tests {
             Assert.False(core.BuildCollision(bad, out _));
             Assert.Contains("too few", core.Error);
         }
+    
+        [Fact]
+        public void RoomGeometryOutputIsAcceptedByTheCoreBuilder() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            ColliderOutline Box(double x0, double y0, double x1, double y1) =>
+                new ColliderOutline { Points = new[] { new V2(x0, y0), new V2(x1, y0), new V2(x1, y1), new V2(x0, y1) } };
+            // a walled-in room (outer solid + hole), a touching block, an edge collider and a one-way platform
+            var colliders = new[] {
+                Box(0, 0, 100, 10), Box(0, 40, 100, 50), Box(0, 0, 10, 50), Box(90, 0, 100, 50), Box(100, 0, 120, 10),
+                new ColliderOutline { Points = new[] { new V2(30, 20), new V2(50, 20) }, Closed = false },
+                new ColliderOutline { Points = new[] { new V2(60, 25), new V2(80, 25), new V2(80, 26), new V2(60, 26) }, OneWay = true },
+            };
+            var t = new RoomTransform { Scale = 6, Origin = new V2(60, 25) };
+            var shapes = RoomGeometry.Build(colliders, t);
+            Assert.Contains(shapes, s => s.Kind == ShapeKind.Hole);
+            Assert.True(core.BuildCollision(shapes, out _), core.Error);
+        }
     }
 }
