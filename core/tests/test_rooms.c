@@ -316,6 +316,56 @@ static void test_hit_pause(void) {
   CHECK(mc_step_to_hits() == -1);
 }
 
+/* the shield bubble: Melee scales Fox's shield joint by his shield size (ftCo_80091D58) */
+static void test_shield(void) {
+  McShield sh;
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_read_shield(0, 0, &sh) == 0 && sh.active == 0);
+  McInput r = {0}; r.buttons = 0x0020; r.trigger_r = 255;   /* R held: shield */
+  steps(5, &r);
+  CHECK(mc_read_shield(0, 0, &sh) == 0 && sh.active == 1);
+  McFighter f = fox();
+  CHECK(fabsf(sh.x - f.x) < 6 && sh.y > f.y && sh.y < f.y + 20);
+  CHECK(sh.radius > 6 && sh.radius < 20 && sh.hard > 0.99f);   /* a full press: hard shield */
+  float full = sh.radius;
+  steps(120, &r);                                          /* shield health drains while held */
+  CHECK(mc_read_shield(0, 0, &sh) == 0 && sh.active == 1 && sh.radius < full - 0.5f);
+  McInput lite = {0}; lite.trigger_r = 60;                  /* light shield: analog only */
+  steps(30, NULL); steps(10, &lite);
+  CHECK(mc_read_shield(0, 0, &sh) == 0 && sh.active == 1 && sh.hard < 0.9f);
+  steps(30, NULL);
+  CHECK(mc_read_shield(0, 0, &sh) == 0 && sh.active == 0);
+  CHECK(mc_read_shield(1, 0, &sh) == 1 && mc_read_shield(7, 0, &sh) == -1);
+  mc_shutdown();
+}
+
+/* items (Fox's lasers), read-only from Melee's item list */
+static void test_items(void) {
+  McItem it[16];
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_read_items(it, 16) == 0);
+  McInput b = {0}; b.buttons = 0x0200;                     /* neutral B: blaster */
+  steps(1, &b);
+  int n = 0, laser = -1, gun = 0;
+  for (int i = 0; i < 40 && laser < 0; i++) {
+    steps(1, NULL);
+    n = mc_read_items(it, 16);
+    for (int k = 0; k < n; k++) { if (fabsf(it[k].vx) > 1) laser = k; else gun = 1; }
+  }
+  CHECK(gun && laser >= 0);                                /* the blaster (held, still) and a laser */
+  McFighter f = fox();
+  CHECK(fabsf(it[laser].x - f.x) < 60 && it[laser].vx * f.facing > 1 && fabsf(it[laser].vy) < 0.01f);
+  uint32_t kind = it[laser].kind; float x0 = it[laser].x;
+  steps(1, NULL);
+  n = mc_read_items(it, 16);
+  int moved = 0;
+  for (int k = 0; k < n; k++) moved |= it[k].kind == kind && (it[k].x - x0) * f.facing > 1;
+  CHECK(moved);                                            /* it flies */
+  CHECK(mc_read_items(it, 0) == 0);
+  mc_shutdown();
+  CHECK(mc_read_items(it, 16) == -1);
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -326,6 +376,8 @@ int main(int argc, char **argv) {
   test_bones();
   test_hitboxes();
   test_hit_pause();
+  test_shield();
+  test_items();
   puts("rooms tests passed");
   return 0;
 }

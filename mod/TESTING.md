@@ -42,6 +42,8 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
     away from Fox (a back air sends an enemy behind him further behind), after the freeze. Grabs do not hurt
     enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail, and Fox can then walk through (ModLog says "terrain changed, collision rebuilt").
 
+11. Shield (hold R/L): a red bubble the size Melee gives it, shrinking as it weakens and fading with a light press. Down-B: a blue hexagon (shine). Neutral B: lasers fly. These are simple shapes standing in for Melee's own effects.
+
 Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
 To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 

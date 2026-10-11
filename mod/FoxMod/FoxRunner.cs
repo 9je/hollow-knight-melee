@@ -22,6 +22,7 @@ namespace FoxMelee {
         bool needPlace = true;                  // Fox starts where the Knight is once Fox drives again
         float accumulator;
         GameObject placeholder;
+        EffectsRenderer effects;                // shield, shine and lasers
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         readonly float[] bones = new float[128 * 12];
@@ -41,7 +42,7 @@ namespace FoxMelee {
             if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
             holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
-            model?.Hide();
+            model?.Hide(); effects?.Hide();
             combat?.ReleaseAll();
         }
 
@@ -59,7 +60,7 @@ namespace FoxMelee {
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
-                    model?.Hide();
+                    model?.Hide(); effects?.Hide();
                 }
                 combat?.ReleaseAll();
                 return;
@@ -77,7 +78,7 @@ namespace FoxMelee {
                 needPlace = true;
                 accumulator = 0;
                 if (placeholder) placeholder.SetActive(false);
-                model?.Hide();
+                model?.Hide(); effects?.Hide();
                 combat?.ReleaseAll();
                 return;
             }
@@ -120,6 +121,7 @@ namespace FoxMelee {
                 model = null;
             }
             if (model == null) DrawPlaceholder(hk);
+            effects?.Draw(core, fox, room);
         }
 
         // D-pad left/right: Hollow Knight gets the Knight back and presses "up" for him; FoxSession keeps him there
@@ -160,6 +162,7 @@ namespace FoxMelee {
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
             if (s.FoxHits) combat = new CombatBridge();
+            try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
             focus = new FocusRules(Math.Max(1, (int)Math.Round(s.FocusSeconds * 60)), 33);
             state = State.Running;
             Log("libmelee_core running");

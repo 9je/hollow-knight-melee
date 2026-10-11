@@ -126,5 +126,36 @@ namespace FoxMelee.Tests {
             Assert.True(core.ReadFighter(0, out var f));
             Assert.Equal(4f, f.Hitlag);
         }
+
+        [Fact]
+        public void ShieldAndLasersAreReadFromMelee() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadShield(out var sh));
+            Assert.Equal(0u, sh.Active);
+            core.SetInput(0, new McInput { Buttons = 0x0020, TriggerR = 255 });
+            for (int i = 0; i < 5; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadShield(out sh));
+            Assert.Equal(1u, sh.Active);
+            Assert.InRange(sh.Radius, 6f, 20f);
+            core.SetInput(0, new McInput());
+            for (int i = 0; i < 30; i++) Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput { Buttons = 0x0200 });
+            Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput());
+            var items = new McItem[16];
+            bool laser = false;
+            for (int i = 0; i < 40 && !laser; i++) {
+                Assert.True(core.Step(), core.Error);
+                int n = core.ReadItems(items);
+                for (int k = 0; k < n; k++) laser |= items[k].Kind == MeleeCore.FoxLaser && Math.Abs(items[k].Vx) > 1;
+            }
+            Assert.True(laser);
+        }
     }
 }

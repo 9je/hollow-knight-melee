@@ -347,3 +347,51 @@ int mc_report_hit(int port, int follower, uint32_t group, float damage) {
   if (d > (int32_t)ld32(c, fp + 0x1914)) st32(c, fp + 0x1914, (uint32_t)d);
   return 0;
 }
+
+/* ---- shield bubble ---- */
+int mc_read_shield(int port, int follower, McShield *out) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  memset(out, 0, sizeof *out);
+  uint32_t fp = fighter_at(c, port, follower);
+  if (!fp) return 1;
+  uint32_t action = ld32(c, fp + 0x10);
+  /* GuardOn 178, Guard 179, GuardSetOff 181 (shield stun), GuardReflect 182; GuardOff 180 has dropped it */
+  if (action < 178 || action > 182 || action == 180) return 0;
+  uint32_t data = ld32(c, fp + 0x10C), x8 = in_mem1(data, 0x10) ? ld32(c, data + 8) : 0;
+  uint32_t parts = ld32(c, fp + 0x5E8);
+  if (!in_mem1(x8, 0x14) || !in_mem1(parts, 0x10)) return 0;
+  uint32_t joint = ld32(c, parts + 0x10u * ld8(c, x8 + 0x11));
+  if (!in_mem1(joint, 0x80)) return 0;
+  uint32_t mt = joint + 0x44;                              /* HSD_JObj world matrix, 3x4 row-major */
+  float a = f32at(c, mt), b = f32at(c, mt + 16), d = f32at(c, mt + 32);
+  out->active = 1;
+  out->x = f32at(c, mt + 12); out->y = f32at(c, mt + 28);
+  out->radius = sqrtf(a * a + b * b + d * d);
+  out->hard = f32at(c, fp + 0x199C);
+  return 0;
+}
+
+/* ---- items ---- */
+#define ADDR_PLINK_HEADS 0x804D782Cu   /* HSD_GObjPLinkHead: HSD_GObj *[] by p_link */
+#define PLINK_ITEM 9u
+int mc_read_items(McItem out[], int max) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t heads = ld32(c, ADDR_PLINK_HEADS);
+  if (!in_mem1(heads, 4 * (PLINK_ITEM + 1))) return 0;
+  int n = 0;
+  for (uint32_t g = ld32(c, heads + 4 * PLINK_ITEM), guard = 0; g && n < max && guard < 4096; g = ld32(c, g + 8), guard++) {
+    if (!in_mem1(g, 0x30)) break;
+    uint32_t it = ld32(c, g + 0x2C);                      /* Item */
+    if (!in_mem1(it, 0x60)) continue;
+    McItem *o = &out[n++];
+    o->kind = ld32(c, it + 0x10);
+    o->facing = f32at(c, it + 0x2C);
+    o->vx = f32at(c, it + 0x40); o->vy = f32at(c, it + 0x44);
+    o->x = f32at(c, it + 0x4C); o->y = f32at(c, it + 0x50);
+  }
+  return n;
+}
