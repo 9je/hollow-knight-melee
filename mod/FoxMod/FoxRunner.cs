@@ -42,6 +42,8 @@ namespace FoxMelee {
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
         int scanTimer;
+        readonly Dictionary<Collider2D, Vector2> terrainAt = new Dictionary<Collider2D, Vector2>();   // where each was last frame
+        bool movingLogged;
         readonly RespawnHold respawnHold = new RespawnHold();
         readonly FocusSound focusSound = new FocusSound();
         readonly FocusEffects focusEffects = new FocusEffects();   // after a respawn: wait for the controller to be let go
@@ -284,6 +286,7 @@ namespace FoxMelee {
         /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played
         /// as the Knight (FoxSession gives him back) until the next room converts.
         bool EnterRoom(string scene) {
+            terrainAt.Clear();
             terrain = FindTerrain();
             terrainSet.Reset();
             terrainSet.Changed(Ids(terrain));
@@ -333,19 +336,29 @@ namespace FoxMelee {
         /// stops being terrain is noticed the same frame, new terrain within ScanFrames. Melee's collision is then
         /// rebuilt with the room's own transform, so nothing moves.
         bool WatchTerrain(string scene) {
-            bool gone = false;
-            foreach (var c in terrain) if (!LiveTerrain(c)) { gone = true; break; }
-            if (!gone && ++scanTimer < ScanFrames) return true;
+            bool gone = false, moved = false;
+            foreach (var c in terrain) {
+                if (!LiveTerrain(c)) { gone = true; break; }
+                // moving terrain (falling and bobbing platforms): rebuilt every frame it moves
+                var at = (Vector2)c.transform.position;
+                if (terrainAt.TryGetValue(c, out var was) && (at - was).sqrMagnitude > 1e-6f) moved = true;
+                terrainAt[c] = at;
+            }
+            if (!gone && !moved && ++scanTimer < ScanFrames) return true;
             scanTimer = 0;
             var now = FindTerrain();
-            if (!terrainSet.Changed(Ids(now))) { terrain = now; return true; }
+            bool changed = terrainSet.Changed(Ids(now));
+            if (!changed && !moved) { terrain = now; return true; }
             terrain = now;
+            if (moved && !changed) {
+                if (!movingLogged) { Log($"{scene}: terrain moving, collision follows it"); movingLogged = true; }
+            } else movingLogged = false;
             var outlines = Outlines(terrain);
             if (outlines.Count == 0) return true;   // keep what Melee has
             var shapes = RoomGeometry.Build(outlines, room);
             if (!core.BuildCollision(shapes, out var col)) { FoxMod.Instance.LogWarn($"{scene}: changed terrain not converted ({core.Error}); keeping the old collision"); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }
-            Log($"{scene}: terrain changed, collision rebuilt ({shapes.Count} shapes)");
+            if (changed) Log($"{scene}: terrain changed, collision rebuilt ({shapes.Count} shapes)");
             return true;
         }
 
