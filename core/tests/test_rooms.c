@@ -444,6 +444,8 @@ static void test_gx_decode(void) {
   CHECK(mc_gx_decode(ITEM, &v, &nv, &r, &nr) == 0 && nv > 0);
   for (int i = 0; i < nr; i++) CHECK(r[i].p_link == 9);
   CHECK(mc_gx_decode(0, &v, &nv, &r, &nr) == 0 && nv == 0 && nr == 0);
+  CHECK(mc_gx_decode(~0ull, &v, &nv, &r, &nr) == 0 && nv > 0);   /* everything (stage, HUD): every draw fully parsed */
+  CHECK(mc_gx_size_mismatches() == 0);
   mc_shutdown();
   CHECK(mc_gx_decode(FIGHTER, &v, &nv, &r, &nr) == -1);
 }

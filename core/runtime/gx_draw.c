@@ -41,6 +41,7 @@ static McGxVert *out_v; static int cap_v;
 static McGxRun *out_r; static int cap_r;
 static Tex *texs; static int ntex, captex;
 static int depth_dl;
+static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_stats) */
 
 /* the object drawing now */
 static uint64_t want_mask;
@@ -325,15 +326,40 @@ static C4 color_read(const uint8_t *p, int fmt) {
 
 typedef struct { float wx, wy, wz, vz, sx, sy; C4 col; float u, v; C4 chan[2]; } Vtx;
 
-static int skip_xform;
-static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o);
-static int read_vertex_state_only(Rd *r, int vat, Vtx *o) {
-  static const DrawSetup none = {1, -1, -1, 0, -1, 0};
-  skip_xform = 1;
-  int ok = read_vertex(r, vat, &none, o);
-  skip_xform = 0;
-  return ok;
+/* bytes per vertex in the stream for a vertex format: direct attributes by their format, indexed ones 1 or 2 */
+static uint32_t vertex_size(int vat) {
+  uint32_t lo = S.vcd_lo, hi = S.vcd_hi, a = S.vat_a[vat], b = S.vat_b[vat], cc = S.vat_c[vat], n = 0;
+  if (lo & 1) n++;
+  for (int i = 0; i < 8; i++) if (lo & (2u << i)) n++;
+  uint32_t ix[4] = {0, 0, 1, 2};
+  int pm = (int)((lo >> 9) & 3);
+  n += pm == 1 ? (uint32_t)((a & 1) ? 3 : 2) * (uint32_t)comp_size((int)((a >> 1) & 7)) : ix[pm];
+  int nm = (int)((lo >> 11) & 3);
+  if (nm == 1) n += (uint32_t)(((a >> 9) & 1) ? 9 : 3) * (uint32_t)comp_size((int)((a >> 10) & 7));
+  else if (nm) n += ix[nm] * ((((a >> 9) & 1) && ((a >> 31) & 1)) ? 3u : 1u);
+  for (int ch = 0; ch < 2; ch++) {
+    int cm = (int)((lo >> (13 + 2 * ch)) & 3);
+    n += cm == 1 ? color_size((int)((a >> (ch ? 18 : 14)) & 7)) : ix[cm];
+  }
+  for (int t = 0; t < 8; t++) {
+    int tm = (int)((hi >> (2 * t)) & 3);
+    if (tm != 1) { n += ix[tm]; continue; }
+    int cnt, type;
+    switch (t) {
+      case 0: cnt = (int)((a >> 21) & 1); type = (int)((a >> 22) & 7); break;
+      case 1: cnt = (int)(b & 1); type = (int)((b >> 1) & 7); break;
+      case 2: cnt = (int)((b >> 9) & 1); type = (int)((b >> 10) & 7); break;
+      case 3: cnt = (int)((b >> 18) & 1); type = (int)((b >> 19) & 7); break;
+      case 4: cnt = (int)((b >> 27) & 1); type = (int)((b >> 28) & 7); break;
+      case 5: cnt = (int)((cc >> 5) & 1); type = (int)((cc >> 6) & 7); break;
+      case 6: cnt = (int)((cc >> 14) & 1); type = (int)((cc >> 15) & 7); break;
+      default: cnt = (int)((cc >> 23) & 1); type = (int)((cc >> 24) & 7); break;
+    }
+    n += (uint32_t)(cnt ? 2 : 1) * (uint32_t)comp_size(type);
+  }
+  return n;
 }
+
 static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o) {
   uint32_t lo = S.vcd_lo, hi = S.vcd_hi, a = S.vat_a[vat], b = S.vat_b[vat], cc = S.vat_c[vat];
   int pmidx = (int)(S.matidx_a & 0x3F), tmidx[8];
@@ -392,7 +418,6 @@ static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o) {
     if (!p) return 0;
     for (int k = 0; k < n; k++) { int s2; tc[t][k] = comp_read(p + k * sz, type, frac, &s2); }
   }
-  if (skip_xform) return 1;
   /* transform */
   int pa = pmidx * 4;
   float pv[3];
@@ -551,16 +576,18 @@ static int draw(Rd *r, int op) {
   if (!rd_ok(r, 2)) return 0;
   int n = be16(r->p); r->p += 2;
   DrawSetup d;
-  if (!span_want) {   /* state only: parse the vertices to step over them */
-    d = (DrawSetup){1, -1, -1, 0, -1, 0};
-    Vtx tmp;
-    for (int i = 0; i < n; i++) if (!read_vertex_state_only(r, vat, &tmp)) return 0;
+  if (!span_want) {   /* state only: step over the vertices (their size is fixed by the vertex format) */
+    uint32_t size = vertex_size(vat) * (uint32_t)n;
+    if (!rd_ok(r, size)) return 0;
+    r->p += size;
     return 1;
   }
   setup_draw(&d);
   static Vtx *vs; static int capvs;
   if (n > capvs) { Vtx *p = realloc(vs, (size_t)n * sizeof *p); if (!p) return 0; vs = p; capvs = n; }
+  const uint8_t *first = r->p;
   for (int i = 0; i < n; i++) if (!read_vertex(r, vat, &d, &vs[i])) return 0;
+  if ((uint32_t)(r->p - first) != vertex_size(vat) * (uint32_t)n) size_mismatches++;   /* the skip path must agree */
   if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
   switch (prim) {
     case 0x80: for (int i = 0; i + 3 < n; i += 4) { emit_tri(&vs[i], &vs[i + 1], &vs[i + 2], &d); emit_tri(&vs[i], &vs[i + 2], &vs[i + 3], &d); } break;
@@ -784,3 +811,6 @@ void gx_draw_free(void) {
   free(out_v); out_v = NULL; cap_v = 0;
   free(out_r); out_r = NULL; cap_r = 0;
 }
+
+uint32_t mc_gx_size_mismatches(void) { return size_mismatches; }
+
