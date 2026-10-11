@@ -7,7 +7,7 @@ cd ~/Documents/ssbmhk
 bash mod/install.sh              # backs up saves + the game's Managed folder first
 ```
 
-Launch Hollow Knight from Steam (branch 1.5.78.11833, native Linux). The main menu shows "Modding API" and FoxMelee in the top-left mod list. To undo: `bash mod/uninstall.sh`.
+Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to Invisible (friends don't see you playing), and waits for Enter before starting Hollow Knight (branch 1.5.78.11833, native Linux). For full privacy also set Steam > Profile > Edit Profile > Privacy Settings > Game details to Private once, since Invisible doesn't hide playtime on your profile. The main menu shows "Modding API" and FoxMelee in the top-left mod list. To undo: `bash mod/uninstall.sh`.
 
 ## Controls
 
