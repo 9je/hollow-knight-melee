@@ -43,7 +43,8 @@ namespace FoxMelee {
         readonly TerrainSet terrainSet = new TerrainSet();
         int scanTimer;
         readonly RespawnHold respawnHold = new RespawnHold();
-        readonly FocusSound focusSound = new FocusSound();   // after a respawn: wait for the controller to be let go
+        readonly FocusSound focusSound = new FocusSound();
+        readonly FocusEffects focusEffects = new FocusEffects();   // after a respawn: wait for the controller to be let go
         string lastBusy = "";                   // Hollow Knight's busy flags last logged
 
         // Hollow Knight's respawn routines clear dead / hazardDeath first, then reload, place and wake the Knight:
@@ -236,6 +237,8 @@ namespace FoxMelee {
             }
             if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); focusSound.Heal(); }   // Focus heals and resets percent (spec §5.3)
             focusSound.Charging(step.Focusing);
+            focusEffects.Focusing(hero, step.Focusing);
+            if (step.Heal) focusEffects.Healed(hero);
             focusing = step.Focusing;
             return focusing;
         }
