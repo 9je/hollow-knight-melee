@@ -132,5 +132,16 @@ namespace FoxMelee.Tests {
             s.Stepped();
             Assert.True(s.KnightFollowsFox);
         }
+
+        [Fact]
+        public void TheRespawnHoldNeverOutlastsASecond() {
+            // a controller that never reads as let go (a drifting stick, a held button) must not lock Fox
+            var hold = new RespawnHold();
+            var right = new McInput { StickX = 100 };
+            hold.Arm();
+            for (int i = 0; i < RespawnHold.MaxFrames; i++) Assert.Equal(new McInput(), hold.Filter(right));
+            Assert.Equal(right, hold.Filter(right));
+            Assert.False(hold.Armed);
+        }
     }
 }

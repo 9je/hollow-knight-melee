@@ -43,6 +43,7 @@ namespace FoxMelee {
                 UnityEngine.Object.DontDestroyOnLoad(go);
                 var body = go.AddComponent<Rigidbody2D>();
                 body.isKinematic = true;
+                body.useFullKinematicContacts = true;   // a kinematic body otherwise ignores static colliders (geo rocks)
                 nailTriggers[i] = go.AddComponent<CircleCollider2D>();
                 nailTriggers[i].isTrigger = true;
                 nailDirections[i] = DamagesEnemy(go);

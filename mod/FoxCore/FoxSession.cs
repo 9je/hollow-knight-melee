@@ -14,13 +14,17 @@ namespace FoxMelee {
     /// would otherwise dash him straight back into the spikes (the Knight's respawn animation gives the player that
     /// moment; Melee would act on the first frame).
     public sealed class RespawnHold {
-        bool armed;
-        public void Arm() => armed = true;
+        public const int MaxFrames = 60;        // at most a second: a controller that never reads as let go can't lock Fox
+        int left;
+        public bool Armed => left > 0;
+        public void Arm() => left = MaxFrames;
         public McInput Filter(McInput i) {
-            if (!armed) return i;
-            if (i.Buttons != 0 || Far(i.StickX) || Far(i.StickY) || Far(i.CStickX) || Far(i.CStickY) || i.TriggerL > 42 || i.TriggerR > 42)
+            if (left <= 0) return i;
+            if (i.Buttons != 0 || Far(i.StickX) || Far(i.StickY) || Far(i.CStickX) || Far(i.CStickY) || i.TriggerL > 42 || i.TriggerR > 42) {
+                left--;
                 return new McInput();
-            armed = false;
+            }
+            left = 0;
             return i;
         }
         static bool Far(sbyte v) => v > 22 || v < -22;   // Melee's dead zone (0.2875 of 80)

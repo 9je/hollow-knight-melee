@@ -34,7 +34,9 @@ namespace FoxMelee {
         McFighter fox;
         const uint ActionWait = 14;             // Melee's Wait: Fox standing
         FocusRules focus;
-        bool focusing, interactHeld;
+        bool focusing, interactHeld, focusHeld;
+        McInput rawInput;                       // the controller this frame, before the respawn hold
+        float stillFor; int stillFrames; float lastX, lastY; bool stuckLogged;
         const int ScanFrames = 30;              // how often new terrain (a gate closing) is looked for
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
@@ -95,6 +97,7 @@ namespace FoxMelee {
             if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
             SetKnightVisible(hero, session.KnightVisible(f));
             HideKnightDeaths(hero, !session.KnightVisible(f));
+            Prompts.Active = !session.KnightVisible(f);
             if (f.Dead) sawDeath = true;
             if (PlayerData.instance.GetBool("atBench")) sawBench = true;
             if (session.Owner(f) == HeroOwner.Hollow) {
@@ -123,7 +126,8 @@ namespace FoxMelee {
             var take = session.Take(f);
             TakeHero(hero, take.IgnoreInput, take.Relinquish);
             holdingBody = true;
-            accumulator += Time.deltaTime;        // scaled: pausing Hollow Knight stops Melee
+            // real time, stopped only by Hollow Knight's pause: its time scale can be left low or at 0 after a death
+            accumulator += gm.gameState == GlobalEnums.GameState.PAUSED ? 0f : Time.unscaledDeltaTime;
             int frames = 0;
             while (accumulator >= Frame && frames < 4) {
                 accumulator -= Frame;
@@ -136,6 +140,7 @@ namespace FoxMelee {
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
                 if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
+                rawInput = input;
                 input = respawnHold.Filter(input);
                 core.SetInput(0, input);
                 int at = 0;
@@ -156,6 +161,8 @@ namespace FoxMelee {
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
+            WatchStuck(frames);
+            if (gx != null) gx.Glow = focusing;
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
@@ -209,6 +216,9 @@ namespace FoxMelee {
             var pd = PlayerData.instance;
             bool still = fox.Airborne == 0 && (fox.Action == ActionWait || focusing);
             var step = focus.Tick(held, still, pd.GetInt("MPCharge"), pd.GetInt("health"), pd.GetInt("maxHealth"));
+            if (held && !focusHeld && !step.Focusing)
+                Log("focus: " + (FocusRules.WhyNot(still, pd.GetInt("MPCharge"), focus.Cost, pd.GetInt("health"), pd.GetInt("maxHealth")) ?? "not started"));
+            focusHeld = held;
             if (step.Drain > 0) hero.TakeMP(step.Drain);
             if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); }   // Focus heals and resets percent (spec §5.3)
             focusing = step.Focusing;
@@ -217,6 +227,7 @@ namespace FoxMelee {
 
         bool Boot() {
             var s = FoxMod.Instance.Settings;
+            Prompts.Hook();
             if (!hooked) {
                 hooked = true;
                 On.HeroController.Respawn += (orig, self) => Track(orig(self));
@@ -352,6 +363,20 @@ namespace FoxMelee {
             DontDestroyOnLoad(copy);
             foreach (var r in copy.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = true;
             return copy;
+        }
+
+        // Fox not moving for 3 s while the controller is pushed: log what is in the way (once per standstill)
+        void WatchStuck(int frames) {
+            bool pushed = rawInput.Buttons != 0 || Math.Abs((int)rawInput.StickX) > 40 || Math.Abs((int)rawInput.StickY) > 40;
+            bool moved = Math.Abs(fox.X - lastX) > 0.01f || Math.Abs(fox.Y - lastY) > 0.01f;
+            lastX = fox.X; lastY = fox.Y;
+            if (moved || !pushed) { stillFor = 0; stillFrames = 0; stuckLogged = false; return; }
+            stillFor += Time.unscaledDeltaTime; stillFrames += frames;
+            if (stillFor < 3f || stuckLogged) return;
+            stuckLogged = true;
+            Log($"Fox not moving for 3 s: action {fox.Action}, airborne {fox.Airborne}, Melee frames run {stillFrames}, time scale {Time.timeScale}, " +
+                $"game state {GameManager.instance.gameState}, respawn hold {respawnHold.Armed}, focusing {focusing}, interacting {session.Interacting}, " +
+                $"stick ({rawInput.StickX}, {rawInput.StickY}), buttons {rawInput.Buttons:X4}");
         }
 
         // What Hollow Knight is doing with the Knight, logged when it changes (deaths, spikes, respawns, loading).

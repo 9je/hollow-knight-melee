@@ -25,6 +25,8 @@ namespace FoxMelee {
         readonly MeshRenderer renderer;
         bool shown;
         public bool Shown => shown;
+        public bool Glow;                       // Fox is focusing: he pulses brighter (the Knight's focus has its glow)
+        readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
 
         public GxRenderer() {
             sprite = Shader.Find("Sprites/Default") ?? throw new InvalidOperationException("Sprites/Default shader not found");
@@ -71,6 +73,9 @@ namespace FoxMelee {
             mesh.RecalculateBounds();
             renderer.sharedMaterials = mats;
             if (like != null) { renderer.sortingLayerID = like.sortingLayerID; renderer.sortingOrder = like.sortingOrder; }
+            float g = Glow ? 1.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 10f) : 1f;
+            block.SetColor("_Color", new Color(g, g, g, 1f));
+            renderer.SetPropertyBlock(block);
             if (!shown) { root.SetActive(true); shown = true; }
             return true;
         }

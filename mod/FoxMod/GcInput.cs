@@ -34,7 +34,7 @@ namespace FoxMelee {
 
         public void Dispose() => adapter.Dispose();
 
-        sealed class GcDevice : InputDevice {
+        internal sealed class GcDevice : InputDevice {
             readonly GcInput gc;
 
             public GcDevice(GcInput gc) : base("GameCube Controller (adapter)") {

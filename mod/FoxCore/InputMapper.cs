@@ -68,6 +68,11 @@ namespace FoxMelee {
 
         public FocusRules(int frames, int cost) { this.frames = frames; this.cost = cost; }
 
+        /// Why a Focus press does nothing (null: it can start), for the log.
+        public static string WhyNot(bool still, int soul, int cost, int health, int maxHealth) =>
+            health >= maxHealth ? "masks are full" : soul < cost ? $"needs {cost} soul (has {soul})" : !still ? "Fox must stand still on the ground" : null;
+        public int Cost => cost;
+
         public FocusStep Tick(bool held, bool canFocus, int soul, int health, int maxHealth) {
             if (!held || !canFocus || health >= maxHealth || (frame == 0 && soul < cost)) { frame = 0; return default; }
             int drain = cost * (frame + 1) / frames - cost * frame / frames;
