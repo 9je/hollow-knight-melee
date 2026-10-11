@@ -25,6 +25,7 @@ namespace FoxMelee {
         EffectsRenderer effects;                // shield, shine and lasers
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
+        SfxPlayer sfx;                          // Melee's sound effects; null = silent
         readonly float[] bones = new float[128 * 12];
         McFighter fox;
         const uint ActionWait = 14;             // Melee's Wait: Fox standing
@@ -44,6 +45,7 @@ namespace FoxMelee {
             if (placeholder) placeholder.SetActive(false);
             model?.Hide(); effects?.Hide();
             combat?.ReleaseAll();
+            sfx?.StopAll();
         }
 
         static HeroFlags Flags(HeroController h) => new HeroFlags {
@@ -109,6 +111,7 @@ namespace FoxMelee {
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
                 if ((combat == null || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                sfx?.Frame(core);
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
@@ -163,6 +166,7 @@ namespace FoxMelee {
             }
             if (s.FoxHits) combat = new CombatBridge();
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
+            try { sfx = SfxPlayer.Create(core, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
             focus = new FocusRules(Math.Max(1, (int)Math.Round(s.FocusSeconds * 60)), 33);
             state = State.Running;
             Log("libmelee_core running");
