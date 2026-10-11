@@ -121,5 +121,16 @@ namespace FoxMelee.Tests {
             Assert.Equal(rest, hold.Filter(rest));                   // let go: Fox plays again
             Assert.Equal(right, hold.Filter(right));
         }
+
+        [Fact]
+        public void TheKnightFollowsFoxOnlyOnceAMeleeFrameHasRunSinceFoxWasPlaced() {
+            // a placement lands at Melee's next frame: until then Melee still has Fox where he died (on the spikes)
+            var s = new FoxSession();
+            Assert.True(s.KnightFollowsFox);
+            s.Placed();
+            Assert.False(s.KnightFollowsFox);
+            s.Stepped();
+            Assert.True(s.KnightFollowsFox);
+        }
     }
 }

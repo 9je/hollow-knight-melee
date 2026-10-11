@@ -112,7 +112,12 @@ namespace FoxMelee {
                 return;
             }
             if (!WatchTerrain(gm.sceneName)) return;
-            if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
+            if (needPlace) {
+                if (!PlaceAtKnight(hero)) return;
+                needPlace = false;
+                session.Placed();
+                accumulator = Frame;              // the placement lands at the next Melee frame: run one now
+            }
             if (sawDeath || sawBench) { core.SetPercent(0f); sawDeath = sawBench = false; }
             var take = session.Take(f);
             TakeHero(hero, take.IgnoreInput, take.Relinquish);
@@ -143,12 +148,14 @@ namespace FoxMelee {
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
                 if ((!pause || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                session.Stepped();
                 sfx?.Frame(core);
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
                 enemies?.AfterFrame(hero);
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
+            if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise

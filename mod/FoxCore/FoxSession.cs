@@ -70,6 +70,13 @@ namespace FoxMelee {
             return roomReady && !HollowBusy(f) ? HeroOwner.Fox : HeroOwner.Hollow;
         }
 
+        bool placing;
+        /// Fox was placed (mc_place/respawn_fighter): it lands at Melee's next frame, and until then Melee still has him
+        /// where he was (after spikes: on them). The Knight must not be moved there.
+        public void Placed() => placing = true;
+        public void Stepped() => placing = false;
+        public bool KnightFollowsFox => !placing;
+
         /// When Fox next takes the Knight: true after spikes or death (Fox comes back still, as the Knight does),
         /// false after a door or transition (Fox keeps his momentum). Consumed by the call.
         public bool TakeRespawns() {
