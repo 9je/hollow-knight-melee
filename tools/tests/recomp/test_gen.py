@@ -80,3 +80,13 @@ def test_gecko_body_returning_past_the_call_site_gets_landings(real, tmp_path):
     generate(dol, fns, tmp_path, gecko=code)
     shards = "".join(p.read_text() for p in tmp_path.glob("shard_*.c"))
     assert "if (r_ == 0x8009987Cu) goto L_8009987C;" in shards
+
+
+def test_tap_names_declared_and_called(real, tmp_path):
+    dol, fns = real
+    generate(dol, fns, tmp_path, tap_names=["HSD_AudioSFXKeyOffAll"])
+    shards = "".join(p.read_text() for p in tmp_path.glob("shard_*.c"))
+    assert "  tap_HSD_AudioSFXKeyOffAll(c);\n" in shards
+    assert "void tap_HSD_AudioSFXKeyOffAll(Cpu *c);" in (tmp_path / "guest_fns.h").read_text()
+    with pytest.raises(ValueError):
+        generate(dol, fns, tmp_path, tap_names=["no_such_function"])

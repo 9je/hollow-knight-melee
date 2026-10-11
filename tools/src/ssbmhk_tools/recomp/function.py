@@ -60,11 +60,14 @@ def _guard(pre: str, test: str, action: str) -> str:
 
 class Program:
     def __init__(self, funcs: list[Func], data_words: list[int], hle: dict[int, str] | None = None, entries=(),
-                 return_offsets: dict[int, set[int]] | None = None):
+                 return_offsets: dict[int, set[int]] | None = None, taps: dict[int, str] | None = None):
         """entries: extra entry points, reached by indirect jumps the code itself does not reveal.
-        return_offsets: function start -> K, where a call to that function may return to its return address + K."""
+        return_offsets: function start -> K, where a call to that function may return to its return address + K.
+        taps: function start -> name; the function's body first calls host `void tap_<name>(Cpu *)` (read-only
+        observers: they must not change guest state), then runs unchanged."""
         return_offsets = return_offsets or {}
         self.hle = dict(hle or {})  # function start -> host replacement hle_<name>
+        self.taps = dict(taps or {})  # function start -> host observer tap_<name>
         self.funcs = sorted(funcs, key=lambda f: f.addr)
         self._starts = [f.addr for f in self.funcs]
         self.entries: set[int] = set(self._starts) | {e for e in entries if self.func_at(e) is not None}
@@ -167,6 +170,8 @@ class Program:
                "  GUEST_POLL();"]   # function entry is an interrupt check point
         if entry != f.addr:
             out.append(f"  goto L_{entry:08X};")
+        elif entry in self.taps:
+            out.insert(1, f"  tap_{self.taps[entry]}(c);")
         for k, w in enumerate(f.words):
             pc = f.addr + 4 * k
             i = decode(w)
