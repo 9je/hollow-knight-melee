@@ -39,7 +39,7 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
     enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail.
 
 Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
-To turn Fox's hits off, set `FoxHits` to false in FoxMelee.GlobalSettings.json.
+To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 ## What to send back
 

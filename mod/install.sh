@@ -32,7 +32,7 @@ if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-fox" ]; then
 else
   echo "fox.model not extracted (no ISO in dev.toml or no tools environment): the mod draws a placeholder"
 fi
-settings="$saves/FoxMelee.GlobalSettings.json"
+settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ] && [ ! -f "$settings" ]; then
   mkdir -p "$saves"
   printf '{\n  "IsoPath": "%s",\n  "WorldScale": 6.0,\n  "CameraMargin": 40.0,\n  "ShowPlaceholder": true,\n  "KeyboardFallback": true\n}\n' "$iso" > "$settings"

@@ -108,7 +108,7 @@ namespace FoxMelee {
         bool Boot() {
             var s = FoxMod.Instance.Settings;
             string dir = FoxMod.ModDir, so = Path.Combine(dir, "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
-            if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMelee.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
+            if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
             if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
             if (!core.StartSoloFox()) { Fail("mc_start_match: " + core.Error); return false; }
