@@ -73,3 +73,18 @@ make -C core replay-check-tool && (cd tools && .venv/bin/ssbmhk-replay-check)   
 - `mc_start_match(..., MC_ONLINE_RNG)` replays an online match: Slippi online re-seeds the RNG every frame (`runtime/online_rng.gecko` plus a host proc).
 - A zero result of `fnmsub`/`fnmsubs`/`ps_nmsub` gets the sign Slippi's deterministic JIT gives it (`b - a*c`), not the hardware's (`gekko_slippi_nmsub`, set by `mc_init`; the difftest keeps the hardware rule).
 - Replay checking compares action, position, facing, percent, shield, velocities and airborne, bit for bit, on every frame for every fighter. Measured speed on the development machine: 100–125 frames/s on most stages, 66 on Fountain of Dreams (its reflections), so 1.1–2× real time.
+
+## Rooms (plan 2)
+
+```bash
+make -C core room-test     # validation and the outline builder (no game needed)
+make -C core rooms-test    # reload, bounds, placement and a built room in the real game
+(cd tools && .venv/bin/ssbmhk-replay-check --reload-collision)   # stages' own collision through the room API
+```
+
+- `mc_build_collision(shapes)` turns solid outlines and one-way platforms into Melee collision (`MapCollData`). It uses Melee's own floor/wall/ceiling slope rule and ledge rule. Coordinates are Melee units; the host stage is FD (world scale 1.0).
+- `mc_load_collision(col)` validates at once and applies at the next frame boundary. Inside the game it frees the previous collision and calls the game's own `mpLibLoad`, so collision behaves exactly as on a stage. After loading different geometry, place every fighter with `mc_place_fighter`.
+- `mc_set_bounds(blast, camera)` sets the room's blast zone and camera box.
+- `mc_place_fighter(port, x, y)` moves a fighter and keeps its action and velocity. A grounded fighter is snapped to a floor within 10 units, otherwise it becomes airborne.
+- Oracle: reloading Final Destination's own collision at the start of the FD replay keeps it bit-exact.
+- Limits: 2048 vertices, 1536 lines and 256 shapes per room, as in Melee.

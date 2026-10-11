@@ -116,12 +116,71 @@ static void test_place(void) {
   mc_shutdown();
 }
 
+/* Grounded fighters stand 0.0001 above their floor (Melee), hence the tolerances below.
+ * L-shaped ground (floor y=0 from x=-100 to 60, a wall up to y=100 at x=60..80) and a platform at y=30 */
+static McVec2 ell[6] = {{-100, 0}, {60, 0}, {60, 100}, {80, 100}, {80, -50}, {-100, -50}};
+static McVec2 plat[2] = {{-40, 30}, {20, 30}};
+static const McCollision *build(float dx) {
+  static McVec2 e2[6], p2[2];
+  for (int i = 0; i < 6; i++) e2[i] = (McVec2){ell[i].x + dx, ell[i].y};
+  for (int i = 0; i < 2; i++) p2[i] = (McVec2){plat[i].x + dx, plat[i].y};
+  McShape s[2] = {{MC_SOLID, e2, 6, 0}, {MC_PLATFORM, p2, 2, 0}};
+  const McCollision *c; char why[200];
+  CHECK(mc_build_collision(s, 2, &c, why, sizeof why) == 0);
+  return c;
+}
+static void enter_room(float dx, float x, float y) {
+  McBox blast = {-300 + dx, 300 + dx, 300, -200}, cam = {-250 + dx, 250 + dx, 250, -150};
+  CHECK(mc_load_collision(build(dx)) == 0);
+  CHECK(mc_set_bounds(&blast, &cam) == 0);
+  CHECK(mc_place_fighter(0, x, y) == 0);
+  steps(1, NULL);
+}
+
+static void test_room(void) {
+  solo_fox();
+  steps(180, NULL);
+  McInput right = {0}; right.stick_x = 127;
+  McInput down = {0}; down.stick_y = -127;
+  McInput drift_right = {0}; drift_right.stick_x = 60;
+  /* wall: running right stops at x < 60 */
+  enter_room(0, 0, 0);
+  CHECK(fox().airborne == 0 && fabsf(fox().y) < 0.001f);
+  steps(90, &right);
+  CHECK(fox().x < 60.0f && fox().x > 40.0f && fox().airborne == 0);
+  /* platform: stand on it, press down: Pass, then land on the floor below */
+  enter_room(0, -10, 30);
+  steps(20, NULL);
+  CHECK(fox().airborne == 0 && fabsf(fox().y - 30.0f) < 0.001f);
+  int passed = 0;
+  for (int i = 0; i < 10; i++) { steps(1, &down); passed |= fox().action == 244; }
+  CHECK(passed);
+  steps(60, NULL);
+  CHECK(fox().airborne == 0 && fabsf(fox().y) < 0.001f);
+  /* ledge: falling just left of the ledge at (-100, 0) while facing it: CliffCatch */
+  enter_room(0, -112, 25);
+  int caught = 0;
+  for (int i = 0; i < 120 && !caught; i++) { steps(1, &drift_right); caught = fox().action == 252 || fox().action == 253; }
+  CHECK(caught);
+  /* many switches between two rooms: no leak, still standing on the right floor */
+  uint32_t lines_at = 0;
+  for (int i = 0; i < 200; i++) {
+    enter_room(i % 2 ? 500.0f : 0.0f, (i % 2 ? 500.0f : 0.0f) - 20.0f, 0);
+    if (i == 2) lines_at = mc_peek32(0x804D64BCu);
+  }
+  CHECK(mc_peek32(0x804D64BCu) == lines_at);
+  steps(30, NULL);
+  CHECK(fox().airborne == 0 && fabsf(fox().y) < 0.001f && fox().x > 470.0f);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   test_reload_is_invisible();
   test_bounds();
   test_place();
+  test_room();
   puts("rooms tests passed");
   return 0;
 }
