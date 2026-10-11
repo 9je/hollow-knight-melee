@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install the Modding API and FoxMelee into Hollow Knight (1.5.78.11833, native Linux). Backs up the game's
-# Managed folder (once) and your saves (every run) first. usage: mod/install.sh [HK folder]
+# Managed folder and your saves first (each once). usage: mod/install.sh [HK folder]
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 hk="${1:-$HOME/.steam/steam/steamapps/common/Hollow Knight}"
@@ -8,8 +8,8 @@ managed="$hk/hollow_knight_Data/Managed"
 [ -f "$managed/Assembly-CSharp.dll" ] || { echo "not a Hollow Knight folder: $hk" >&2; exit 1; }
 saves="${HK_SAVES:-$HOME/.config/unity3d/Team Cherry/Hollow Knight}"   # overridable for dry runs
 backups="${BACKUP_DIR:-$HOME/Documents}"
-stamp="$(date +%Y%m%d-%H%M%S)"
-if [ -d "$saves" ]; then cp -a "$saves" "$backups/hollow-knight-save-backup-$stamp"; echo "saves backed up to $backups/hollow-knight-save-backup-$stamp"; fi
+backup="$backups/hollow-knight-save-backup"   # one backup, made once; kept as long as it exists
+if [ -d "$saves" ] && [ ! -d "$backup" ]; then cp -a "$saves" "$backup"; echo "saves backed up to $backup"; fi
 [ -d "$managed.vanilla" ] || { cp -a "$managed" "$managed.vanilla"; echo "vanilla Managed backed up to $managed.vanilla"; }
 [ -f "$repo/mod/lib/api/Assembly-CSharp.dll" ] || bash "$repo/mod/fetch_api.sh"
 make -s -C "$repo/core" shared

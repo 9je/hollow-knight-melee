@@ -6,8 +6,9 @@
 # Game details to Private (once, by hand).
 set -euo pipefail
 saves="$HOME/.config/unity3d/Team Cherry/Hollow Knight"
-backup="$HOME/Documents/hollow-knight-save-backup-$(date +%Y%m%d-%H%M%S)"
-if [ -d "$saves" ]; then cp -a "$saves" "$backup" && diff -rq "$saves" "$backup" >/dev/null && echo "saves backed up to $backup"; fi
+backup="$HOME/Documents/hollow-knight-save-backup"   # one backup, made once (install.sh uses the same one)
+if [ -d "$backup" ]; then echo "save backup: $backup"
+elif [ -d "$saves" ]; then cp -a "$saves" "$backup" && diff -rq "$saves" "$backup" >/dev/null && echo "saves backed up to $backup"; fi
 command -v steam >/dev/null || { echo "steam not found on PATH" >&2; exit 1; }
 pgrep -x steam >/dev/null || { echo "start Steam (and log in) first" >&2; exit 1; }
 steam steam://friends/status/invisible
