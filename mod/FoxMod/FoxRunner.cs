@@ -39,6 +39,21 @@ namespace FoxMelee {
         List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
         readonly TerrainSet terrainSet = new TerrainSet();
         int scanTimer;
+        readonly RespawnHold respawnHold = new RespawnHold();   // after a respawn: wait for the controller to be let go
+        string lastBusy = "";                   // Hollow Knight's busy flags last logged
+
+        // Hollow Knight's respawn routines clear dead / hazardDeath first, then reload, place and wake the Knight:
+        // Fox waits until they finish (10 s at most, in case one is stopped part way).
+        static int respawnRunning;
+        static float respawnSince;
+        static bool hooked;
+        static System.Collections.IEnumerator Track(System.Collections.IEnumerator inner) {
+            respawnRunning++;
+            respawnSince = Time.unscaledTime;
+            try { while (inner.MoveNext()) yield return inner.Current; }
+            finally { respawnRunning--; }
+        }
+        static bool Respawning => respawnRunning > 0 && Time.unscaledTime - respawnSince < 10f;
 
         static void Log(string m) => FoxMod.Instance.Log(m);
         void Fail(string why) {
@@ -57,6 +72,7 @@ namespace FoxMelee {
             WaitingToTransition = h.transitionState == GlobalEnums.HeroTransitionState.WAITING_TO_TRANSITION,
             HazardRespawning = h.cState.hazardRespawning, HazardDeath = h.cState.hazardDeath, Dead = h.cState.dead,
             AcceptingInput = h.acceptingInput, ControlRelinquished = h.controlReqlinquished,
+            Respawning = Respawning,
             Loading = GameManager.instance.gameState != GlobalEnums.GameState.PLAYING
                    && GameManager.instance.gameState != GlobalEnums.GameState.PAUSED,
         };
@@ -74,6 +90,7 @@ namespace FoxMelee {
             }
             if (state == State.Waiting && !Boot()) return;
             var f = Flags(hero);
+            LogBusy(f);
             // A new room is converted once Hollow Knight has finished bringing the Knight in.
             if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
             SetKnightVisible(hero, session.KnightVisible(f));
@@ -113,6 +130,7 @@ namespace FoxMelee {
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
                 if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
+                input = respawnHold.Filter(input);
                 core.SetInput(0, input);
                 int at = 0;
                 bool pause = combat != null || enemies != null;
@@ -191,6 +209,11 @@ namespace FoxMelee {
 
         bool Boot() {
             var s = FoxMod.Instance.Settings;
+            if (!hooked) {
+                hooked = true;
+                On.HeroController.Respawn += (orig, self) => Track(orig(self));
+                On.HeroController.HazardRespawn += (orig, self) => Track(orig(self));
+            }
             string dir = FoxMod.ModDir, so = Path.Combine(dir, "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
             if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
@@ -295,6 +318,15 @@ namespace FoxMelee {
             holdingBody = false;
         }
 
+        // What Hollow Knight is doing with the Knight, logged when it changes (deaths, spikes, respawns, loading).
+        void LogBusy(HeroFlags f) {
+            var b = (f.Dead ? "dead " : "") + (f.HazardDeath ? "hazard-death " : "") + (f.HazardRespawning ? "hazard-respawning " : "")
+                  + (f.Respawning ? "respawn-routine " : "") + (f.Loading ? "loading " : "") + (f.Transitioning ? "transitioning " : "");
+            if (b == lastBusy) return;
+            lastBusy = b;
+            Log($"Hollow Knight: {(b.Length == 0 ? "playing" : b.Trim())} (Fox action {fox.Action}, airborne {fox.Airborne})");
+        }
+
         // Fox keeps his action and velocity; he starts where Hollow Knight put the Knight (feet to feet).
         // After spikes or death he comes back still, as the Knight does (no momentum to carry him back in).
         bool PlaceAtKnight(HeroController hero) {
@@ -302,6 +334,7 @@ namespace FoxMelee {
             var at = room.ToMelee(new V2(feet.x, feet.y));
             bool respawn = session.TakeRespawns();
             Log($"Fox takes the Knight at ({feet.x:F2}, {feet.y:F2}) → Melee ({at.X:F1}, {at.Y:F1}){(respawn ? ", respawned" : "")}");
+            if (respawn) respawnHold.Arm();
             if (respawn ? core.RespawnFighter(0, (float)at.X, (float)at.Y) : core.PlaceFighter(0, (float)at.X, (float)at.Y)) return true;
             Fail($"mc_place_fighter: {core.Error}");
             return false;

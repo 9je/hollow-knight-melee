@@ -16,7 +16,8 @@ namespace FoxMelee.Tests {
                 new HeroFlags { WaitingToTransition = true, HazardRespawning = true },
                 new HeroFlags { WaitingToTransition = true, HazardDeath = true },
                 new HeroFlags { WaitingToTransition = true, Dead = true },
-                new HeroFlags { WaitingToTransition = true, Loading = true } })   // a save loading: the Knight is parked off-room
+                new HeroFlags { WaitingToTransition = true, Loading = true },
+                new HeroFlags { WaitingToTransition = true, Respawning = true } })   // HK's Respawn/HazardRespawn still running   // a save loading: the Knight is parked off-room
                 Assert.Equal(HeroOwner.Hollow, s.Owner(busy));
         }
 
@@ -97,6 +98,28 @@ namespace FoxMelee.Tests {
             var respawning = Playing; respawning.HazardRespawning = true;
             s.Owner(respawning);
             Xunit.Assert.True(s.TakeRespawns());
+        }
+
+        [Fact]
+        public void HollowKnightsRespawnRoutineCountsAsARespawn() {
+            var s = new FoxSession();
+            s.RoomConverted("Tutorial_01", true);
+            Assert.Equal(HeroOwner.Hollow, s.Owner(new HeroFlags { WaitingToTransition = true, Respawning = true }));
+            Assert.Equal(HeroOwner.Fox, s.Owner(Playing));
+            Assert.True(s.TakeRespawns());
+        }
+
+        [Fact]
+        public void AfterARespawnFoxWaitsForTheControllerToBeLetGo() {
+            var hold = new RespawnHold();
+            var right = new McInput { StickX = 100 };
+            Assert.Equal(right, hold.Filter(right));                 // not armed: everything passes
+            hold.Arm();
+            Assert.Equal(new McInput(), hold.Filter(right));         // still holding right from before the hit
+            Assert.Equal(new McInput(), hold.Filter(new McInput { Buttons = GcButtons.A }));
+            var rest = new McInput { StickX = 5, StickY = -8, TriggerL = 20 };   // a real controller at rest
+            Assert.Equal(rest, hold.Filter(rest));                   // let go: Fox plays again
+            Assert.Equal(right, hold.Filter(right));
         }
     }
 }

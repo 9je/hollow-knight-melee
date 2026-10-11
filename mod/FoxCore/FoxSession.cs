@@ -6,6 +6,24 @@ namespace FoxMelee {
         public bool Transitioning, WaitingToTransition, HazardRespawning, HazardDeath, Dead;
         public bool AcceptingInput, ControlRelinquished;
         public bool Loading;                    // the game is not playing yet (a save loading, a cutscene)
+        public bool Respawning;                 // HeroController.Respawn / HazardRespawn still running (they clear
+                                                // dead / hazardDeath at their start, then wake the Knight up)
+    }
+
+    /// After a respawn Fox ignores the controller until it is let go once: a stick still held from before the hit
+    /// would otherwise dash him straight back into the spikes (the Knight's respawn animation gives the player that
+    /// moment; Melee would act on the first frame).
+    public sealed class RespawnHold {
+        bool armed;
+        public void Arm() => armed = true;
+        public McInput Filter(McInput i) {
+            if (!armed) return i;
+            if (i.Buttons != 0 || Far(i.StickX) || Far(i.StickY) || Far(i.CStickX) || Far(i.CStickY) || i.TriggerL > 42 || i.TriggerR > 42)
+                return new McInput();
+            armed = false;
+            return i;
+        }
+        static bool Far(sbyte v) => v > 22 || v < -22;   // Melee's dead zone (0.2875 of 80)
     }
 
     /// Who moves the Knight, and what FoxRunner must do to him. Pure, so the hand-over rules are unit-tested;
@@ -27,7 +45,7 @@ namespace FoxMelee {
         /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death, loading a save:
         /// until the game plays, the Knight is parked far outside the room).
         public static bool HollowBusy(HeroFlags f) =>
-            f.Loading || f.Transitioning || !f.WaitingToTransition || f.HazardRespawning || f.HazardDeath || f.Dead;
+            f.Respawning || f.Loading || f.Transitioning || !f.WaitingToTransition || f.HazardRespawning || f.HazardDeath || f.Dead;
 
         public bool NeedsRoom(string scene) => scene != roomScene;
 
@@ -42,7 +60,7 @@ namespace FoxMelee {
         }
 
         public HeroOwner Owner(HeroFlags f) {
-            if (f.HazardDeath || f.HazardRespawning || f.Dead) respawn = true;
+            if (f.HazardDeath || f.HazardRespawning || f.Dead || f.Respawning) respawn = true;
             if (interact >= 0) {
                 if (f.ControlRelinquished || !f.AcceptingInput) interactStarted = true;
                 bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= InteractWaitFrames;
