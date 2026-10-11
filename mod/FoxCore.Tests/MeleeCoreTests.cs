@@ -36,6 +36,19 @@ namespace FoxMelee.Tests {
             Assert.True(core.ReadFighter(0, out f));
             Assert.Equal(0u, f.Airborne);
             Assert.InRange(f.Y, 29.99f, 30.01f);   // on the platform
+            // a breakable wall goes: the room is rebuilt around Fox, who keeps standing where he is
+            var x0 = f.X;
+            var broken = new List<RoomShape> {
+                new RoomShape { Kind = ShapeKind.Solid, XY = new float[] { -100, 0, 60, 0, 60, -50, -100, -50 } },
+                new RoomShape { Kind = ShapeKind.Platform, XY = new float[] { -40, 30, 20, 30 } },
+            };
+            Assert.True(core.BuildCollision(broken, out var col2), core.Error);
+            Assert.True(core.LoadCollision(col2), core.Error);
+            for (int i = 0; i < 30; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out f));
+            Assert.Equal(0u, f.Airborne);
+            Assert.InRange(f.Y, 29.99f, 30.01f);
+            Assert.InRange(f.X, x0 - 0.01f, x0 + 0.01f);
             var bad = new List<RoomShape> { new RoomShape { Kind = ShapeKind.Solid, XY = new float[] { 0, 0, 1, 1 } } };
             Assert.False(core.BuildCollision(bad, out _));
             Assert.Contains("too few", core.Error);

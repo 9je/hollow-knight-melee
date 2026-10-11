@@ -26,6 +26,10 @@ namespace FoxMelee {
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         readonly float[] bones = new float[128 * 12];
         McFighter fox;
+        const int ScanFrames = 30;              // how often new terrain (a gate closing) is looked for
+        List<Collider2D> terrain = new List<Collider2D>();   // the colliders Melee's collision was built from
+        readonly TerrainSet terrainSet = new TerrainSet();
+        int scanTimer;
 
         static void Log(string m) => FoxMod.Instance.Log(m);
         void Fail(string why) {
@@ -72,6 +76,7 @@ namespace FoxMelee {
                 combat?.ReleaseAll();
                 return;
             }
+            if (!WatchTerrain(gm.sceneName)) return;
             if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
             var take = session.Take(f);
             TakeHero(hero, take.IgnoreInput, take.Relinquish);
@@ -129,11 +134,10 @@ namespace FoxMelee {
         /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played
         /// as the Knight (FoxSession gives him back) until the next room converts.
         bool EnterRoom(string scene) {
-            var outlines = new List<ColliderOutline>();
-            foreach (var c in FindObjectsOfType<Collider2D>()) {
-                if (!c.enabled || c.isTrigger || c.gameObject.layer != TerrainLayer || !c.gameObject.activeInHierarchy) continue;
-                AddOutlines(c, outlines);
-            }
+            terrain = FindTerrain();
+            terrainSet.Reset();
+            terrainSet.Changed(Ids(terrain));
+            var outlines = Outlines(terrain);
             if (outlines.Count == 0) { RoomFailed(scene, "no terrain colliders"); return true; }
             var (min, max) = RoomGeometry.Bounds(outlines);
             var s = FoxMod.Instance.Settings;
@@ -151,6 +155,47 @@ namespace FoxMelee {
             session.RoomConverted(scene, true);
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");
+            return true;
+        }
+
+        static bool LiveTerrain(Collider2D c) =>
+            c != null && c.enabled && !c.isTrigger && c.gameObject.layer == TerrainLayer && c.gameObject.activeInHierarchy;
+
+        static List<Collider2D> FindTerrain() {
+            var l = new List<Collider2D>();
+            foreach (var c in FindObjectsOfType<Collider2D>()) if (LiveTerrain(c)) l.Add(c);
+            return l;
+        }
+
+        static List<int> Ids(List<Collider2D> cs) {
+            var ids = new List<int>(cs.Count);
+            foreach (var c in cs) ids.Add(c.GetInstanceID());
+            return ids;
+        }
+
+        static List<ColliderOutline> Outlines(List<Collider2D> cs) {
+            var outlines = new List<ColliderOutline>();
+            foreach (var c in cs) AddOutlines(c, outlines);
+            return outlines;
+        }
+
+        /// Breakable walls, gates and anything else that adds or removes terrain mid-room: a converted collider that
+        /// stops being terrain is noticed the same frame, new terrain within ScanFrames. Melee's collision is then
+        /// rebuilt with the room's own transform, so nothing moves.
+        bool WatchTerrain(string scene) {
+            bool gone = false;
+            foreach (var c in terrain) if (!LiveTerrain(c)) { gone = true; break; }
+            if (!gone && ++scanTimer < ScanFrames) return true;
+            scanTimer = 0;
+            var now = FindTerrain();
+            if (!terrainSet.Changed(Ids(now))) { terrain = now; return true; }
+            terrain = now;
+            var outlines = Outlines(terrain);
+            if (outlines.Count == 0) return true;   // keep what Melee has
+            var shapes = RoomGeometry.Build(outlines, room);
+            if (!core.BuildCollision(shapes, out var col)) { FoxMod.Instance.LogWarn($"{scene}: changed terrain not converted ({core.Error}); keeping the old collision"); return true; }
+            if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }
+            Log($"{scene}: terrain changed, collision rebuilt ({shapes.Count} shapes)");
             return true;
         }
 

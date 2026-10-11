@@ -98,3 +98,21 @@ namespace FoxMelee {
         }
     }
 }
+
+namespace FoxMelee {
+    /// Which terrain colliders the room's Melee collision was built from: a broken wall or a closing gate changes the
+    /// set, and the collision is rebuilt (spec §4: breakables, arena doors).
+    public sealed class TerrainSet {
+        readonly System.Collections.Generic.HashSet<int> ids = new System.Collections.Generic.HashSet<int>();
+        bool seen;
+
+        public bool Changed(System.Collections.Generic.IEnumerable<int> live) {
+            var now = new System.Collections.Generic.HashSet<int>(live);
+            if (seen && now.SetEquals(ids)) return false;
+            ids.Clear(); ids.UnionWith(now); seen = true;
+            return true;
+        }
+
+        public void Reset() { ids.Clear(); seen = false; }
+    }
+}

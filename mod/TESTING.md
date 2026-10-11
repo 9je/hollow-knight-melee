@@ -36,7 +36,7 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
     hitlag (jab: 4 frames; bigger hits longer), then the enemy is knocked back. Down-air hits
     several times (as in Melee); a single hitbox never hits the same enemy twice. Enemies get Hollow Knight's knockback
     away from Fox (a back air sends an enemy behind him further behind), after the freeze. Grabs do not hurt
-    enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail.
+    enemies. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail, and Fox can then walk through (ModLog says "terrain changed, collision rebuilt").
 
 Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
 To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
