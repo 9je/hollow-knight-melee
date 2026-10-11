@@ -29,6 +29,8 @@ typedef struct Machine {
   int in_match;
   uint8_t start[0x138];                 /* StartMeleeData to install */
   uint32_t seed;
+  int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
+  int at_hits;                          /* paused there, mid-frame */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */

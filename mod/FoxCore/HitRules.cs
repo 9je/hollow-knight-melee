@@ -56,3 +56,36 @@ namespace FoxMelee {
         }
     }
 }
+
+namespace FoxMelee {
+    /// Melee's hitlag for victims outside Melee: a hit target stays frozen for the frames Melee gave Fox (attacker and
+    /// victim share the formula), counted in Melee frames; a new hit restarts the count, as Melee overwrites it.
+    public sealed class HitlagTimers {
+        readonly Dictionary<object, int> left = new Dictionary<object, int>();
+        readonly List<object> released = new List<object>();
+
+        /// True when the target was not frozen yet (the caller freezes it now).
+        public bool Freeze(object target, int frames) {
+            if (frames <= 0) return false;
+            bool fresh = !left.ContainsKey(target);
+            left[target] = frames;
+            return fresh;
+        }
+
+        public bool IsFrozen(object target) => left.ContainsKey(target);
+
+        /// After each Melee frame: the targets whose hitlag just ended.
+        public List<object> Tick() {
+            released.Clear();
+            foreach (var k in new List<object>(left.Keys))
+                if (--left[k] <= 0) { left.Remove(k); released.Add(k); }
+            return released;
+        }
+
+        public IEnumerable<object> ReleaseAll() {
+            var all = new List<object>(left.Keys);
+            left.Clear();
+            return all;
+        }
+    }
+}

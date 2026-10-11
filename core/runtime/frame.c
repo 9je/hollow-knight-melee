@@ -17,6 +17,7 @@
 #define MAGIC_SYNC_RNG 0x80000208u      /* GObj proc created by runtime/online_rng.gecko */
 #define ADDR_ONLINE_FLAG 0x80002F00u    /* read by runtime/online_rng.gecko; +4: the RNG offset */
 #define ADDR_GLOBAL_FRAME 0x80479D60u
+#define ADDR_COLL_RESOLVE 0x8006D1ECu   /* Fighter_procCollResolve: fighter proc 14, resolves the frame's hits */
 
 static uint32_t mode_struct(Cpu *c, uint32_t kind) {
   for (uint32_t m = ADDR_MODES; ld8(c, m + 1) != GM_COUNT; m += 0x14)
@@ -92,6 +93,12 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   if (target == MAGIC_SYNC_RNG) {   /* Slippi FN_SyncRNG: seed = rotl(global frame, 16) + RNG offset */
     st32(c, ADDR_RAND_SEED, rotl32(ld32(c, ADDR_GLOBAL_FRAME), 16) + ld32(c, ADDR_ONLINE_FLAG + 4));
     RET;
+  }
+  if (target == ADDR_COLL_RESOLVE && m->hit_pause && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
+    m->hit_pause = 0;                   /* mc_step_to_hits: give the host this frame's hitboxes */
+    m->at_hits = 1;
+    coro_yield();
+    m->at_hits = 0;
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);

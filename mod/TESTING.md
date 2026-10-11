@@ -27,7 +27,8 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 9. Pause (Start/Esc): Fox freezes; unpause: he continues.
 
 10. Fox hits enemies (King's Pass crawlers and flies): jab, tilts, smashes, aerials. Each hit does Melee's % × your nail
-    damage / 5 (old nail: Fox's jab = 4), gives Soul like a nail hit, and Fox freezes for Melee's hitlag. Down-air hits
+    damage / 5 (old nail: Fox's jab = 4), gives Soul like a nail hit, and both Fox and the enemy freeze for Melee's
+    hitlag (jab: 4 frames; bigger hits longer), then the enemy is knocked back. Down-air hits
     several times (as in Melee); a single hitbox never hits the same enemy twice. Enemies get Hollow Knight's knockback
     in the hit's direction. Also try the King's Pass breakable walls (may not break yet).
 

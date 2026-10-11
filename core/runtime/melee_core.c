@@ -118,6 +118,14 @@ void mc_shutdown(void) {
 }
 const char *mc_error(void) { return g_m && g_m->error[0] ? g_m->error : init_error; }
 int mc_step(void) { return run_frame(); }
+int mc_step_to_hits(void) {
+  Machine *m = g_m;
+  if (m && !m->dead && m->at_hits) return 0;
+  if (m) m->hit_pause = 1;
+  int rc = run_frame();
+  if (m && !m->dead) m->hit_pause = 0;
+  return rc < 0 ? -1 : g_m->at_hits ? 0 : 1;
+}
 uint64_t mc_frame(void) { return g_m ? g_m->frames : 0; }
 uint32_t mc_mem_crc32(void) { return g_m ? crc32_buf(g_m->cpu.mem, MEM1_SIZE) : 0; }
 static int in_mem1(uint32_t ea, uint32_t n) { return ea >= 0x80000000u && ea - 0x80000000u <= MEM1_SIZE - n; }
@@ -250,6 +258,7 @@ int mc_read_fighter(int port, int follower, McFighter *out) {
   out->kb_vel_y = f32at(c, fp + 0x90);
   out->ground_vel = f32at(c, fp + 0xEC);
   out->airborne = ld32(c, fp + 0xE0);
+  out->hitlag = f32at(c, fp + 0x195C);
   return 0;
 }
 

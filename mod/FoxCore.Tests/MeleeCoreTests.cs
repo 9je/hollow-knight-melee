@@ -87,5 +87,31 @@ namespace FoxMelee.Tests {
             core.ReadHitboxes(boxes);
             Assert.Equal(0u, boxes[0].Fresh);
         }
+
+        [Fact]
+        public void AHitReportedAtTheHitPauseGivesFoxHitlagThatFrame() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput { Buttons = 0x0100 });
+            Assert.True(core.Step(), core.Error);
+            core.SetInput(0, new McInput());
+            var boxes = new McHitbox[4];
+            int n = 0;
+            for (int i = 0; i < 10; i++) {
+                Assert.Equal(0, core.StepToHits());
+                if ((n = core.ReadHitboxes(boxes)) > 0) break;
+                Assert.True(core.Step(), core.Error);
+            }
+            Assert.True(n > 0);
+            Assert.True(core.ReportHit(boxes[0].Group, boxes[0].Damage), core.Error);
+            Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out var f));
+            Assert.Equal(4f, f.Hitlag);
+        }
     }
 }

@@ -18,6 +18,9 @@ namespace FoxMelee {
         readonly HitTracker tracker = new HitTracker();
         readonly Collider2D[] found = new Collider2D[32];
         readonly List<object> targets = new List<object>();
+        readonly List<GameObject> landed = new List<GameObject>();   // hit this frame: frozen for the hitlag after it
+        readonly HitlagTimers hitlag = new HitlagTimers();
+        readonly Dictionary<object, EnemyFreeze> frozen = new Dictionary<object, EnemyFreeze>();
         readonly GameObject strike;            // each hit's Source: Hollow Knight draws nail effects between it and the target
         RoomTransform room;
         float facing;
@@ -28,7 +31,8 @@ namespace FoxMelee {
             if (Evasion == null) FoxMod.Instance.LogWarn("HealthManager.evasionByHitRemaining not found: rapid Melee hits may be ignored");
         }
 
-        /// Checks one Melee frame's hitboxes; false if the core failed.
+        /// Checks one Melee frame's hitboxes at the core's hit pause (mc_step_to_hits), where a reported hit lands in
+        /// this frame as a Melee victim's would; false if the core failed.
         public bool Frame(MeleeCore core, RoomTransform room) {
             int n = core.ReadHitboxes(boxes);
             if (n < 0) return false;
@@ -42,6 +46,28 @@ namespace FoxMelee {
             foreach (var h in hits) Land(h, nail);
             foreach (var (group, damage) in HitTracker.Reports(hits)) core.ReportHit(group, damage);   // 1 = it just ended: harmless
             return true;
+        }
+
+        /// After the frame finished: victims' hitlag counts down, and this frame's victims freeze for the hitlag Melee
+        /// gave Fox (the attacker's and victim's hitlag share Melee's formula).
+        public bool AfterFrame(MeleeCore core) {
+            foreach (var k in hitlag.Tick()) Thaw(k);
+            if (landed.Count == 0) return true;
+            if (!core.ReadFighter(0, out var fox)) return false;
+            foreach (var go in landed)
+                if (go != null && hitlag.Freeze(go, (int)fox.Hitlag)) frozen[go] = new EnemyFreeze(go);
+            landed.Clear();
+            return true;
+        }
+
+        /// Room changes, Hollow Knight taking over, failures: nothing stays frozen.
+        public void ReleaseAll() {
+            foreach (var k in hitlag.ReleaseAll()) Thaw(k);
+            landed.Clear();
+        }
+
+        void Thaw(object k) {
+            if (frozen.TryGetValue(k, out var f)) { f.Release(); frozen.Remove(k); }
         }
 
         IEnumerable<object> Overlaps(McHitbox b) {
@@ -76,6 +102,8 @@ namespace FoxMelee {
             strike.transform.position = Hk(h.Box.X, h.Box.Y);
             var hm = target.GetComponentInParent<HealthManager>();
             if (hm != null && Evasion != null) Evasion.SetValue(hm, 0f);
+            var victim = hm != null ? hm.gameObject : target.gameObject;
+            if (!landed.Contains(victim)) landed.Add(victim);
             HitTaker.Hit(target.gameObject, new HitInstance {
                 Source = strike,
                 AttackType = AttackTypes.Nail,    // Soul and nail effects, as the nail gives

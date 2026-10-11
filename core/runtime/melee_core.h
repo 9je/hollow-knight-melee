@@ -10,7 +10,11 @@ extern "C" {
 int mc_init(const char *mem1_path, const char *iso_path);   /* boots to the first frame boundary */
 void mc_shutdown(void);
 const char *mc_error(void);
-int mc_step(void);                 /* runs exactly one frame */
+int mc_step(void);                 /* runs exactly one frame (or the rest of one paused by mc_step_to_hits) */
+/* Runs the next frame up to port 0's hit resolution (Fighter_procCollResolve, after Melee placed hitboxes and checked
+ * attack collision), where a hit reported with mc_report_hit lands in this frame. mc_step() finishes the frame.
+ * 0 paused there (or already), 1 the frame ended without reaching it (no fighter), -1 error. */
+int mc_step_to_hits(void);
 uint64_t mc_frame(void);           /* frame boundaries reached since mc_init */
 uint32_t mc_mem_crc32(void);       /* CRC-32 of MEM1 (determinism checks) */
 uint32_t mc_peek32(uint32_t ea);   /* big-endian MEM1 read; 0 outside MEM1 or with no machine */
@@ -26,6 +30,7 @@ typedef struct {
   float kb_vel_x, kb_vel_y;      /* +0x8C, +0x90 */
   float ground_vel;              /* +0xEC */
   uint32_t airborne;             /* +0xE0: 0 grounded, 1 airborne */
+  float hitlag;                  /* +0x195C: hitlag frames left */
 } McFighter;
 #define MC_START_SIZE 0x138
 void mc_set_input(int port, const McInput *in);     /* NULL = no controller */

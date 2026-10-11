@@ -35,6 +35,7 @@ namespace FoxMelee {
             holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
             model?.Hide();
+            combat?.ReleaseAll();
         }
 
         static HeroFlags Flags(HeroController h) => new HeroFlags {
@@ -51,6 +52,7 @@ namespace FoxMelee {
             if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide();
+                combat?.ReleaseAll();
                 return;
             }
             if (state == State.Waiting && !Boot()) return;
@@ -67,6 +69,7 @@ namespace FoxMelee {
                 accumulator = 0;
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide();
+                combat?.ReleaseAll();
                 return;
             }
             if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
@@ -79,8 +82,13 @@ namespace FoxMelee {
                 accumulator -= Frame;
                 frames++;
                 core.SetInput(0, InputMapper.Map(ReadPad()));
+                if (combat != null) {
+                    int at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
+                    if (at < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
+                    if (at == 0 && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                }
                 if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
-                if (combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
@@ -136,6 +144,7 @@ namespace FoxMelee {
             var blast = new McBox { Left = cam.Left - FarBlast, Right = cam.Right + FarBlast, Top = cam.Top + FarBlast, Bottom = cam.Bottom - FarBlast };
             if (!core.SetBounds(blast, cam)) { Fail($"{scene}: mc_set_bounds: {core.Error}"); return false; }
             room = t;
+            combat?.ReleaseAll();
             session.RoomConverted(scene, true);
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");

@@ -257,6 +257,44 @@ static void test_hitboxes(void) {
   mc_shutdown();
 }
 
+/* Melee resolves hits mid-frame (Fighter_procCollResolve, proc 14, after hitbox positions and attack collision):
+ * mc_step_to_hits pauses there so a hit reported then lands in the same frame, as a Melee victim's would. */
+static void test_hit_pause(void) {
+  McHitbox h[8];
+  /* pausing and resuming changes nothing about the game */
+  McInput idle = {0};
+  solo_fox(); steps(180, NULL); steps(20, &idle);
+  uint32_t plain = mc_mem_crc32(); uint64_t fr = mc_frame();
+  mc_shutdown();
+  solo_fox(); steps(180, NULL);
+  mc_set_input(0, &idle);
+  for (int i = 0; i < 20; i++) {
+    uint64_t before = mc_frame();
+    CHECK(mc_step_to_hits() == 0);
+    CHECK(mc_frame() == before);                         /* mid-frame: the boundary has not been reached */
+    CHECK(mc_step_to_hits() == 0);                       /* already there */
+    CHECK(mc_step() == 0 && mc_frame() == before + 1);
+  }
+  CHECK(mc_frame() == fr && mc_mem_crc32() == plain);
+  /* a jab's hit reported at the pause gives Fox hitlag in that same frame */
+  McInput a = {0}; a.buttons = 0x0100;
+  steps(1, &a);
+  mc_set_input(0, &idle);
+  int n = 0;
+  for (int i = 0; i < 10; i++) {
+    CHECK(mc_step_to_hits() == 0);
+    if ((n = mc_read_hitboxes(0, 0, h, 8)) > 0) break;
+    CHECK(mc_step() == 0);
+  }
+  CHECK(n > 0 && h[0].fresh);
+  CHECK(mc_report_hit(0, 0, h[0].group, h[0].damage) == 0);
+  CHECK(mc_step() == 0);
+  CHECK(hitlag() == 4.0f);                                 /* floor(4/3 + 3): Melee's hitlag for a 4% jab */
+  McFighter f; CHECK(mc_read_fighter(0, 0, &f) == 0 && f.hitlag == 4.0f);
+  mc_shutdown();
+  CHECK(mc_step_to_hits() == -1);
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -266,6 +304,7 @@ int main(int argc, char **argv) {
   test_room();
   test_bones();
   test_hitboxes();
+  test_hit_pause();
   puts("rooms tests passed");
   return 0;
 }

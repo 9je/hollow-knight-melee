@@ -13,6 +13,7 @@ namespace FoxMelee {
         public uint Action;
         public float X, Y, Facing, Percent, Shield, SelfVelX, SelfVelY, KbVelX, KbVelY, GroundVel;
         public uint Airborne;
+        public float Hitlag;   // hitlag frames left
     }
 
     /// One of Fox's active Melee hitboxes (core McHitbox), in Melee units.
@@ -65,7 +66,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
 
         const int StartSize = 0x138;
-        readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step;
+        readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits;
         readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
@@ -77,6 +78,7 @@ namespace FoxMelee {
             shutdown = NativeLib.Symbol<VoidFn>(lib, "mc_shutdown");
             error = NativeLib.Symbol<ErrorFn>(lib, "mc_error");
             step = NativeLib.Symbol<IntFn>(lib, "mc_step");
+            stepToHits = NativeLib.Symbol<IntFn>(lib, "mc_step_to_hits");
             solo = NativeLib.Symbol<SoloFn>(lib, "mc_solo_fox_start");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
@@ -112,6 +114,9 @@ namespace FoxMelee {
             else input(port, IntPtr.Zero);
         }
         public bool Step() => Ok(step());
+        /// Runs the next frame up to Melee's hit resolution for port 0, where ReportHit lands in this frame; Step()
+        /// finishes the frame. 0 paused there, 1 the frame ended without reaching it, -1 error.
+        public int StepToHits() { localError = null; return stepToHits(); }
         public bool ReadFighter(int port, out McFighter f) => Ok(read(port, 0, out f));
         public bool LoadCollision(IntPtr collision) => Ok(load(collision));
         public bool SetBounds(McBox blast, McBox camera) => Ok(bounds(ref blast, ref camera));
