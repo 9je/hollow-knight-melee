@@ -65,10 +65,30 @@ static void test_reload_is_invisible(void) {
   mc_shutdown();
 }
 
+static void test_bounds(void) {
+  solo_fox();
+  steps(180, NULL);
+  McBox blast, cam;
+  CHECK(mc_get_bounds(&blast, &cam) == 0 && blast.left < cam.left && cam.right < blast.right);
+  McBox bad = {10, -10, 50, -50};
+  CHECK(mc_set_bounds(&bad, &cam) == -1 && strstr(mc_error(), "left"));
+  /* a blast zone just under FD's floor: walking off the edge is a KO almost at once */
+  McBox low = {-300, 300, 300, -8}, low_cam = {-200, 200, 200, -4};
+  CHECK(mc_set_bounds(&low, &low_cam) == 0);
+  McBox b2, c2;
+  CHECK(mc_get_bounds(&b2, &c2) == 0 && b2.bottom == -8.0f && c2.bottom == -4.0f);
+  McInput run = {0}; run.stick_x = 127;
+  int dead = 0;
+  for (int i = 0; i < 240 && !dead; i++) { steps(1, &run); dead = fox().action <= 10; }
+  CHECK(dead);   /* DeadDown..: KO'd by the new bottom blast zone */
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   test_reload_is_invisible();
+  test_bounds();
   puts("rooms tests passed");
   return 0;
 }

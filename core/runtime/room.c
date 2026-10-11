@@ -1,5 +1,6 @@
 /* room.c - room collision at runtime: export the live MapCollData, load a new one at the frame boundary
  * through the game's own mpLibLoad (after freeing the previous arrays), and the jobs that need the guest. */
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mc_internal.h"
@@ -120,4 +121,36 @@ void room_boundary_jobs(Cpu *c) {
   uint32_t d = write_room(c, &m->room);
   call_guest(c, FN_MPLIBLOAD, d, 0);
   m->room_guest = d;
+}
+#define ADDR_STAGE_INFO 0x8049E6C8u
+static float ldf(Cpu *c, uint32_t ea) { uint32_t u = ld32(c, ea); float f; memcpy(&f, &u, 4); return f; }
+
+int mc_get_bounds(McBox *blast, McBox *cam) {
+  Machine *m = g_m;
+  if (!m || m->dead || !m->in_match) return -1;
+  Cpu *c = &m->cpu;
+  float ox = ldf(c, ADDR_STAGE_INFO + 0x10), oy = ldf(c, ADDR_STAGE_INFO + 0x14);
+  *cam = (McBox){ldf(c, ADDR_STAGE_INFO) + ox, ldf(c, ADDR_STAGE_INFO + 4) + ox, ldf(c, ADDR_STAGE_INFO + 8) + oy, ldf(c, ADDR_STAGE_INFO + 0xC) + oy};
+  *blast = (McBox){ldf(c, ADDR_STAGE_INFO + 0x74) + ox, ldf(c, ADDR_STAGE_INFO + 0x78) + ox, ldf(c, ADDR_STAGE_INFO + 0x7C) + oy, ldf(c, ADDR_STAGE_INFO + 0x80) + oy};
+  return 0;
+}
+
+static int box_ok(const McBox *b) { return isfinite(b->left) && isfinite(b->right) && isfinite(b->top) && isfinite(b->bottom); }
+
+int mc_set_bounds(const McBox *blast, const McBox *cam) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  if (!m->in_match) return set_error("no match is running");
+  if (!box_ok(blast) || !box_ok(cam)) return set_error("bounds must be finite");
+  if (!(blast->left < blast->right && cam->left < cam->right)) return set_error("bounds: left must be less than right");
+  if (!(blast->bottom < blast->top && cam->bottom < cam->top)) return set_error("bounds: bottom must be less than top");
+  if (!(blast->left < cam->left && cam->right < blast->right && blast->bottom < cam->bottom && cam->top < blast->top))
+    return set_error("bounds: the camera box must be inside the blast zone");
+  Cpu *c = &m->cpu;
+  stf(c, ADDR_STAGE_INFO + 0x00, cam->left); stf(c, ADDR_STAGE_INFO + 0x04, cam->right);
+  stf(c, ADDR_STAGE_INFO + 0x08, cam->top); stf(c, ADDR_STAGE_INFO + 0x0C, cam->bottom);
+  stf(c, ADDR_STAGE_INFO + 0x10, 0.0f); stf(c, ADDR_STAGE_INFO + 0x14, 0.0f);
+  stf(c, ADDR_STAGE_INFO + 0x74, blast->left); stf(c, ADDR_STAGE_INFO + 0x78, blast->right);
+  stf(c, ADDR_STAGE_INFO + 0x7C, blast->top); stf(c, ADDR_STAGE_INFO + 0x80, blast->bottom);
+  return 0;
 }

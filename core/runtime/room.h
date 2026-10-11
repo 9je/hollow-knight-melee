@@ -27,3 +27,7 @@ int mc_check_collision(const McCollision *col, char *why, size_t why_size);   /*
 const McCollision *mc_get_collision(void);        /* live collision, copied out; valid until the next call */
 int mc_load_collision(const McCollision *col);    /* validates and copies now; applied at the next frame boundary */
 
+typedef struct { float left, right, top, bottom; } McBox;
+int mc_set_bounds(const McBox *blast, const McBox *camera);   /* absolute world units; applied at once */
+int mc_get_bounds(McBox *blast, McBox *camera);
+
