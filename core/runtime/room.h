@@ -31,3 +31,12 @@ typedef struct { float left, right, top, bottom; } McBox;
 int mc_set_bounds(const McBox *blast, const McBox *camera);   /* absolute world units; applied at once */
 int mc_get_bounds(McBox *blast, McBox *camera);
 
+enum { MC_SOLID, MC_PLATFORM };
+typedef struct {
+  int kind;              /* MC_SOLID: closed outline, either winding; MC_PLATFORM: open polyline, either direction */
+  const McVec2 *pts; int n;
+  uint8_t material;      /* 0..19 (Melee terrain id: footsteps, ice) */
+} McShape;
+/* Builds collision into library-owned storage (valid until the next call). 0 ok, -1 + reason in why. */
+int mc_build_collision(const McShape *shapes, int n_shapes, const McCollision **out, char *why, size_t why_size);
+

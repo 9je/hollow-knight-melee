@@ -1,2 +1,110 @@
-/* room_build.c - room outlines to Melee collision (McCollision). Filled in by plan 2 Task 4. */
+/* room_build.c - room outlines to Melee collision (McCollision), with Melee's own classification. Pure. */
+#include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 #include "melee_core.h"
+
+#define TAN30 0.57735026f
+#define TAN60 1.7320508f
+static McVec2 V[MC_MAX_VERTS]; static McLine L[MC_MAX_LINES]; static McJoint J[MC_MAX_JOINTS];
+static McLine raw[MC_MAX_LINES]; static int raw_shape[MC_MAX_LINES];
+static McCollision C;
+
+static int fail(char *why, size_t n, const char *fmt, ...) { va_list ap; va_start(ap, fmt); vsnprintf(why, n, fmt, ap); va_end(ap); return -1; }
+
+/* mpJointUpdateDynamics' rule (mplib.c:4637), in float like the game */
+static uint16_t classify(McVec2 a, McVec2 b) {
+  float dx = b.x - a.x, dy = b.y - a.y;
+  if (dx > 0.0f) return dy / dx > TAN60 ? MC_LINE_LEFT_WALL : dy / dx < -TAN60 ? MC_LINE_RIGHT_WALL : MC_LINE_FLOOR;
+  if (dx < 0.0f) return dy / dx > TAN30 ? MC_LINE_RIGHT_WALL : dy / dx < -TAN30 ? MC_LINE_LEFT_WALL : MC_LINE_CEILING;
+  return dy > 0.0f ? MC_LINE_LEFT_WALL : MC_LINE_RIGHT_WALL;
+}
+static int group_of(uint16_t kind) { return kind == MC_LINE_FLOOR ? MC_FLOOR : kind == MC_LINE_CEILING ? MC_CEILING : kind == MC_LINE_RIGHT_WALL ? MC_RIGHT_WALL : MC_LEFT_WALL; }
+static float cross(McVec2 a, McVec2 b, McVec2 c) { return (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x); }
+
+int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *why, size_t wn) {
+  if (ns < 1 || ns > MC_MAX_JOINTS) return fail(why, wn, "%d shapes: need 1 to 256", ns);
+  int nv = 0, nl = 0;
+  static int16_t shape_v0[MC_MAX_JOINTS], shape_nv[MC_MAX_JOINTS];
+  for (int k = 0; k < ns; k++) {
+    if (s[k].material > 19) return fail(why, wn, "shape %d material %u: must be 0..19", k, s[k].material);
+    /* the shape's points without repeats (and, for solids, without a closing repeat) */
+    int v0 = nv, n = 0;
+    for (int i = 0; i < s[k].n; i++) {
+      McVec2 p = s[k].pts[i];
+      if (!isfinite(p.x) || !isfinite(p.y)) return fail(why, wn, "shape %d point %d is not finite", k, i);
+      if (n > 0 && p.x == V[nv - 1].x && p.y == V[nv - 1].y) continue;
+      if (nv == MC_MAX_VERTS) return fail(why, wn, "more than 2048 vertices");
+      V[nv++] = p; n++;
+    }
+    if (s[k].kind == MC_SOLID && n > 1 && V[v0].x == V[nv - 1].x && V[v0].y == V[nv - 1].y) { nv--; n--; }
+    if ((s[k].kind == MC_SOLID && n < 3) || (s[k].kind == MC_PLATFORM && n < 2)) return fail(why, wn, "shape %d has too few distinct points", k);
+    if (s[k].kind == MC_SOLID) {   /* clockwise in y-up: negative signed area */
+      float area = 0;
+      for (int i = 0; i < n; i++) { McVec2 a = V[v0 + i], b = V[v0 + (i + 1) % n]; area += a.x * b.y - b.x * a.y; }
+      if (area > 0) for (int i = 0; i < n / 2; i++) { McVec2 t = V[v0 + i]; V[v0 + i] = V[v0 + n - 1 - i]; V[v0 + n - 1 - i] = t; }
+    } else if (V[v0].x > V[nv - 1].x) {
+      for (int i = 0; i < n / 2; i++) { McVec2 t = V[v0 + i]; V[v0 + i] = V[v0 + n - 1 - i]; V[v0 + n - 1 - i] = t; }
+    }
+    shape_v0[k] = (int16_t)v0; shape_nv[k] = (int16_t)n;
+    int edges = s[k].kind == MC_SOLID ? n : n - 1, l0 = nl;
+    if (nl + edges > MC_MAX_LINES) return fail(why, wn, "more than 1536 lines");
+    for (int i = 0; i < edges; i++) {
+      int a = v0 + i, b = v0 + (i + 1) % n;
+      uint16_t kind = classify(V[a], V[b]);
+      if (s[k].kind == MC_PLATFORM && kind != MC_LINE_FLOOR) return fail(why, wn, "shape %d: platform segment %d is not a floor", k, i);
+      int16_t prev = (int16_t)(s[k].kind == MC_SOLID ? l0 + (i + edges - 1) % edges : (i ? l0 + i - 1 : -1));
+      int16_t next = (int16_t)(s[k].kind == MC_SOLID ? l0 + (i + 1) % edges : (i + 1 < edges ? l0 + i + 1 : -1));
+      raw[nl] = (McLine){(uint16_t)a, (uint16_t)b, prev, next, -1, -1, kind,
+                         (uint16_t)(s[k].material | (s[k].kind == MC_PLATFORM ? MC_LO_PLATFORM : 0))};
+      raw_shape[nl++] = k;
+    }
+    if (s[k].kind == MC_SOLID)   /* ledges: floor ends at a convex corner whose neighbour is not a floor */
+      for (int i = l0; i < nl; i++) {
+        McLine *l = &raw[i];
+        if (l->hi_flags != MC_LINE_FLOOR) continue;
+        const McLine *p = &raw[l->prev0], *q = &raw[l->next0];
+        int left = p->hi_flags != MC_LINE_FLOOR && cross(V[p->v0], V[l->v0], V[l->v1]) < 0;
+        int right = q->hi_flags != MC_LINE_FLOOR && cross(V[l->v0], V[l->v1], V[q->v1]) < 0;
+        if (left || right) l->lo_flags |= MC_LO_LEDGE;
+      }
+  }
+  /* group by kind, shape order kept inside each group; remap links */
+  static int16_t new_id[MC_MAX_LINES];
+  int at = 0;
+  for (int g = 0; g < MC_GROUPS; g++) {
+    C.start[g] = (int16_t)at;
+    for (int i = 0; i < nl; i++) if (g < MC_DYNAMIC && group_of(raw[i].hi_flags) == g) new_id[i] = (int16_t)at++;
+    C.count[g] = (int16_t)(at - C.start[g]);
+  }
+  for (int i = 0; i < nl; i++) {
+    McLine l = raw[i];
+    l.prev0 = l.prev0 < 0 ? -1 : new_id[l.prev0];
+    l.next0 = l.next0 < 0 ? -1 : new_id[l.next0];
+    L[new_id[i]] = l;
+  }
+  /* one joint per shape: its lines in each group are contiguous because of the stable grouping */
+  for (int k = 0; k < ns; k++) {
+    McJoint *j = &J[k];
+    memset(j, 0, sizeof *j);
+    for (int g = 0; g < MC_GROUPS; g++) { j->start[g] = C.start[g]; j->count[g] = 0; }
+    int first = 1;
+    for (int i = 0; i < nl; i++) {
+      if (raw_shape[i] != k) continue;
+      int g = group_of(raw[i].hi_flags);
+      if (j->count[g] == 0) j->start[g] = new_id[i];
+      j->count[g]++;
+      for (int e = 0; e < 2; e++) {
+        McVec2 p = V[e ? raw[i].v1 : raw[i].v0];
+        if (first) { j->left = j->right = p.x; j->bottom = j->top = p.y; first = 0; }
+        j->left = fminf(j->left, p.x); j->right = fmaxf(j->right, p.x); j->bottom = fminf(j->bottom, p.y); j->top = fmaxf(j->top, p.y);
+      }
+    }
+    j->vtx_start = shape_v0[k];
+    j->vtx_count = shape_nv[k];
+  }
+  C.verts = V; C.n_verts = nv; C.lines = L; C.n_lines = nl; C.joints = J; C.n_joints = ns; C.x2c = 0;
+  *out = &C;
+  return mc_check_collision(&C, why, wn);
+}
