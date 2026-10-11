@@ -22,6 +22,7 @@ namespace FoxMelee {
         bool needPlace = true;                  // Fox starts where the Knight is once Fox drives again
         float accumulator;
         GameObject placeholder;
+        CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         readonly float[] bones = new float[128 * 12];
         McFighter fox;
@@ -79,6 +80,7 @@ namespace FoxMelee {
                 frames++;
                 core.SetInput(0, InputMapper.Map(ReadPad()));
                 if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                if (combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
@@ -107,6 +109,7 @@ namespace FoxMelee {
                 try { model = FoxRenderer.Create(FoxModel.Load(path)); Log("drawing Fox's model"); }
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
+            if (s.FoxHits) combat = new CombatBridge();
             state = State.Running;
             Log("libmelee_core running");
             return true;

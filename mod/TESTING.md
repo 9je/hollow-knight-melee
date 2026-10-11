@@ -26,10 +26,17 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 8. Spikes / pits: Hollow Knight's hazard respawn plays and Fox reappears where the Knight respawns.
 9. Pause (Start/Esc): Fox freezes; unpause: he continues.
 
-Not in this checkpoint: combat. Enemies still hit the (invisible) Knight and use his masks; Fox cannot hurt them yet.
+10. Fox hits enemies (King's Pass crawlers and flies): jab, tilts, smashes, aerials. Each hit does Melee's % × your nail
+    damage / 5 (old nail: Fox's jab = 4), gives Soul like a nail hit, and Fox freezes for Melee's hitlag. Down-air hits
+    several times (as in Melee); a single hitbox never hits the same enemy twice. Enemies get Hollow Knight's knockback
+    in the hit's direction. Also try the King's Pass breakable walls (may not break yet).
+
+Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks. Lasers do not hit enemies yet.
+To turn Fox's hits off, set `FoxHits` to false in FoxMelee.GlobalSettings.json.
 
 ## What to send back
 
 - `ModLog.txt` (whole file).
 - For any room that looked wrong: its scene name (from the log) and what was wrong (walls missing, floors you fall through, ledges in odd places).
 - Your WorldScale verdict and how input latency felt.
+- Combat: did hits land where Fox's attacks visibly connect? Too strong or too weak? Any enemy that could not be hit?

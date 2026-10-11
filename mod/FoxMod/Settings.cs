@@ -7,5 +7,6 @@ namespace FoxMelee {
         public bool ShowPlaceholder = true;
         public bool ShowModel = true;               // Fox's Melee model (fox.model, extracted at install); placeholder if missing
         public bool KeyboardFallback = true;
+        public bool FoxHits = true;                 // Fox's Melee hitboxes damage enemies (spec §5.1)
     }
 }
