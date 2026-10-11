@@ -471,7 +471,8 @@ int mc_read_items(McItem out[], int max) {
 /* ---- hits from outside Melee (spec 5.2) ---- */
 #define FN_ENV_HIT 0x800C08A0u      /* ftCo_800C08A0(gobj, source, lbColl_80008D30_arg1 *desc, bury type) */
 #define FN_DMG_LOG 0x8007AB48u      /* ftColl_8007AB48(gobj): the damage log -> fp->dmg (direction, angle, knockback) */
-#define ADDR_HIT_DESC 0x80002F40u   /* our descriptor (0x24 bytes), below the OS globals, after the runtime words */
+#define ADDR_HIT_DESC 0x80002F40u   /* our descriptors (0x24 bytes each), below the OS globals, after the runtime words */
+#define HIT_SLOTS 4                 /* per hit pause: Melee's damage log keeps a pointer to each until it is processed */
 
 typedef struct { int port; const McHit *hit; int result; } ApplyArgs;
 
@@ -510,7 +511,8 @@ static void apply_on_worker(void *arg) {
     return;
   }
   /* Melee's environmental hit: the descriptor (lbColl_80008D30_arg1), logged and processed as procAttackColl does */
-  uint32_t d = ADDR_HIT_DESC;
+  if (m->hit_slots >= HIT_SLOTS) { a->result = MC_HIT_LATER; return; }
+  uint32_t d = ADDR_HIT_DESC + 0x24u * (uint32_t)m->hit_slots++;
   st32(c, d + 0x00, 1); st32(c, d + 0x04, (uint32_t)dmg); st32(c, d + 0x08, (uint32_t)h->angle);
   st32(c, d + 0x0C, (uint32_t)h->growth); st32(c, d + 0x10, (uint32_t)h->set_kb); st32(c, d + 0x14, (uint32_t)h->base_kb);
   st32(c, d + 0x18, h->element); st32(c, d + 0x1C, 0); st32(c, d + 0x20, 0);

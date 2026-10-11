@@ -564,6 +564,19 @@ static void test_apply_hit(void) {
   CHECK(mc_step_to_hits() == 0);
   CHECK(mc_apply_hit(0, &hit) == MC_HIT_LANDED);
   CHECK(mc_step() == 0 && fox().percent > f.percent + 9);
+  /* two hits in one pause: both damages count, the stronger knockback wins (each keeps its own descriptor) */
+  CHECK(mc_set_percent(0, 0) == 0);
+  steps(200, &idle);
+  f = fox();
+  McHit strong = {0}, weak = {0};
+  strong.damage = 20; strong.angle = 45; strong.growth = 100; strong.base_kb = 80; strong.from_x = f.x - 10;
+  weak.damage = 1; weak.angle = 45; weak.from_x = f.x - 10;
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit(0, &strong) == MC_HIT_LANDED && mc_apply_hit(0, &weak) == MC_HIT_LANDED);
+  CHECK(mc_step() == 0);
+  CHECK(fabsf(fox().percent - 21) < 0.01f);
+  for (int i = 0; i < 12; i++) steps(1, &idle);
+  CHECK(fox().kb_vel_x > 1.0f);                            /* launched by the strong hit */
   /* Focus, benches and deaths reset Fox's percent (spec 5.3) */
   CHECK(mc_set_percent(0, 0) == 0);
   CHECK(fox().percent == 0);

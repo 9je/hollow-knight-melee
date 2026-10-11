@@ -35,6 +35,7 @@ typedef struct Machine {
   int gx_nmarks[2], gx_capmarks[2], gx_cur;
   int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
   int at_hits;                          /* paused there, mid-frame */
+  int hit_slots;                        /* mc_apply_hit descriptors used at this pause */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */

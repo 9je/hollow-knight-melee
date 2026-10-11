@@ -7,7 +7,7 @@ namespace FoxMelee {
     public struct McHit {
         public float Damage; public int Angle, Growth, SetKb, BaseKb; public uint Element;
         public float ShieldDamage; public uint Unblockable; public float FromX, FromY;
-        public const int Landed = 0, Shielded = 1, Intangible = 2;
+        public const int Landed = 0, Shielded = 1, Intangible = 2, Later = 3;
     }
 
     /// How a Hollow Knight attack becomes a Melee hit (spec §5.2: per enemy attack in the tuning file; these are the

@@ -98,6 +98,7 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   if (target == ADDR_COLL_RESOLVE && m->hit_pause && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
     m->hit_pause = 0;                   /* mc_step_to_hits: give the host this frame's hitboxes */
     m->at_hits = 1;
+    m->hit_slots = 0;
     coro_yield();
     m->at_hits = 0;
   }

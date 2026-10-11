@@ -70,7 +70,7 @@ int mc_read_hurtboxes(int port, int follower, McHurtbox out[], int max);
 int mc_report_hit(int port, int follower, uint32_t group, float damage);
 /* Items the fighter owns (his lasers) are read with his hitboxes: slot 4..7, group = the item's GObj (>= 0x80000000).
  * Reporting such a hit ends the item as Melee ends a laser on a wall (life timer 1) and gives no hitlag. */
-int mc_hitlag_frames(int damage);
+int mc_hitlag_frames(int damage);   /* Melee's hitlag for a hit of `damage` (ftCommon_CalcHitlag, capped); -1 error */
 /* A hit from outside Melee (a Hollow Knight enemy) on the fighter, applied at the hit pause (mc_step_to_hits) through
  * Melee's environmental hit path, so Melee resolves damage, knockback (crouch cancel included), victim hitlag, DI and
  * teching; a shield (unless unblockable) takes it as Melee's shield does an item's; intangibility (dodges, respawn
@@ -82,8 +82,9 @@ typedef struct {
 #define MC_HIT_LANDED 0
 #define MC_HIT_SHIELDED 1
 #define MC_HIT_INTANGIBLE 2
+#define MC_HIT_LATER 3       /* this pause already took 4 hits: apply it at the next one */
 int mc_apply_hit(int port, const McHit *hit);
-int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */   /* Melee's hitlag for a hit of `damage` (ftCommon_CalcHitlag, capped); -1 error */
+int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */
 /* Fox's shield bubble, read-only: Melee draws it as an effect on the fighter's shield joint, which it scales by the
  * shield's size (ftCo_80091D58). hard: Melee's lightshield_amount, 0 lightest .. 1 a full press (opaque). */
 typedef struct { uint32_t active; float x, y, radius, hard; } McShield;

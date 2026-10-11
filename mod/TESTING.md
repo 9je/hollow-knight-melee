@@ -60,7 +60,8 @@ Lasers hit enemies too (3 damage with the old nail, Melee's 4-frame hitlag on th
     a second; Fox is not invulnerable to the others. Focus, benches and deaths reset Fox's percent to 0%. Tuning in the
     settings file under `EnemyHits` (PercentPerMask, Angle, BaseKnockback, KnockbackGrowth, ShieldDamagePerMask,
     UnblockableFromMasks, CooldownFrames); `EnemiesHitFox: false` gives hits back to the Knight. Known: the Knight's
-    hit box (not Fox's hurtboxes) decides contact, and Hollow Knight's own short damage freeze still plays.
+    hit box (not Fox's hurtboxes) decides contact. Hollow Knight's recoil and damage freeze do not play (Melee's hitlag
+    and knockback are Fox's); hits the Knight would ignore (respawn invulnerability, invincibility) are ignored.
 To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 ## What to send back
