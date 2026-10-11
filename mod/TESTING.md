@@ -53,7 +53,14 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 
 Lasers hit enemies too (3 damage with the old nail, Melee's 4-frame hitlag on the enemy, none on Fox) and vanish on hit, as in Melee.
 
-Not yet: enemies hitting Fox. They still hit the (invisible) Knight and use his masks.
+13. Enemies hitting Fox: an enemy's hit goes through Melee. Fox takes percent (10% per mask of the enemy's damage),
+    Melee's knockback, hitlag and hitstun; DI, crouch-cancel and teching work as in Melee. Only a hit that lands costs
+    masks (Hollow Knight's own damage: HUD, death). Shield blocks hits (Hollow Knight's attacks are heavy on the shield;
+    attacks of 3+ masks go through it); spot dodge, rolls and air dodge avoid them. Each enemy can hit again after half
+    a second; Fox is not invulnerable to the others. Focus, benches and deaths reset Fox's percent to 0%. Tuning in the
+    settings file under `EnemyHits` (PercentPerMask, Angle, BaseKnockback, KnockbackGrowth, ShieldDamagePerMask,
+    UnblockableFromMasks, CooldownFrames); `EnemiesHitFox: false` gives hits back to the Knight. Known: the Knight's
+    hit box (not Fox's hurtboxes) decides contact, and Hollow Knight's own short damage freeze still plays.
 To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 ## What to send back

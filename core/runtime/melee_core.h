@@ -82,7 +82,8 @@ typedef struct {
 #define MC_HIT_LANDED 0
 #define MC_HIT_SHIELDED 1
 #define MC_HIT_INTANGIBLE 2
-int mc_apply_hit(int port, const McHit *hit);   /* Melee's hitlag for a hit of `damage` (ftCommon_CalcHitlag, capped); -1 error */
+int mc_apply_hit(int port, const McHit *hit);
+int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */   /* Melee's hitlag for a hit of `damage` (ftCommon_CalcHitlag, capped); -1 error */
 /* Fox's shield bubble, read-only: Melee draws it as an effect on the fighter's shield joint, which it scales by the
  * shield's size (ftCo_80091D58). hard: Melee's lightshield_amount, 0 lightest .. 1 a full press (opaque). */
 typedef struct { uint32_t active; float x, y, radius, hard; } McShield;

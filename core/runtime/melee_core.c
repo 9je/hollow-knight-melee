@@ -536,3 +536,12 @@ int mc_apply_hit(int port, const McHit *hit) {
   worker_call(apply_on_worker, &a);
   return m->dead ? -1 : a.result;
 }
+
+int mc_set_percent(int port, float percent) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3 || !isfinite(percent)) return -1;
+  uint32_t fp = fighter_at(&m->cpu, port, 0);
+  if (!fp) return 1;
+  stf32(&m->cpu, fp + 0x1830, percent < 0 ? 0 : percent > 999 ? 999 : percent);
+  return 0;
+}

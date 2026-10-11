@@ -24,6 +24,8 @@ namespace FoxMelee {
         GameObject placeholder;
         EffectsRenderer effects;                // shield, shine and lasers (stand-ins when Melee's frame is not drawn)
         GxRenderer gx;                          // Melee's own frame: its models, effects and art
+        EnemyBridge enemies;                    // enemies hitting Fox through Melee
+        bool sawDeath, sawBench;                // Fox's percent resets after a death, a bench and a Focus heal
         RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
@@ -72,7 +74,10 @@ namespace FoxMelee {
             // A new room is converted once Hollow Knight has finished bringing the Knight in.
             if (!FoxSession.HollowBusy(f) && session.NeedsRoom(gm.sceneName) && !EnterRoom(gm.sceneName)) return;
             SetKnightVisible(hero, session.KnightVisible(f));
+            if (f.Dead) sawDeath = true;
+            if (PlayerData.instance.GetBool("atBench")) sawBench = true;
             if (session.Owner(f) == HeroOwner.Hollow) {
+                enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
                 // normal physics (entering a room drops him with gravity onto the floor).
                 if (holdingBody && session.ReturnBody(f)) GiveBodyBack(hero);
@@ -88,6 +93,7 @@ namespace FoxMelee {
             }
             if (!WatchTerrain(gm.sceneName)) return;
             if (needPlace) { if (!PlaceAtKnight(hero)) return; needPlace = false; }
+            if (sawDeath || sawBench) { core.SetPercent(0f); sawDeath = sawBench = false; }
             var take = session.Take(f);
             TakeHero(hero, take.IgnoreInput, take.Relinquish);
             holdingBody = true;
@@ -106,15 +112,18 @@ namespace FoxMelee {
                 if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
                 core.SetInput(0, input);
                 int at = 0;
-                if (combat != null) {
+                bool pause = combat != null || enemies != null;
+                if (pause) {
                     at = core.StepToHits();   // Melee's hit resolution, mid-frame: hits land this frame
                     if (at < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
-                    if (at == 0 && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                    if (at == 0 && combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
+                    if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position)) { Fail("applying a hit to Fox: " + core.Error); return; }
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
-                if ((combat == null || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                if ((!pause || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
                 sfx?.Frame(core);
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
+                enemies?.AfterFrame(hero);
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
@@ -171,7 +180,7 @@ namespace FoxMelee {
             bool still = fox.Airborne == 0 && (fox.Action == ActionWait || focusing);
             var step = focus.Tick(held, still, pd.GetInt("MPCharge"), pd.GetInt("health"), pd.GetInt("maxHealth"));
             if (step.Drain > 0) hero.TakeMP(step.Drain);
-            if (step.Heal) hero.AddHealth(1);
+            if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); }   // Focus heals and resets percent (spec §5.3)
             focusing = step.Focusing;
             return focusing;
         }
@@ -192,6 +201,7 @@ namespace FoxMelee {
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
             if (s.FoxHits) combat = new CombatBridge();
+            if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
             if (s.MeleeGraphics) {
                 try {

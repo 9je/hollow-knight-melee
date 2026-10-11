@@ -564,6 +564,10 @@ static void test_apply_hit(void) {
   CHECK(mc_step_to_hits() == 0);
   CHECK(mc_apply_hit(0, &hit) == MC_HIT_LANDED);
   CHECK(mc_step() == 0 && fox().percent > f.percent + 9);
+  /* Focus, benches and deaths reset Fox's percent (spec 5.3) */
+  CHECK(mc_set_percent(0, 0) == 0);
+  CHECK(fox().percent == 0);
+  CHECK(mc_set_percent(1, 0) == 1 && mc_set_percent(9, 0) == -1);
   mc_shutdown();
 }
 

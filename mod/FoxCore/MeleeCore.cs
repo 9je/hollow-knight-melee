@@ -75,6 +75,8 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ItemsFn([Out] McItem[] o, int max);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxCaptureFn(int on);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HitlagFn(int damage);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ApplyHitFn(int port, ref McHit hit);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ReportFn(int port, int follower, uint group, float damage);
@@ -87,7 +89,7 @@ namespace FoxMelee {
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
-        readonly HitlagFn hitlag;
+        readonly HitlagFn hitlag; readonly ApplyHitFn applyHit; readonly SetPercentFn setPercent;
         readonly GxCaptureFn gxCapture; readonly GxDecodeFn gxDecode; readonly GxTextureFn gxTexture; readonly SfxFn sfx;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
@@ -116,6 +118,8 @@ namespace FoxMelee {
             items = NativeLib.Symbol<ItemsFn>(lib, "mc_read_items");
             gxCapture = NativeLib.Symbol<GxCaptureFn>(lib, "mc_gx_capture");
             hitlag = NativeLib.Symbol<HitlagFn>(lib, "mc_hitlag_frames");
+            applyHit = NativeLib.Symbol<ApplyHitFn>(lib, "mc_apply_hit");
+            setPercent = NativeLib.Symbol<SetPercentFn>(lib, "mc_set_percent");
             gxDecode = NativeLib.Symbol<GxDecodeFn>(lib, "mc_gx_decode");
             gxTexture = NativeLib.Symbol<GxTextureFn>(lib, "mc_gx_texture");
             sfx = NativeLib.Symbol<SfxFn>(lib, "mc_read_sfx");
@@ -166,6 +170,10 @@ namespace FoxMelee {
         public int ReadItems(McItem[] o) => items(o, o.Length);
         /// Melee's hitlag frames for a hit of `damage` (its formula and cap); -1 on error.
         public int HitlagFrames(int damage) => hitlag(damage);
+        /// A hit from outside Melee on port 0, at the hit pause (StepToHits): McHit.Landed / Shielded / Intangible, -1 error.
+        public int ApplyHit(McHit hit) { localError = null; return applyHit(0, ref hit); }
+        /// Port 0's percent (Focus, benches and deaths reset it).
+        public bool SetPercent(float percent) => Ok(setPercent(0, percent));
         /// Capture Melee's graphics each frame (off by default; it changes nothing in the game).
         public bool GxCapture(bool on) => Ok(gxCapture(on ? 1 : 0));
         /// Decodes the last frame's drawing by the objects in `plinkMask` (GxFrame.FoxAndEffects) into `frame`.

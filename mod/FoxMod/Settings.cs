@@ -14,5 +14,7 @@ namespace FoxMelee {
         public bool MeleeSfx = true;                // Melee's sound effects (melee.sfx, extracted at install); silent if missing
         public double SfxVolume = 0.8;              // 0..1
         public double FocusSeconds = 1.141;         // Hollow Knight's Focus time for one mask (D-pad down)
+        public bool EnemiesHitFox = true;           // enemies' hits go through Melee (shield, dodges, DI); off: the Knight takes them
+        public EnemyHitTuning EnemyHits = new EnemyHitTuning();   // how a Hollow Knight hit becomes a Melee hit
     }
 }

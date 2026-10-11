@@ -210,5 +210,27 @@ namespace FoxMelee.Tests {
             }
             Assert.True(laser);
         }
+
+        [Fact]
+        public void AnEnemyHitLandsThroughMelee() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 190; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out var f));
+            var hit = new McHit { Damage = 10, Angle = 45, Growth = 100, BaseKb = 20, FromX = f.X - 10, FromY = f.Y };
+            Assert.Equal(-1, core.ApplyHit(hit));                     // only at the hit pause
+            Assert.Equal(0, core.StepToHits());
+            Assert.Equal(McHit.Landed, core.ApplyHit(hit));
+            Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out f));
+            Assert.Equal(10f, f.Percent, 2);
+            Assert.True(core.SetPercent(0f));
+            Assert.True(core.ReadFighter(0, out f));
+            Assert.Equal(0f, f.Percent);
+        }
     }
 }
