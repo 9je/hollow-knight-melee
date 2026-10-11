@@ -23,7 +23,7 @@ cp -f "$repo/core/build/libmelee_core.so" "$repo/core/build/gen-core/mem1.bin" "
 iso="$(python3 -c "import tomllib;print(tomllib.load(open('$repo/dev.toml','rb'))['iso'])" 2>/dev/null || true)"
 # Fox's model from your ISO (never fatal: without it the mod draws a placeholder)
 venv="${TOOLS_VENV:-$repo/tools/.venv}"
-if [ ! -x "$venv/bin/ssbmhk-extract-fox" ]; then
+if [ ! -x "$venv/bin/ssbmhk-extract-fox" ] || [ ! -x "$venv/bin/ssbmhk-extract-sfx" ]; then
   { [ -x "$venv/bin/python" ] || python3 -m venv "$venv"; } && "$venv/bin/pip" install -q -e "$repo/tools" \
     || echo "could not set up the tools environment ($venv)"
 fi
@@ -31,6 +31,12 @@ if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-fox" ]; then
   "$venv/bin/ssbmhk-extract-fox" "$iso" --out "$dest" || echo "fox.model not extracted: the mod draws a placeholder"
 else
   echo "fox.model not extracted (no ISO in dev.toml or no tools environment): the mod draws a placeholder"
+fi
+# Melee's sound effects from your ISO (never fatal: without them the mod is silent)
+if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-sfx" ]; then
+  "$venv/bin/ssbmhk-extract-sfx" "$iso" --out "$dest" || echo "melee.sfx not extracted: Fox is silent"
+else
+  echo "melee.sfx not extracted (no ISO in dev.toml or no tools environment): Fox is silent"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting

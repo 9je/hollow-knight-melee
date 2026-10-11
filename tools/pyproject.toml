@@ -20,6 +20,7 @@ ssbmhk-replay-check = "ssbmhk_tools.replaycheck:main"
 ssbmhk-hk-rooms = "ssbmhk_tools.hkrooms:main"
 ssbmhk-room-png = "ssbmhk_tools.roompng:main"
 ssbmhk-extract-fox = "ssbmhk_tools.foxmodel:main"
+ssbmhk-extract-sfx = "ssbmhk_tools.meleesfx:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
