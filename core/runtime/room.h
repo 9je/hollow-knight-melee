@@ -31,9 +31,10 @@ typedef struct { float left, right, top, bottom; } McBox;
 int mc_set_bounds(const McBox *blast, const McBox *camera);   /* absolute world units; applied at once */
 int mc_get_bounds(McBox *blast, McBox *camera);
 
-enum { MC_SOLID, MC_PLATFORM };
+enum { MC_SOLID, MC_PLATFORM, MC_HOLE };
 typedef struct {
-  int kind;              /* MC_SOLID: closed outline, either winding; MC_PLATFORM: open polyline, either direction */
+  int kind;              /* MC_SOLID: closed outline, either winding; MC_PLATFORM: open polyline, either direction;
+                            MC_HOLE: closed outline with solid outside it (empty space walled in) */
   const McVec2 *pts; int n;
   uint8_t material;      /* 0..19 (Melee terrain id: footsteps, ice) */
 } McShape;

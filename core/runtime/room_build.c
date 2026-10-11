@@ -28,6 +28,8 @@ int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *
   int nv = 0, nl = 0;
   static int16_t shape_v0[MC_MAX_JOINTS], shape_nv[MC_MAX_JOINTS];
   for (int k = 0; k < ns; k++) {
+    if (s[k].kind < MC_SOLID || s[k].kind > MC_HOLE) return fail(why, wn, "shape %d: unknown kind %d", k, s[k].kind);
+    int closed = s[k].kind != MC_PLATFORM;
     if (s[k].material > 19) return fail(why, wn, "shape %d material %u: must be 0..19", k, s[k].material);
     /* the shape's points without repeats (and, for solids, without a closing repeat) */
     int v0 = nv, n = 0;
@@ -38,29 +40,29 @@ int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *
       if (nv == MC_MAX_VERTS) return fail(why, wn, "more than 2048 vertices");
       V[nv++] = p; n++;
     }
-    if (s[k].kind == MC_SOLID && n > 1 && V[v0].x == V[nv - 1].x && V[v0].y == V[nv - 1].y) { nv--; n--; }
-    if ((s[k].kind == MC_SOLID && n < 3) || (s[k].kind == MC_PLATFORM && n < 2)) return fail(why, wn, "shape %d has too few distinct points", k);
-    if (s[k].kind == MC_SOLID) {   /* clockwise in y-up: negative signed area */
+    if (closed && n > 1 && V[v0].x == V[nv - 1].x && V[v0].y == V[nv - 1].y) { nv--; n--; }
+    if ((closed && n < 3) || (s[k].kind == MC_PLATFORM && n < 2)) return fail(why, wn, "shape %d has too few distinct points", k);
+    if (closed) {   /* solid on the right of every edge: solids clockwise, holes counter-clockwise (y-up) */
       float area = 0;
       for (int i = 0; i < n; i++) { McVec2 a = V[v0 + i], b = V[v0 + (i + 1) % n]; area += a.x * b.y - b.x * a.y; }
-      if (area > 0) for (int i = 0; i < n / 2; i++) { McVec2 t = V[v0 + i]; V[v0 + i] = V[v0 + n - 1 - i]; V[v0 + n - 1 - i] = t; }
+      if ((s[k].kind == MC_SOLID && area > 0) || (s[k].kind == MC_HOLE && area < 0)) for (int i = 0; i < n / 2; i++) { McVec2 t = V[v0 + i]; V[v0 + i] = V[v0 + n - 1 - i]; V[v0 + n - 1 - i] = t; }
     } else if (V[v0].x > V[nv - 1].x) {
       for (int i = 0; i < n / 2; i++) { McVec2 t = V[v0 + i]; V[v0 + i] = V[v0 + n - 1 - i]; V[v0 + n - 1 - i] = t; }
     }
     shape_v0[k] = (int16_t)v0; shape_nv[k] = (int16_t)n;
-    int edges = s[k].kind == MC_SOLID ? n : n - 1, l0 = nl;
+    int edges = closed ? n : n - 1, l0 = nl;
     if (nl + edges > MC_MAX_LINES) return fail(why, wn, "more than 1536 lines");
     for (int i = 0; i < edges; i++) {
       int a = v0 + i, b = v0 + (i + 1) % n;
       uint16_t kind = classify(V[a], V[b]);
       if (s[k].kind == MC_PLATFORM && kind != MC_LINE_FLOOR) return fail(why, wn, "shape %d: platform segment %d is not a floor", k, i);
-      int16_t prev = (int16_t)(s[k].kind == MC_SOLID ? l0 + (i + edges - 1) % edges : (i ? l0 + i - 1 : -1));
-      int16_t next = (int16_t)(s[k].kind == MC_SOLID ? l0 + (i + 1) % edges : (i + 1 < edges ? l0 + i + 1 : -1));
+      int16_t prev = (int16_t)(closed ? l0 + (i + edges - 1) % edges : (i ? l0 + i - 1 : -1));
+      int16_t next = (int16_t)(closed ? l0 + (i + 1) % edges : (i + 1 < edges ? l0 + i + 1 : -1));
       raw[nl] = (McLine){(uint16_t)a, (uint16_t)b, prev, next, -1, -1, kind,
                          (uint16_t)(s[k].material | (s[k].kind == MC_PLATFORM ? MC_LO_PLATFORM : 0))};
       raw_shape[nl++] = k;
     }
-    if (s[k].kind == MC_SOLID)   /* ledges: floor ends at a convex corner whose neighbour is not a floor */
+    if (closed)   /* ledges: floor ends at a convex corner whose neighbour is not a floor */
       for (int i = l0; i < nl; i++) {
         McLine *l = &raw[i];
         if (l->hi_flags != MC_LINE_FLOOR) continue;

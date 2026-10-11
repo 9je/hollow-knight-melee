@@ -99,6 +99,20 @@ static void test_builder(void) {
   McVec2 vert[2] = {{0, 0}, {0, 50}};
   McShape pv = {MC_PLATFORM, vert, 2, 0};
   CHECK(mc_build_collision(&pv, 1, &c, why, sizeof why) == -1 && strstr(why, "platform"));
+  /* a hole: the empty inside of a room walled in on all sides. Floor at the bottom, ceiling at the top,
+   * walls facing inwards, no ledges (every corner is concave for the solid) */
+  McVec2 cave_cw[4] = {{-50, 0}, {-50, 100}, {50, 100}, {50, 0}};
+  McShape cave = {MC_HOLE, cave_cw, 4, 0};
+  CHECK(mc_build_collision(&cave, 1, &c, why, sizeof why) == 0);
+  CHECK(c->count[MC_FLOOR] == 1 && c->count[MC_CEILING] == 1 && c->count[MC_RIGHT_WALL] == 1 && c->count[MC_LEFT_WALL] == 1);
+  const McLine *hf = line_of_kind(c, MC_LINE_FLOOR, 0);
+  CHECK(c->verts[hf->v0].y == 0 && c->verts[hf->v0].x == -50 && !(hf->lo_flags & MC_LO_LEDGE));
+  const McLine *hc = line_of_kind(c, MC_LINE_CEILING, 0);
+  CHECK(c->verts[hc->v0].y == 100);
+  /* a solid and its hole together */
+  McVec2 outer[4] = {{-80, -20}, {80, -20}, {80, 120}, {-80, 120}};
+  McShape both[2] = {{MC_SOLID, outer, 4, 0}, {MC_HOLE, cave_cw, 4, 0}};
+  CHECK(mc_build_collision(both, 2, &c, why, sizeof why) == 0 && c->count[MC_FLOOR] == 2 && c->n_joints == 2);
   /* limits */
   static McShape many[257];
   for (int i = 0; i < 257; i++) many[i] = box;
