@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="FoxCore/FoxCore.csproj" />
   <Project Path="FoxMod/FoxMod.csproj" />
+  <Project Path="RoomLab/RoomLab.csproj" />
 </Solution>

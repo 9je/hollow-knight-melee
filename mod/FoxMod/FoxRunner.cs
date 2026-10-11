@@ -105,7 +105,7 @@ namespace FoxMelee {
             if (outlines.Count == 0) { RoomFailed(scene, "no terrain colliders"); return true; }
             var (min, max) = RoomGeometry.Bounds(outlines);
             var s = FoxMod.Instance.Settings;
-            var t = new RoomTransform { Scale = s.WorldScale, Origin = new V2((min.X + max.X) / 2, (min.Y + max.Y) / 2) };
+            var t = RoomTransform.ForRoom(outlines, s.WorldScale);   // the rule RoomLab uses too
             var shapes = RoomGeometry.Build(outlines, t);
             if (!core.BuildCollision(shapes, out var col)) { RoomFailed(scene, core.Error); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }

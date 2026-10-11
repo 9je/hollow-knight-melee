@@ -18,6 +18,9 @@ namespace FoxMelee {
     [StructLayout(LayoutKind.Sequential)]
     public struct McBox { public float Left, Right, Top, Bottom; }
 
+    /// A managed copy of a built Melee collision (MeleeCore.ReadCollision).
+    public sealed class MeleeCollision { public float[] XY; public ushort[] V0, V1, HiFlags, LoFlags; }
+
     public enum ShapeKind { Solid = 0, Platform = 1, Hole = 2 }
 
     /// One outline in Melee units: XY = x0, y0, x1, y1, ...
@@ -105,6 +108,28 @@ namespace FoxMelee {
             } finally {
                 foreach (var h in handles) h.Free();
             }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct McCollisionNative {
+            public IntPtr Verts; public int NVerts; public IntPtr Lines; public int NLines;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 5)] public short[] Start;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 5)] public short[] Count;
+            public IntPtr Joints; public int NJoints; public uint X2c;
+        }
+
+        /// A managed copy of a built collision (valid only until the next build: copy at once).
+        public MeleeCollision ReadCollision(IntPtr collision) {
+            var c = Marshal.PtrToStructure<McCollisionNative>(collision);
+            var m = new MeleeCollision { XY = new float[2 * c.NVerts], V0 = new ushort[c.NLines], V1 = new ushort[c.NLines], HiFlags = new ushort[c.NLines], LoFlags = new ushort[c.NLines] };
+            Marshal.Copy(c.Verts, m.XY, 0, m.XY.Length);
+            var raw = new short[8 * c.NLines];   // McLine: u16 v0, v1; s16 prev0, next0, prev1, next1; u16 hi, lo
+            Marshal.Copy(c.Lines, raw, 0, raw.Length);
+            for (int i = 0; i < c.NLines; i++) {
+                m.V0[i] = (ushort)raw[8 * i]; m.V1[i] = (ushort)raw[8 * i + 1];
+                m.HiFlags[i] = (ushort)raw[8 * i + 6]; m.LoFlags[i] = (ushort)raw[8 * i + 7];
+            }
+            return m;
         }
 
         public void Dispose() {

@@ -1,0 +1,49 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+
+namespace FoxMelee.Lab {
+    static class Program {
+        static string CoreSo => Environment.GetEnvironmentVariable("MELEE_CORE_SO")
+            ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../core/build/libmelee_core.so"));
+
+        static double Opt(string[] a, string name, double dflt) { int i = Array.IndexOf(a, name); return i >= 0 ? double.Parse(a[i + 1]) : dflt; }
+        static string OptS(string[] a, string name) { int i = Array.IndexOf(a, name); return i >= 0 ? a[i + 1] : null; }
+
+        static int Main(string[] a) {
+            if (a.Length < 2) { Console.Error.WriteLine("usage: roomlab convert <room.json> --out DIR | summary <dir> | run <room.json> ..."); return 2; }
+            double scale = Opt(a, "--scale", 6.0);
+            using var core = MeleeCore.Load(CoreSo);
+            switch (a[0]) {
+                case "convert": {
+                    var room = RoomFile.Load(a[1]);
+                    var c = Rooms.Convert(core, room, scale);
+                    Console.WriteLine($"{c.Scene}: {(c.Ok ? "OK" : "FAIL " + c.Error)} colliders={c.Colliders} shapes={c.Shapes} lines={c.Lines}");
+                    if (!c.Ok) return 1;
+                    var m = core.ReadCollision(c.Collision);
+                    var gates = room.Gates.Select(g => { var p = c.Transform.ToMelee(new V2(g.X, g.Y)); return new { g.Name, x = p.X, y = p.Y, w = g.W * scale, h = g.H * scale }; });
+                    var outDir = OptS(a, "--out") ?? ".";
+                    Directory.CreateDirectory(outDir);
+                    File.WriteAllText(Path.Combine(outDir, c.Scene + ".melee.json"), JsonSerializer.Serialize(new {
+                        scene = c.Scene, scale, xy = m.XY, v0 = m.V0, v1 = m.V1, hi = m.HiFlags, lo = m.LoFlags, gates }));
+                    return 0;
+                }
+                case "summary": {
+                    int ok = 0, fail = 0, empty = 0;
+                    foreach (var f in Directory.GetFiles(a[1], "*.json").Where(f => !f.EndsWith(".melee.json")).OrderBy(f => f)) {
+                        var c = Rooms.Convert(core, RoomFile.Load(f), scale);
+                        if (c.Ok) ok++; else if (c.Error == "no terrain") empty++; else fail++;
+                        if (c.Error != "no terrain")
+                            Console.WriteLine($"{(c.Ok ? "OK  " : "FAIL")} {c.Scene,-28} colliders={c.Colliders,4} shapes={c.Shapes,4} lines={c.Lines,5}{(c.Ok ? "" : "  " + c.Error)}");
+                    }
+                    Console.WriteLine($"total: {ok} ok, {fail} failed, {empty} without terrain");
+                    return 0;
+                }
+                default:
+                    Console.Error.WriteLine($"unknown command {a[0]}");
+                    return 2;
+            }
+        }
+    }
+}

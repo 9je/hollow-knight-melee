@@ -18,6 +18,12 @@ namespace FoxMelee {
         public V2 Origin;
         public V2 ToMelee(V2 hk) => new V2((hk.X - Origin.X) * Scale, (hk.Y - Origin.Y) * Scale);
         public V2 ToHk(V2 melee) => new V2(melee.X / Scale + Origin.X, melee.Y / Scale + Origin.Y);
+
+        /// The room rule shared by the mod and the lab: origin at the centre of the terrain's bounds.
+        public static RoomTransform ForRoom(IEnumerable<ColliderOutline> outlines, double scale) {
+            var (min, max) = RoomGeometry.Bounds(outlines);
+            return new RoomTransform { Scale = scale, Origin = new V2((min.X + max.X) / 2, (min.Y + max.Y) / 2) };
+        }
     }
 
     /// Hollow Knight terrain colliders to Melee room shapes (merged outlines, holes, platforms).

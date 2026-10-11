@@ -12,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../FoxCore/FoxCore.csproj" />
+    <ProjectReference Include="../RoomLab/RoomLab.csproj" />
   </ItemGroup>
 </Project>
