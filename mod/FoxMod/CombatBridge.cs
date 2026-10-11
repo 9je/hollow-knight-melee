@@ -102,8 +102,8 @@ namespace FoxMelee {
         }
 
         // Tag-driven objects (lifeblood cocoons, stalactites, geo rocks) read the hit's direction from the nail slash's
-        // "damages_enemy" state machine, and geo rocks also its attackType (their "Check If Nail" state goes on only for
-        // 0, the nail). This one only carries those values: it has no states and damages nothing.
+        // "damages_enemy" state machine; geo rocks also need its damageDealt above 0 (ReceivedDamage ignores hitters
+        // without) and its attackType 0, the nail (their "Check If Nail" state). This one only carries those values: it has no states and damages nothing.
         static HutongGames.PlayMaker.FsmFloat DamagesEnemy(GameObject go) {
             try {
                 var fsm = go.AddComponent<PlayMakerFSM>();
@@ -111,7 +111,10 @@ namespace FoxMelee {
                 fsm.FsmName = "damages_enemy";
                 var dir = new HutongGames.PlayMaker.FsmFloat("direction");
                 fsm.FsmVariables.FloatVariables = new[] { dir };
-                fsm.FsmVariables.IntVariables = new[] { new HutongGames.PlayMaker.FsmInt("attackType") { Value = (int)AttackTypes.Nail } };
+                fsm.FsmVariables.IntVariables = new[] {
+                    new HutongGames.PlayMaker.FsmInt("attackType") { Value = (int)AttackTypes.Nail },
+                    new HutongGames.PlayMaker.FsmInt("damageDealt") { Value = Math.Max(1, PlayerData.instance.GetInt("nailDamage")) },
+                };
                 return dir;
             } catch (Exception e) {
                 FoxMod.Instance.LogWarn("no damages_enemy stand-in (" + e.Message + "): cocoons and rocks may not react to Fox");
