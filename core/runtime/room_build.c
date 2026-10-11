@@ -23,6 +23,25 @@ static uint16_t classify(McVec2 a, McVec2 b) {
 static int group_of(uint16_t kind) { return kind == MC_LINE_FLOOR ? MC_FLOOR : kind == MC_LINE_CEILING ? MC_CEILING : kind == MC_LINE_RIGHT_WALL ? MC_RIGHT_WALL : MC_LEFT_WALL; }
 static float cross(McVec2 a, McVec2 b, McVec2 c) { return (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x); }
 
+/* Hollow Knight's terrain is full of small steps and bumps, and a ledge on each would catch Fox everywhere: a floor end
+ * is a ledge only above a drop of at least Fox's height. The drop is measured down the walls that follow the corner
+ * (several wall segments count as one). */
+#define MIN_LEDGE_DROP 18.0f    /* Melee units: about the Knight's height at the default scale */
+#define MIN_LEDGE_WIDTH 6.0f    /* a floor narrower than this (a thin pillar's top) has no ledges */
+static float drop(const McLine *raw, const McVec2 *V, int floor, int dir) {
+  float top = dir < 0 ? V[raw[floor].v0].y : V[raw[floor].v1].y, low = top;
+  int k = dir < 0 ? raw[floor].prev0 : raw[floor].next0;
+  for (int n = 0; k >= 0 && k != floor && n < MC_MAX_LINES; n++) {
+    uint16_t kind = raw[k].hi_flags;
+    if (kind != MC_LINE_LEFT_WALL && kind != MC_LINE_RIGHT_WALL) break;
+    float y = dir < 0 ? V[raw[k].v0].y : V[raw[k].v1].y;   /* the wall's far end, away from the corner */
+    if (y > low) break;                                     /* the wall turns back up: the drop ends */
+    low = y;
+    k = dir < 0 ? raw[k].prev0 : raw[k].next0;
+  }
+  return top - low;
+}
+
 int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *why, size_t wn) {
   if (ns < 1 || ns > MC_MAX_JOINTS) return fail(why, wn, "%d shapes: need 1 to 256", ns);
   int nv = 0, nl = 0;
@@ -65,10 +84,10 @@ int mc_build_collision(const McShape *s, int ns, const McCollision **out, char *
     if (closed)   /* ledges: floor ends at a convex corner whose neighbour is not a floor */
       for (int i = l0; i < nl; i++) {
         McLine *l = &raw[i];
-        if (l->hi_flags != MC_LINE_FLOOR) continue;
+        if (l->hi_flags != MC_LINE_FLOOR || fabsf(V[l->v1].x - V[l->v0].x) < MIN_LEDGE_WIDTH) continue;
         const McLine *p = &raw[l->prev0], *q = &raw[l->next0];
-        int left = p->hi_flags != MC_LINE_FLOOR && cross(V[p->v0], V[l->v0], V[l->v1]) < 0;
-        int right = q->hi_flags != MC_LINE_FLOOR && cross(V[l->v0], V[l->v1], V[q->v1]) < 0;
+        int left = p->hi_flags != MC_LINE_FLOOR && cross(V[p->v0], V[l->v0], V[l->v1]) < 0 && drop(raw, V, i, -1) >= MIN_LEDGE_DROP;
+        int right = q->hi_flags != MC_LINE_FLOOR && cross(V[l->v0], V[l->v1], V[q->v1]) < 0 && drop(raw, V, i, 1) >= MIN_LEDGE_DROP;
         if (left || right) l->lo_flags |= MC_LO_LEDGE;
       }
   }

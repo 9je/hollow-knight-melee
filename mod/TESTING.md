@@ -13,11 +13,15 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 
 - **GameCube controller (Wii U / Mayflash adapter, in Wii U mode): native.** The mod reads the adapter over USB the way
   Slippi Dolphin does, so Melee gets your controller's values unmapped. Close Slippi Dolphin first, since only one
-  program can hold the adapter. Start opens Hollow Knight's pause menu; in menus A confirms, B goes back and the stick
-  or D-pad moves. `ModLog.txt` shows "GameCube adapter: reading" when it works. Settings: `GameCubePort` (0 = first
-  controller found, 1-4 = that port), `GameCubeAdapter: false` to turn it off.
-- Gamepad (Xbox layout): left stick = control stick, right stick = C-stick, A = A, B = B, X/Y = jump, RB = Z, LT/RT = analog L/R (click past 90%), LB = full shield. The D-pad and Start stay Hollow Knight's.
-- Keyboard: WASD stick (Left Shift = half tilt), arrows = C-stick, J = A, K = B, Space or L = jump, I = shield, U = Z.
+  program can hold the adapter. Settings: `GameCubePort` (0 = first controller found, 1-4 = that port),
+  `GameCubeAdapter: false` to turn it off.
+- **D-pad (any controller):** up = Melee taunt; left or right = interact (inspect, talk, sit at a bench; Fox must be on
+  the ground); down (hold) = Focus: Fox stands still, Soul drains, and a mask heals after about 1.1 s (`FocusSeconds`).
+  Start = Hollow Knight's pause menu (A confirms, B goes back).
+- Gamepad (Xbox layout): left stick = control stick, right stick = C-stick, A = A, B = B, X/Y = jump, RB = Z, LT/RT =
+  analog L/R (click past 90%), LB = full shield.
+- Keyboard: WASD stick (Left Shift = half tilt), arrows = C-stick, J = A, K = B, Space or L = jump, I = shield, U = Z,
+  T = taunt, E = interact, F = focus.
 
 ## Checklist (King's Pass)
 

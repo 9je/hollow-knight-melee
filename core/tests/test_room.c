@@ -90,6 +90,31 @@ static void test_builder(void) {
   for (int i = 0; i < c->n_lines; i++) if ((c->lines[i].hi_flags & 0xF) == MC_LINE_FLOOR && c->verts[c->lines[i].v0].y == 0) ground = &c->lines[i];
   CHECK(ground && (ground->lo_flags & MC_LO_LEDGE));   /* the left end (-100, 0) is a ledge ... */
   CHECK((c->lines[ground->next0].hi_flags & 0xF) == MC_LINE_LEFT_WALL);   /* ... the right end meets the wall going up */
+  /* a small bump (4 units) on the ground: no ledges on it (Hollow Knight's terrain is full of these); the ground's
+   * far ends, 50 units above the bottom, keep theirs */
+  McVec2 bump[8] = {{-100, 0}, {-10, 0}, {-10, 4}, {10, 4}, {10, 0}, {100, 0}, {100, -50}, {-100, -50}};
+  McShape bs = {MC_SOLID, bump, 8, 0};
+  CHECK(mc_build_collision(&bs, 1, &c, why, sizeof why) == 0);
+  int top = 0, ends = 0;
+  for (int i = 0; i < c->n_lines; i++) {
+    const McLine *li = &c->lines[i];
+    if ((li->hi_flags & 0xF) != MC_LINE_FLOOR) continue;
+    if (c->verts[li->v0].y == 4) { top++; CHECK(!(li->lo_flags & MC_LO_LEDGE)); }
+    else { ends++; CHECK(li->lo_flags & MC_LO_LEDGE); }
+  }
+  CHECK(top == 1 && ends == 2);
+  /* a drop made of several wall segments counts as one drop */
+  McVec2 cliff[6] = {{-50, 0}, {50, 0}, {50, -9}, {52, -19}, {52, -40}, {-50, -40}};
+  McShape cs = {MC_SOLID, cliff, 6, 0};
+  CHECK(mc_build_collision(&cs, 1, &c, why, sizeof why) == 0);
+  f = line_of_kind(c, MC_LINE_FLOOR, 0);
+  CHECK(f && (f->lo_flags & MC_LO_LEDGE));
+  /* a thin pillar's top (3 wide) is no ledge, however tall */
+  McVec2 pillar[8] = {{-100, 0}, {0, 0}, {0, 40}, {3, 40}, {3, 0}, {100, 0}, {100, -50}, {-100, -50}};
+  McShape ps = {MC_SOLID, pillar, 8, 0};
+  CHECK(mc_build_collision(&ps, 1, &c, why, sizeof why) == 0);
+  for (int i = 0; i < c->n_lines; i++)
+    if ((c->lines[i].hi_flags & 0xF) == MC_LINE_FLOOR && c->verts[c->lines[i].v0].y == 40) CHECK(!(c->lines[i].lo_flags & MC_LO_LEDGE));
   /* platform drawn right to left, plus a repeated point */
   McVec2 plat[3] = {{20, 30}, {20, 30}, {-40, 30}};
   McShape p = {MC_PLATFORM, plat, 3, 7};
