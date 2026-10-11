@@ -75,6 +75,19 @@ int mc_read_shield(int port, int follower, McShield *out);   /* 0 ok, 1 no fight
 /* Melee's items (Fox's lasers among them), read-only: kind (ItemKind), position, velocity per frame, facing. */
 typedef struct { uint32_t kind; float x, y, vx, vy, facing; } McItem;
 int mc_read_items(McItem out[], int max);   /* count, -1 error */
+/* Melee's sound effects, read-only (no audio is produced: the host plays them). Taps on HSD_AudioSFXStartParam,
+ * HSD_AudioSFXKeyOff, KeyOffAll and KeyOffTrack queue one event per call that Melee would accept; mc_read_sfx drains
+ * the oldest `max` in order (the queue keeps the newest MC_SFX_QUEUE). start: id (bank = id / 10000), vol 0..254, pan
+ * 0..254 (0x80 centre), track (a new sound on a nonzero track cuts the last one on it), mix channel, and the handle
+ * Melee returns (-1 once its 96 voices are used up: the recompiled game never frees them). keyoff: handle. keyoff
+ * track: track. frame: mc_frame() when Melee made the call. */
+#define MC_SFX_START 0u
+#define MC_SFX_KEYOFF 1u
+#define MC_SFX_KEYOFF_ALL 2u
+#define MC_SFX_KEYOFF_TRACK 3u
+#define MC_SFX_QUEUE 256
+typedef struct { uint32_t kind, id; uint8_t vol, pan, track, channel; int32_t handle; uint32_t frame; } McSfx;
+int mc_read_sfx(McSfx out[], int max);   /* count, -1 error */
 #include "room.h"
 
 #ifdef __cplusplus

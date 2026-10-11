@@ -366,6 +366,39 @@ static void test_items(void) {
   CHECK(mc_read_items(it, 16) == -1);
 }
 
+static void test_sfx(void) {
+  McSfx ev[64];
+  CHECK(mc_read_sfx(ev, 64) == -1);                         /* no machine */
+  solo_fox(); steps(180, NULL);
+  while (mc_read_sfx(ev, 64) > 0) {}                       /* the countdown's sounds */
+  McInput b = {0}; b.buttons = 0x0200;                     /* neutral B: blaster */
+  steps(1, &b);
+  int laser = -1, n = 0;
+  for (int i = 0; i < 30 && laser < 0; i++) {
+    steps(1, NULL);
+    n = mc_read_sfx(ev, 64);
+    for (int k = 0; k < n; k++) if (ev[k].kind == MC_SFX_START && ev[k].id == 110103) laser = k;
+  }
+  CHECK(laser >= 0);                                       /* Fox's laser, facing right */
+  McSfx l = ev[laser];
+  CHECK(l.vol > 0 && l.channel == 7 && l.pan == 0x80 && l.frame > 0 && l.frame <= mc_frame());
+  CHECK(l.handle >= 0 && (l.handle & 0x7F) < 0x60);         /* a predicted voice handle: the one Melee gave it */
+  uint32_t voice = 0x804C45A0u + 0x34u * (uint32_t)(l.handle & 0x7F);
+  CHECK(mc_peek32(voice + 0x0C) == (uint32_t)l.handle && (mc_peek32(voice + 0x14) & 0xFFFF) == (110103u & 0xFFFF));
+  for (int k = 0; k < n; k++)                              /* live handles are distinct */
+    for (int j = k + 1; j < n; j++)
+      if (ev[k].kind == MC_SFX_START && ev[j].kind == MC_SFX_START && ev[k].handle >= 0) CHECK(ev[k].handle != ev[j].handle);
+  CHECK(mc_read_sfx(ev, 64) == 0);                         /* reading drains */
+  /* more than fit: the oldest are kept in order, the rest wait for the next read */
+  McInput none = {0};
+  for (int i = 0; i < 6; i++) { steps(1, &b); steps(20, &none); }
+  int n1 = mc_read_sfx(ev, 1), n2 = mc_read_sfx(ev + 1, 63);
+  CHECK(n1 == 1 && n2 >= 1 && ev[0].frame <= ev[1].frame);
+  CHECK(mc_read_sfx(ev, 0) == 0);
+  mc_shutdown();
+  CHECK(mc_read_sfx(ev, 64) == -1);
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -378,6 +411,7 @@ int main(int argc, char **argv) {
   test_hit_pause();
   test_shield();
   test_items();
+  test_sfx();
   puts("rooms tests passed");
   return 0;
 }

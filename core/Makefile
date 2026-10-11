@@ -52,7 +52,7 @@ GEN := $(B)/gen
 GOBJ ?= $(B)/guest
 LIBGUEST ?= $(B)/libguest.a
 gen:
-	cd ../tools && .venv/bin/ssbmhk-recomp --config ../dev.toml --out ../core/$(GEN) $(if $(HLE),--hle ../core/$(HLE)) $(if $(GECKO),--gecko ../core/$(GECKO))
+	cd ../tools && .venv/bin/ssbmhk-recomp --config ../dev.toml --out ../core/$(GEN) $(if $(HLE),--hle ../core/$(HLE)) $(if $(GECKO),--gecko ../core/$(GECKO)) $(if $(TAP),--tap ../core/$(TAP))
 GUEST_SRCS = $(wildcard $(GEN)/shard_*.c) $(GEN)/guest_table.c
 GUEST_OBJS = $(GUEST_SRCS:$(GEN)/%.c=$(GOBJ)/%.o)
 GUEST_HDRS := runtime/cpu.h gekko/gekko_fp.h
@@ -75,7 +75,7 @@ gecko: $(GECKO_CODES)
 $(B)/core.gecko: $(GECKO_CODES) runtime/online_rng.gecko
 	cat $^ > $@
 core-gen: $(B)/core.gecko
-	$(MAKE) gen GEN=$(CORE_GEN) HLE=runtime/hle.txt GECKO=$(B)/core.gecko
+	$(MAKE) gen GEN=$(CORE_GEN) HLE=runtime/hle.txt GECKO=$(B)/core.gecko TAP=runtime/taps.txt
 .PHONY: gecko core-gen
 guest: gen
 	$(MAKE) $(B)/libguest.a
@@ -89,7 +89,7 @@ runtime-test: | $(B)
 	$(B)/test_runtime
 .PHONY: runtime-test
 CORE_GOBJ := $(B)/guest-core
-RUNTIME_SRCS := hw coro irq hle_io frame melee_core room room_check room_build worker
+RUNTIME_SRCS := hw coro irq hle_io frame melee_core room room_check room_build worker sfx
 RUNTIME_HDRS := runtime/mc_internal.h runtime/coro.h runtime/melee_core.h runtime/room.h $(GUEST_HDRS)
 $(CORE_GOBJ)/rt_%.o: runtime/%.c $(RUNTIME_HDRS) $(CORE_GEN)/guest_meta.h
 	mkdir -p $(CORE_GOBJ)
