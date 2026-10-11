@@ -194,6 +194,26 @@ static void test_room(void) {
   mc_shutdown();
 }
 
+static void test_bones(void) {
+  static float b[128][12];
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  CHECK(mc_read_bones(0, 0, b, 128) == 0);                 /* no match yet */
+  mc_shutdown();
+  solo_fox();
+  steps(180, NULL);
+  int n = mc_read_bones(0, 0, b, 128);
+  CHECK(n == 73);                                         /* Fox's skeleton (PlyFox5K_Share_joint) */
+  McFighter f = fox();
+  CHECK(fabsf(b[0][3] - f.x) < 0.01f && fabsf(b[0][7] - f.y) < 0.01f);   /* root joint at Fox */
+  float head_y = b[40][7];
+  McInput run = {0}; run.stick_x = 127;
+  steps(25, &run);
+  CHECK(mc_read_bones(0, 0, b, 128) == 73 && fabsf(b[0][3] - fox().x) < 0.01f && b[40][7] != head_y);
+  CHECK(mc_read_bones(0, 0, b, 10) == 10);                 /* respects max */
+  CHECK(mc_read_bones(1, 0, b, 128) == 0 && mc_read_bones(5, 0, b, 128) == -1);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -201,6 +221,7 @@ int main(int argc, char **argv) {
   test_bounds();
   test_place();
   test_room();
+  test_bones();
   puts("rooms tests passed");
   return 0;
 }

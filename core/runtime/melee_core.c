@@ -183,6 +183,26 @@ void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
 }
 
 static float f32at(Cpu *c, uint32_t ea) { uint32_t v = ld32(c, ea); float f; memcpy(&f, &v, 4); return f; }
+/* Fox's (any fighter's) joint world matrices, as Melee's render pass leaves them every frame. */
+static int bones_walk(Cpu *c, uint32_t j, float (*out)[12], int max, int n, int depth) {
+  for (; j && n < max && depth < 64; j = ld32(c, j + 0x08)) {
+    if (!in_mem1(j, 0x88)) return n;
+    for (int k = 0; k < 12; k++) out[n][k] = f32at(c, j + 0x44 + 4u * (uint32_t)k);
+    n++;
+    n = bones_walk(c, ld32(c, j + 0x10), out, max, n, depth + 1);
+  }
+  return n;
+}
+
+int mc_read_bones(int port, int follower, float out[][12], int max) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u));
+  if (!gobj || !in_mem1(gobj, 0x30)) return 0;
+  return bones_walk(c, ld32(c, gobj + 0x28), out, max, 0, 0);
+}
+
 int mc_read_fighter(int port, int follower, McFighter *out) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;

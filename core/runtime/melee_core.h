@@ -35,6 +35,9 @@ void mc_set_input(int port, const McInput *in);     /* NULL = no controller */
 int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags);
 void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
+/* The fighter's joint world matrices (3x4 row-major, Melee units), depth first, as Melee's render pass leaves
+ * them each frame; read-only. Returns the number written, 0 when there is no fighter, -1 on error. */
+int mc_read_bones(int port, int follower, float out[][12], int max);
 #include "room.h"
 
 #ifdef __cplusplus
