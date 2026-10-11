@@ -44,11 +44,12 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BoundsFn(ref McBox blast, ref McBox cam);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int PlaceFn(int port, float x, float y);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BonesFn(int port, int follower, float[] out12, int max);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
 
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step;
         readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
-        readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place; readonly BonesFn bones;
+        readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
 
@@ -66,6 +67,7 @@ namespace FoxMelee {
             bounds = NativeLib.Symbol<BoundsFn>(lib, "mc_set_bounds");
             place = NativeLib.Symbol<PlaceFn>(lib, "mc_place_fighter");
             bones = NativeLib.Symbol<BonesFn>(lib, "mc_read_bones");
+            dobjs = NativeLib.Symbol<DobjsFn>(lib, "mc_read_dobjs");
         }
 
         public static MeleeCore Load(string libraryPath) {
@@ -94,6 +96,8 @@ namespace FoxMelee {
         public bool PlaceFighter(int port, float x, float y) => Ok(place(port, x, y));
         /// Melee's joint world matrices (12 floats each, 3x4 row-major) for port's fighter; 0 = no fighter.
         public int ReadBones(int port, float[] out12xN) => bones(port, 0, out12xN, out12xN.Length / 12);
+        /// Mesh parts (DObjs) in the bones' order: hidden flag and joint index per part; returns the count.
+        public int ReadDobjs(int port, byte[] hidden, byte[] joint) => dobjs(port, 0, hidden, joint, Math.Min(hidden.Length, joint.Length));
 
         public bool BuildCollision(IReadOnlyList<RoomShape> shapes, out IntPtr collision) {
             var handles = new List<GCHandle>();

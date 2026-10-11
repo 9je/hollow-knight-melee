@@ -210,6 +210,13 @@ static void test_bones(void) {
   steps(25, &run);
   CHECK(mc_read_bones(0, 0, b, 128) == 73 && fabsf(b[0][3] - fox().x) < 0.01f && b[40][7] != head_y);
   CHECK(mc_read_bones(0, 0, b, 10) == 10);                 /* respects max */
+  /* mesh parts (DObjs) in the same depth-first order: Melee hides alternates (e.g. low-detail parts) */
+  static uint8_t hidden[256], joint[256];
+  int nd = mc_read_dobjs(0, 0, hidden, joint, 256), nh = 0, on_root = 0;
+  for (int i = 0; i < nd; i++) { nh += hidden[i]; on_root += joint[i] == 0; }
+  CHECK(nd == 86 && nh > 0 && nh < nd);
+  CHECK(on_root == 81 && joint[81] == 41);   /* 72 costume parts + 9 appended by the game on the root joint */
+  CHECK(mc_read_dobjs(0, 0, hidden, joint, 5) == 5 && mc_read_dobjs(1, 0, hidden, joint, 256) == 0);
   CHECK(mc_read_bones(1, 0, b, 128) == 0 && mc_read_bones(5, 0, b, 128) == -1);
   mc_shutdown();
 }

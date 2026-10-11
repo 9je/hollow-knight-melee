@@ -68,6 +68,7 @@ class Material:
     texture: RgbaImage | None
     colour: tuple
     uv_scale: tuple
+    wrap: tuple = (0, 0)       # GX wrap mode per axis: 0 clamp, 1 repeat, 2 mirror
 
 
 @dataclass
@@ -117,15 +118,17 @@ def _attr_value(dat, at, idx):
 
 
 def _material(dat, mobj):
-    colour, tex, scale = (255, 255, 255, 255), None, (1.0, 1.0)
+    colour, tex, scale, wrap = (255, 255, 255, 255), None, (1.0, 1.0), (0, 0)
     if not mobj:
-        return Material(None, colour, scale)
+        return Material(None, colour, scale, wrap)
     mat = dat.u32(mobj + 0xC)
     if mat:
         colour = tuple(dat.d[mat + 4:mat + 8])          # diffuse RGBA
     t = dat.u32(mobj + 8)
     if t:
-        scale = (float(dat.u8(t + 0x40) or 1), float(dat.u8(t + 0x41) or 1))
+        # TObjDesc (tobj.h): wrap_s +0x34, wrap_t +0x38, repeat_s +0x3C, repeat_t +0x3D
+        wrap = (min(dat.u32(t + 0x34), 2), min(dat.u32(t + 0x38), 2))
+        scale = (float(dat.u8(t + 0x3C) or 1), float(dat.u8(t + 0x3D) or 1))
         img = dat.u32(t + 0x4C)
         if img:
             data, w, h, fmt = dat.u32(img), dat.u16(img + 4), dat.u16(img + 6), dat.u32(img + 8)
@@ -138,7 +141,7 @@ def _material(dat, mobj):
                 tex = RgbaImage(w, h, gxtex.decode(fmt, w, h, dat.d[data:], tlut, tlut_fmt))
             except gxtex.UnsupportedTexture:
                 tex = None
-    return Material(tex, colour, scale)
+    return Material(tex, colour, scale, wrap)
 
 
 def _pobj(dat, p, owner, joint_index):
@@ -222,7 +225,7 @@ def read_joints(dat, root):
             jt = Joint(len(joints), parent, flags, (s, r, t), world, inv)
             index_of[j] = jt.index
             joints.append(jt)
-            if not flags & 0x60:            # not a particle / spline joint: u is a DObj list
+            if not flags & 0x4020:          # not a particle (0x20) or spline (0x4000) joint: u is a DObj list
                 pending.append((jt, dat.u32(j + 0x10)))
             walk(dat.u32(j + 8), jt.index, world)
             j = dat.u32(j + 0xC)

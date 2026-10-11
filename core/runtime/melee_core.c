@@ -203,6 +203,31 @@ int mc_read_bones(int port, int follower, float out[][12], int max) {
   return bones_walk(c, ld32(c, gobj + 0x28), out, max, 0, 0);
 }
 
+/* Each joint's mesh parts (HSD_DObj: next +4, flags +0x14, bit 0 = hidden), depth first like the bones. */
+static int dobjs_walk(Cpu *c, uint32_t j, uint8_t *hidden, uint8_t *joint, int max, int n, int *ji, int depth) {
+  for (; j && n < max && depth < 64; j = ld32(c, j + 0x08)) {
+    if (!in_mem1(j, 0x88)) return n;
+    int me = (*ji)++;
+    if (!(ld32(c, j + 0x14) & 0x4020u))             /* not a particle or spline joint: u is the DObj list */
+      for (uint32_t d = ld32(c, j + 0x18); d && n < max && in_mem1(d, 0x18); d = ld32(c, d + 0x04)) {
+        hidden[n] = ld32(c, d + 0x14) & 1u;
+        joint[n++] = (uint8_t)me;
+      }
+    n = dobjs_walk(c, ld32(c, j + 0x10), hidden, joint, max, n, ji, depth + 1);
+  }
+  return n;
+}
+
+int mc_read_dobjs(int port, int follower, uint8_t hidden[], uint8_t joint[], int max) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u));
+  if (!gobj || !in_mem1(gobj, 0x30)) return 0;
+  int ji = 0;
+  return dobjs_walk(c, ld32(c, gobj + 0x28), hidden, joint, max, 0, &ji, 0);
+}
+
 int mc_read_fighter(int port, int follower, McFighter *out) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;

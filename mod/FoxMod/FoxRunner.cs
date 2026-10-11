@@ -47,7 +47,11 @@ namespace FoxMelee {
             if (state == State.Failed) return;
             var hero = HeroController.instance;
             var gm = GameManager.instance;
-            if (hero == null || gm == null || !gm.IsGameplayScene()) return;
+            if (hero == null || gm == null || !gm.IsGameplayScene()) {   // menus: nothing of Fox lingers
+                if (placeholder) placeholder.SetActive(false);
+                model?.Hide();
+                return;
+            }
             if (state == State.Waiting && !Boot()) return;
             var f = Flags(hero);
             // A new room is converted once Hollow Knight has finished bringing the Knight in.
@@ -80,8 +84,12 @@ namespace FoxMelee {
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
-            if (model != null) model.Draw(bones, core.ReadBones(0, bones), room);
-            else DrawPlaceholder(hk);
+            if (model != null && !model.Draw(core, bones, room)) {
+                FoxMod.Instance.LogError("Fox's skeleton does not match fox.model; drawing the placeholder");
+                model.Hide();
+                model = null;
+            }
+            if (model == null) DrawPlaceholder(hk);
         }
 
         bool Boot() {

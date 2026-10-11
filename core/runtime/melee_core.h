@@ -38,6 +38,9 @@ int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no suc
 /* The fighter's joint world matrices (3x4 row-major, Melee units), depth first, as Melee's render pass leaves
  * them each frame; read-only. Returns the number written, 0 when there is no fighter, -1 on error. */
 int mc_read_bones(int port, int follower, float out[][12], int max);
+/* Mesh parts (DObjs) in the bones' depth-first order: hidden[i] = 1 when part i is hidden this frame, joint[i] =
+ * its joint's index. The game appends parts to a joint's list, so (joint, index within the joint) names a part. */
+int mc_read_dobjs(int port, int follower, uint8_t hidden[], uint8_t joint[], int max);
 #include "room.h"
 
 #ifdef __cplusplus

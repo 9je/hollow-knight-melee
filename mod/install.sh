@@ -21,11 +21,16 @@ out="$repo/mod/FoxMod/bin/Release/net472"
 cp -f "$out/FoxMod.dll" "$out/FoxCore.dll" "$out/Clipper2Lib.dll" "$dest/"
 cp -f "$repo/core/build/libmelee_core.so" "$repo/core/build/gen-core/mem1.bin" "$dest/"
 iso="$(python3 -c "import tomllib;print(tomllib.load(open('$repo/dev.toml','rb'))['iso'])" 2>/dev/null || true)"
-[ -x "$repo/tools/.venv/bin/ssbmhk-extract-fox" ] || (cd "$repo/tools" && .venv/bin/pip install -q -e .)
-if [ -n "$iso" ] && [ -f "$iso" ]; then
-  "$repo/tools/.venv/bin/ssbmhk-extract-fox" "$iso" --out "$dest" || echo "fox.model not extracted: the mod draws a placeholder"
+# Fox's model from your ISO (never fatal: without it the mod draws a placeholder)
+venv="${TOOLS_VENV:-$repo/tools/.venv}"
+if [ ! -x "$venv/bin/ssbmhk-extract-fox" ]; then
+  { [ -x "$venv/bin/python" ] || python3 -m venv "$venv"; } && "$venv/bin/pip" install -q -e "$repo/tools" \
+    || echo "could not set up the tools environment ($venv)"
+fi
+if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-fox" ]; then
+  "$venv/bin/ssbmhk-extract-fox" "$iso" --out "$dest" || echo "fox.model not extracted: the mod draws a placeholder"
 else
-  echo "Melee ISO not found (dev.toml): fox.model not extracted, the mod draws a placeholder"
+  echo "fox.model not extracted (no ISO in dev.toml or no tools environment): the mod draws a placeholder"
 fi
 settings="$saves/FoxMelee.GlobalSettings.json"
 if [ -n "$iso" ] && [ ! -f "$settings" ]; then
