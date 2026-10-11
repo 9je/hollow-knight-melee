@@ -44,5 +44,19 @@ namespace FoxMelee.Tests {
             Assert.Equal(0u, h.Unblockable);
             Assert.Equal(1u, EnemyHits.ToMelee(t, 3, 0, 0, unblockableFromMasks: 3).Unblockable);   // the biggest attacks
         }
+    
+        // Fox's percent follows his masks (user's call): full health 10%, the last mask 100%, healing brings it back
+        [Theory]
+        [InlineData(5, 5, 10)]
+        [InlineData(1, 5, 100)]
+        [InlineData(3, 5, 55)]
+        [InlineData(4, 5, 32.5)]
+        [InlineData(9, 9, 10)]
+        [InlineData(1, 9, 100)]
+        [InlineData(1, 1, 10)]        // one mask in all: nothing to lose
+        [InlineData(0, 5, 100)]       // dying: never past the top
+        [InlineData(7, 5, 10)]        // lifeblood over the maximum: never under the bottom
+        public void PercentFollowsMasks(int health, int maxHealth, double percent) =>
+            Assert.Equal(percent, EnemyHits.PercentFor(new EnemyHitTuning(), health, maxHealth), 3);
     }
 }

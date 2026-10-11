@@ -25,7 +25,6 @@ namespace FoxMelee {
         EffectsRenderer effects;                // shield, shine and lasers (stand-ins when Melee's frame is not drawn)
         GxRenderer gx;                          // Melee's own frame: its models, effects and art
         EnemyBridge enemies;                    // enemies hitting Fox through Melee
-        bool sawDeath, sawBench;                // Fox's percent resets after a death, a bench and a Focus heal
         RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
@@ -115,8 +114,6 @@ namespace FoxMelee {
             SetKnightVisible(hero, session.KnightVisible(f));
             HideKnightDeaths(hero, !session.KnightVisible(f));
             Prompts.Active = !session.KnightVisible(f);
-            if (f.Dead) sawDeath = true;
-            if (PlayerData.instance.GetBool("atBench")) sawBench = true;
             if (session.Owner(f) == HeroOwner.Hollow) {
                 enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
@@ -143,7 +140,6 @@ namespace FoxMelee {
                 session.Placed();
                 accumulator = Frame;              // the placement lands at the next Melee frame: run one now
             }
-            if (sawDeath || sawBench) { core.SetPercent(0f); sawDeath = sawBench = false; }
             var take = session.Take(f);
             TakeHero(hero, take.IgnoreInput, take.Relinquish);
             holdingBody = true;
@@ -200,6 +196,10 @@ namespace FoxMelee {
             Profile();
             if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             WatchStuck(frames);
+            // Fox's percent follows his masks (EnemyHits.PercentFor): held there between hits, down again with a heal
+            var pd = PlayerData.instance;
+            float percent = (float)EnemyHits.PercentFor(FoxMod.Instance.Settings.EnemyHits ?? new EnemyHitTuning(), pd.GetInt("health"), pd.GetInt("maxHealth"));
+            if (Math.Abs(fox.Percent - percent) > 0.01f && !core.SetPercent(percent)) { Fail("mc_set_percent: " + core.Error); return; }
             if (frames > 0 && session.KnightFollowsFox && Unstick()) return;
             if (gx != null) gx.Glow = focusing;
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
@@ -267,7 +267,7 @@ namespace FoxMelee {
                 else { pd.TakeMP(focusDrain); GameCameras.instance.soulOrbFSM.SendEvent("MP SET"); }
                 focusDrain = 0;
             }
-            if (step.Heal) { hero.AddHealth(1); core.SetPercent(0f); focusSound.Heal(); }   // Focus heals and resets percent (spec §5.3)
+            if (step.Heal) { hero.AddHealth(1); focusSound.Heal(); }   // Focus heals (and percent follows the masks back down)
             focusSound.Charging(step.Focusing);
             focusEffects.Focusing(hero, step.Focusing);
             if (step.Heal) focusEffects.Healed(hero);

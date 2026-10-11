@@ -21,6 +21,8 @@ namespace FoxMelee {
         public int UnblockableFromMasks = 3;        // attacks this big go through the shield
         public int CooldownFrames = 30;             // per enemy, replacing the Knight's long invulnerability
         public int GraceFrames = 20;                // after Fox's attack lands on an enemy, its body can't hurt him (0: off)
+        public double PercentAtFullHealth = 10;     // Fox's percent follows his masks: this at full health,
+        public double PercentAtLastMask = 100;      // this on his last mask (PercentFor)
     }
 
     /// Enemies hitting Fox: each enemy (source) can hit again only after its cooldown, so one enemy's hit does not
@@ -54,6 +56,14 @@ namespace FoxMelee {
         }
 
         public void Clear() => left.Clear();
+
+        /// Fox's percent for his health: PercentAtFullHealth with every mask, PercentAtLastMask on the last one, in
+        /// steps between. Losing masks raises it, healing lowers it; it is held there between hits.
+        public static double PercentFor(EnemyHitTuning t, int health, int maxHealth) {
+            if (maxHealth <= 1) return t.PercentAtFullHealth;
+            double lost = System.Math.Max(0, System.Math.Min(maxHealth - 1, maxHealth - health));
+            return t.PercentAtFullHealth + (t.PercentAtLastMask - t.PercentAtFullHealth) * lost / (maxHealth - 1);
+        }
 
         public static McHit ToMelee(EnemyHitTuning t, int masks, float fromX, float fromY, int unblockableFromMasks = int.MaxValue) => new McHit {
             Damage = (float)(t.PercentPerMask * masks), Angle = t.Angle, Growth = t.KnockbackGrowth, BaseKb = t.BaseKnockback,
