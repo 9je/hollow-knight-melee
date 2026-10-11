@@ -45,6 +45,7 @@ uint32_t hle_lb_80019894(Cpu *c) {
   Machine *m = g_m;
   if (m->start_req == 1) request_match(m, c);
   m->frames++;
+  gx_frame_done();
   coro_yield();
   tb_advance_to(m->frames * (uint64_t)TB_PER_FRAME);
   room_boundary_jobs(c);
@@ -102,5 +103,12 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);
+  uint32_t gobj = c->gpr[3];   /* a GObj's render callback (HSD_GObj_80390CD4 calls render_cb(gobj, pass)) */
+  if (m->gx_on && gobj >= 0x80000000u && gobj < 0x80000000u + MEM1_SIZE - 0x30 && ld32(c, gobj + 0x1C) == target) {
+    gx_mark(c, gobj);
+    uint32_t r = f(c);
+    gx_mark(c, 0);
+    return r;
+  }
   return f(c);
 }

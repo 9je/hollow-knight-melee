@@ -75,6 +75,28 @@ int mc_read_shield(int port, int follower, McShield *out);   /* 0 ok, 1 no fight
 /* Melee's items (Fox's lasers among them), read-only: kind (ItemKind), position, velocity per frame, facing. */
 typedef struct { uint32_t kind; float x, y, vx, vy, facing; } McItem;
 int mc_read_items(McItem out[], int max);   /* count, -1 error */
+/* GX capture (off by default): each frame's graphics command stream, as the game wrote it to the GX FIFO
+ * (0xCC008000), big-endian, plus marks: from `offset` on, the stream was written by `gobj` (0 = no object), an
+ * HSD_GObj with that p_link (8 fighters, 9 items, ...) and gx_link. Display lists, vertex arrays and textures it refers
+ * to are in MEM1 (mc_mem1). Capturing changes nothing in the game. */
+typedef struct { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; } McGxMark;   /* view: the camera's (HSD_CObj+0x54) */
+int mc_gx_capture(int on);
+/* The last complete frame's stream and marks (valid until the next mc_step). */
+int mc_gx_frame(const uint8_t **fifo, uint32_t *len, const McGxMark **marks, int *nmarks);
+const uint8_t *mc_mem1(void);   /* MEM1 (24 MiB, big-endian), read-only for the host; NULL with no machine */
+/* The last captured frame decoded (gx_draw.c): triangles drawn by the objects whose p_link bit is set in plink_mask,
+ * in Melee world units, sorted back to front, as runs of one texture and blend mode to draw in order. Colours are
+ * Melee's lighting and TEV with a white texture: draw texture x colour. Valid until the next decode. */
+typedef struct { float x, y, z; uint8_t r, g, b, a; float u, v; } McGxVert;
+#define MC_GX_OPAQUE 0
+#define MC_GX_ALPHA 1
+#define MC_GX_ADD 2
+typedef struct { uint32_t first, count; int32_t tex; uint8_t blend, p_link, wrap_s, wrap_t; uint32_t gobj; } McGxRun;   /* wrap: 0 clamp, 1 repeat, 2 mirror */
+#define MC_GX_ATLAS 0x40000000   /* a run's tex: the shared atlas (4096x4096, wraps already laid out: sample clamped) */
+int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const McGxRun **runs, int *nruns);
+/* A texture a run uses (RGBA8, top row first); ids stay the same while the texture does. */
+typedef struct { uint32_t w, h; const uint8_t *rgba; uint32_t gen; } McGxTexture;   /* gen: changes when the id is reused */
+int mc_gx_texture(int32_t id, McGxTexture *out);
 #include "room.h"
 
 #ifdef __cplusplus

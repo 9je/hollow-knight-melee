@@ -30,6 +30,7 @@ uint32_t guest_bad_return(Cpu *c, uint32_t expected, uint32_t got) { (void)c; (v
 
 uint8_t *guest_io_ptr(Cpu *c, uint32_t ea, uint32_t size, int write) {
   Machine *m = g_m;
+  if (write && m->gx_on && (ea & 0xFFFFFFF8u) == 0xCC008000u) return gx_append(size);   /* GX FIFO: capture */
   if ((ea & 0xFFFF0000u) == 0xCC000000u && (ea & 0xFFFFu) + size <= sizeof m->hw) {
     uint32_t o = ea & 0xFFFFu;
     if (!write && (o == 0x680C || o == 0x6820 || o == 0x6834)) m->hw[o + 3] &= ~1u;   /* EXI: transfers complete at once */

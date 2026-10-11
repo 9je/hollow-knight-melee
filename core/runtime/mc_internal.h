@@ -29,6 +29,10 @@ typedef struct Machine {
   int in_match;
   uint8_t start[0x138];                 /* StartMeleeData to install */
   uint32_t seed;
+  int gx_on;                            /* mc_gx_capture */
+  uint8_t *gx_fifo[2]; uint32_t gx_len[2], gx_cap[2];   /* [cur]: this frame's stream; [!cur]: the last complete one */
+  struct McGxMarkI { uint32_t offset, gobj; uint16_t classifier; uint8_t p_link, gx_link; float view[12]; } *gx_marks[2];
+  int gx_nmarks[2], gx_capmarks[2], gx_cur;
   int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
   int at_hits;                          /* paused there, mid-frame */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
@@ -52,3 +56,12 @@ void room_boundary_jobs(Cpu *c);
 void worker_call(void (*fn)(void *), void *arg);   /* worker.c: run fn on the core's own thread, wait */
 void worker_stop(void);   /* room.c: pending room loads and placements */
 #define RET return c->spr[SPR_LR]
+
+/* gx.c */
+uint8_t *gx_append(uint32_t size);
+void gx_mark(Cpu *c, uint32_t gobj);
+void gx_frame_done(void);
+void gx_free(Machine *m);
+void gx_draw_free(void);
+void gx_track_frame(const uint8_t *fifo, uint32_t len, const uint8_t *mem);
+

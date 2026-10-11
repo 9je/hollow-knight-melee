@@ -1,5 +1,6 @@
 /* melee_core.c - public API: boot, step, inspect. */
 #include <stdarg.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -108,6 +109,8 @@ void mc_shutdown(void) {
   worker_stop();
   coro_free(m->guest);
   if (m->iso) fclose(m->iso);
+  gx_free(m);
+  gx_draw_free();
   free(m->cpu.mem);
   free(m->aram);
   free(m->room_verts);

@@ -366,6 +366,88 @@ static void test_items(void) {
   CHECK(mc_read_items(it, 16) == -1);
 }
 
+/* GX capture: each frame's graphics command stream (writes to the GX FIFO at 0xCC008000), with marks saying which
+ * Melee object drew which part. Capturing changes nothing in the game. */
+static void test_gx_capture(void) {
+  const uint8_t *fifo; uint32_t len; const McGxMark *mk; int nmk;
+  McInput idle = {0};
+  solo_fox(); steps(180, NULL); steps(20, &idle);
+  uint32_t plain = mc_mem_crc32();
+  mc_shutdown();
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(20, &idle);
+  CHECK(mc_mem_crc32() == plain);                          /* capture is invisible to the game */
+  CHECK(mc_gx_frame(&fifo, &len, &mk, &nmk) == 0);
+  CHECK(len > 1000 && nmk > 4);
+  int fighter = 0, ok_ops = 0;
+  for (int i = 0; i < nmk; i++) {
+    CHECK(mk[i].offset <= len && (i == 0 || mk[i].offset >= mk[i - 1].offset));
+    if (mk[i].gobj && mk[i].p_link == 8) fighter++;        /* HSD_GOBJ_PLINK_FIGHTER */
+  }
+  CHECK(fighter >= 1);
+  for (int i = 0; i < nmk; i++) if (mk[i].gobj && mk[i].offset < len) {   /* a drawing object's stream starts with a GX command */
+    uint8_t op = fifo[mk[i].offset];
+    ok_ops += op == 0x00 || op == 0x08 || op == 0x10 || (op >= 0x20 && op <= 0x38) || op == 0x40 || op == 0x48 || op == 0x61 || op >= 0x80;
+  }
+  CHECK(ok_ops >= 1);
+  uint32_t len1 = len;
+  steps(1, &idle);                                         /* the next frame replaces it */
+  CHECK(mc_gx_frame(&fifo, &len, &mk, &nmk) == 0 && len > 1000 && len < 4 * len1);
+  CHECK(mc_gx_capture(0) == 0);
+  steps(1, &idle);
+  CHECK(mc_gx_frame(&fifo, &len, &mk, &nmk) == 0 && len == 0);
+  mc_shutdown();
+}
+
+/* the captured frame decoded: Fox's body where Fox is, in a few runs on the atlas; his shield bubble as a translucent
+ * effect at the shield; his laser as an item. Decoding changes nothing in the game. */
+static void test_gx_decode(void) {
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  const uint64_t FIGHTER = 1ull << 8, ITEM = 1ull << 9, EFFECTS = (1ull << 11) | (1ull << 12);
+  McInput idle = {0};
+  solo_fox(); steps(180, NULL);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(3, &idle);
+  uint32_t crc = mc_mem_crc32();
+  CHECK(mc_gx_decode(FIGHTER, &v, &nv, &r, &nr) == 0);
+  CHECK(mc_mem_crc32() == crc);
+  McFighter f = fox();
+  CHECK(nv > 9000 && nv % 3 == 0 && nr >= 1 && nr < 40);
+  float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+  for (int i = 0; i < nv; i++) { x0 = fminf(x0, v[i].x); x1 = fmaxf(x1, v[i].x); y0 = fminf(y0, v[i].y); y1 = fmaxf(y1, v[i].y); }
+  CHECK(x0 > f.x - 15 && x1 < f.x + 15 && y0 > f.y - 2 && y1 < f.y + 20 && y1 > f.y + 10);   /* Fox, standing */
+  int atlas = 0;
+  for (int i = 0; i < nr; i++) atlas += r[i].tex == MC_GX_ATLAS && r[i].p_link == 8;
+  McGxTexture t;
+  CHECK(atlas >= 1 && mc_gx_texture(MC_GX_ATLAS, &t) == 0 && t.w == 4096 && t.gen > 0);
+  CHECK(r[nr - 1].first + r[nr - 1].count == (uint32_t)nv);
+  /* shield: a translucent effect around the shield's centre */
+  McInput sh = {0}; sh.buttons = 0x0020; sh.trigger_r = 255;
+  steps(6, &sh);
+  McShield s; CHECK(mc_read_shield(0, 0, &s) == 0 && s.active);
+  CHECK(mc_gx_decode(EFFECTS, &v, &nv, &r, &nr) == 0);
+  int bubble = 0;
+  for (int i = 0; i < nr; i++) {
+    if (r[i].blend != MC_GX_ALPHA || r[i].count < 6) continue;
+    float cx = 0, cy = 0;
+    for (uint32_t k = r[i].first; k < r[i].first + r[i].count; k++) { cx += v[k].x; cy += v[k].y; }
+    cx /= (float)r[i].count; cy /= (float)r[i].count;
+    if (fabsf(cx - s.x) < 3 && fabsf(cy - s.y) < 3) bubble = 1;
+    CHECK(r[i].tex < 0 || mc_gx_texture(r[i].tex, &t) == 0);
+  }
+  CHECK(bubble);
+  /* laser: an item */
+  steps(30, &idle);
+  McInput b = {0}; b.buttons = 0x0200;
+  steps(1, &b); steps(15, &idle);
+  CHECK(mc_gx_decode(ITEM, &v, &nv, &r, &nr) == 0 && nv > 0);
+  for (int i = 0; i < nr; i++) CHECK(r[i].p_link == 9);
+  CHECK(mc_gx_decode(0, &v, &nv, &r, &nr) == 0 && nv == 0 && nr == 0);
+  mc_shutdown();
+  CHECK(mc_gx_decode(FIGHTER, &v, &nv, &r, &nr) == -1);
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -378,6 +460,8 @@ int main(int argc, char **argv) {
   test_hit_pause();
   test_shield();
   test_items();
+  test_gx_capture();
+  test_gx_decode();
   puts("rooms tests passed");
   return 0;
 }
