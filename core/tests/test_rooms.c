@@ -550,6 +550,28 @@ static void test_laser_hits(void) {
 /* Enemies hitting Fox (spec 5.2): at the hit pause, a hit from outside Melee goes through Melee's own environmental
  * hit path (ftCo_800C08A0 + ftColl_8007AB48), so Melee resolves damage, knockback, hitlag, DI and teching; shields and
  * intangibility are checked as Melee's collision does. */
+/* A respawn in the middle of knockback (Hollow Knight's spikes or death took him): Fox comes back able to act, as a
+ * fresh fighter would, not stuck in the hit's hitstun */
+static void test_respawn_after_hit(void) {
+  McInput idle = {0}, right = {0}; right.stick_x = 127;
+  solo_fox(); steps(180, NULL); steps(10, &idle);
+  McHit hit = {0};
+  hit.damage = 60; hit.angle = 45; hit.growth = 100; hit.base_kb = 60;
+  McFighter f = fox();
+  hit.from_x = f.x - 10; hit.from_y = f.y;
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit(0, &hit) == MC_HIT_LANDED);
+  CHECK(mc_step() == 0);
+  steps(15, &idle);                                        /* flying */
+  CHECK(mc_respawn_fighter(0, 0.0f, 20.0f) == 0);
+  steps(40, &idle);                                        /* falls and lands on Final Destination */
+  CHECK(fox().airborne == 0);
+  float x0 = fox().x;
+  steps(30, &right);
+  CHECK(fox().x > x0 + 20.0f);                             /* runs */
+  mc_shutdown();
+}
+
 static void test_apply_hit(void) {
   McHit hit = {0};
   hit.damage = 10; hit.angle = 45; hit.growth = 100; hit.base_kb = 20; hit.element = 0;
@@ -630,6 +652,7 @@ int main(int argc, char **argv) {
   test_sfx();
   test_laser_hits();
   test_apply_hit();
+  test_respawn_after_hit();
   puts("rooms tests passed");
   return 0;
 }

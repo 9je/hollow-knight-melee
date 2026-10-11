@@ -121,6 +121,7 @@ static void free_islands(Cpu *c) {
 #define PLAYER_BLOCK(p) (0x80453080u + 0xE90u * (uint32_t)(p))
 #define FN_SET_AIRBORNE 0x8007D5D4u      /* ftCommon_8007D5D4(fp) */
 #define FN_CAMERA_SNAP 0x80076064u       /* ftCamera_80076064(fp) */
+#define FN_HITLAG_EXIT 0x8006D10Cu       /* Fighter_8006D10C(gobj): leave hitlag (post-hitlag callback, clears x2219_b5) */
 
 int mc_place_fighter(int port, float x, float y) {
   Machine *m = g_m;
@@ -173,6 +174,12 @@ static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int r
   uint32_t action = ld32(c, fp + 0x10);
   call_guest(c, FN_CLEAR_FLOOR_SKIP, fp + 0x6F0u, 0);   /* a drop-through in progress named an old line */
   if (respawn) {                                        /* falling, still: no momentum, knockback or hitlag */
+    /* hitlag is left through Melee's own exit (its counter alone would leave x2219_b5, "frozen in hitlag", set:
+     * a fighter respawned mid-hit would never move again) */
+    if ((ld8(c, fp + 0x2219u) & 0x04u) || ldf(c, fp + 0x195Cu) > 0.0f) {
+      stf(c, fp + 0x195Cu, 0.0f);
+      call_guest(c, FN_HITLAG_EXIT, gobj, 0);
+    }
     call_guest(c, FN_SET_AIRBORNE, fp, 0);
     call_guest(c, FN_FALL_ENTER, gobj, 0);
     static const uint32_t vel[] = {0x80, 0x84, 0x88, 0x8C, 0x90, 0x94, 0xEC, 0x195C};   /* self, kb, ground, hitlag */
