@@ -114,6 +114,11 @@ static void free_islands(Cpu *c) {
  * collision between the frees and mpLibLoad: this runs between frames, inside one host job. */
 #define FN_MPCOLL_SET_POS 0x80043680u    /* mpColl_80043680(CollData *, Vec3 *) */
 #define FN_CHECK_FLOOR 0x8004F008u       /* mpCheckFloor */
+#define FN_CLEAR_FLOOR_SKIP 0x8004CBF4u  /* mpClearFloorSkip(CollData *) */
+#define FN_FALL_ENTER 0x800CC730u        /* ftCo_Fall_Enter(gobj) */
+#define MS_CLIFF_FIRST 252u              /* CliffCatch */
+#define MS_CLIFF_LAST 263u               /* CliffJumpQuick2 */
+#define PLAYER_BLOCK(p) (0x80453080u + 0xE90u * (uint32_t)(p))
 #define FN_SET_AIRBORNE 0x8007D5D4u      /* ftCommon_8007D5D4(fp) */
 #define FN_CAMERA_SNAP 0x80076064u       /* ftCamera_80076064(fp) */
 
@@ -152,15 +157,23 @@ static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, 
   return (int)ld32(c, f + 0x1C);
 }
 
-static void place(Cpu *c, int port, float x, float y) {
-  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + 0xB0u);
-  if (!gobj) return;
+/* Moves one fighter GObj to (x, y), keeping its action and velocity where Melee allows it:
+ * - ledge actions (CliffCatch..CliffJumpQuick2) hold a ledge line id from the old room: they become Fall;
+ * - a grounded fighter stands on the floor within 10 units (mpCheckFloor), else becomes airborne.
+ * moved == 0 (a fighter not placed after a room load): only the line ids the old room invalidated are
+ * renewed; position, ECB and camera stay as they are. */
+static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved) {
   uint32_t fp = ld32(c, gobj + 0x2C);
-  if (ld32(c, fp + 0xE0) == 0) {                    /* grounded: stand on the floor within 10 units, or fall */
+  uint32_t action = ld32(c, fp + 0x10);
+  call_guest(c, FN_CLEAR_FLOOR_SKIP, fp + 0x6F0u, 0);   /* a drop-through in progress named an old line */
+  if (action >= MS_CLIFF_FIRST && action <= MS_CLIFF_LAST) {
+    call_guest(c, FN_SET_AIRBORNE, fp, 0);
+    call_guest(c, FN_FALL_ENTER, gobj, 0);
+  } else if (ld32(c, fp + 0xE0) == 0) {
     float fy, n[3]; uint32_t fl;
     int line = floor_under(c, x, y, &fy, &fl, n);
     if (line >= 0) {
-      y = fy;
+      if (moved) y = fy;
       st32(c, fp + 0x83C, (uint32_t)line);          /* CollData.floor: index, flags, normal */
       st32(c, fp + 0x840, fl);
       for (int k = 0; k < 3; k++) stf(c, fp + 0x844 + 4u * k, n[k]);
@@ -168,6 +181,7 @@ static void place(Cpu *c, int port, float x, float y) {
       call_guest(c, FN_SET_AIRBORNE, fp, 0);
     }
   }
+  if (!moved) return;
   stf(c, fp + 0xB0, x); stf(c, fp + 0xB4, y);
   stf(c, fp + 0xBC, x); stf(c, fp + 0xC0, y);      /* prev_pos */
   call_guest(c, FN_MPCOLL_SET_POS, fp + 0x6F0u, fp + 0xB0u);
@@ -176,6 +190,7 @@ static void place(Cpu *c, int port, float x, float y) {
 
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
+  int loaded = m->room_pending;
   if (m->room_pending) {
     m->room_pending = 0;
     for (int k = 0; k < 3; k++) call_guest(c, FN_HSD_FREE, ld32(c, ADDR_COLL_ARRAYS + 4u * k), 0);
@@ -185,7 +200,17 @@ void room_boundary_jobs(Cpu *c) {
     call_guest(c, FN_MPLIBLOAD, d, 0);
     m->room_guest = d;
   }
-  for (int p = 0; p < 4; p++) if (m->place_pending[p]) { m->place_pending[p] = 0; place(c, p, m->place_x[p], m->place_y[p]); }
+  /* placements; after a new room, every fighter not placed explicitly is placed where it is, so no
+   * fighter keeps a floor or ledge line id from the old room */
+  for (int p = 0; p < 4; p++)
+    for (int follower = 0; follower < 2; follower++) {
+      uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
+      if (!gobj) continue;
+      uint32_t fp = ld32(c, gobj + 0x2C);
+      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1);
+      else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0);
+    }
+  for (int p = 0; p < 4; p++) m->place_pending[p] = 0;
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u
 

@@ -162,6 +162,26 @@ static void test_room(void) {
   int caught = 0;
   for (int i = 0; i < 120 && !caught; i++) { steps(1, &drift_right); caught = fox().action == 252 || fox().action == 253; }
   CHECK(caught);
+  /* placed while hanging on the ledge (CliffCatch/CliffWait keep a ledge line id): falls at the new spot */
+  CHECK(mc_load_collision(build(0)) == 0);
+  CHECK(mc_place_fighter(0, -10.0f, 60.0f) == 0);
+  steps(1, NULL);
+  CHECK(fox().action == 29 && fox().airborne == 1 && fabsf(fox().x - (-10.0f)) < 3.0f);
+  steps(60, NULL);
+  CHECK(fox().airborne == 0);
+  /* a room loaded without placing Fox: he is placed where he stands. His old floor is line 0; in the new
+   * room line 0 is a far box's floor and the floor under him is line 1, so a stale index would drop him. */
+  enter_room(0, 0, 0);
+  steps(5, NULL);
+  {
+    McVec2 far_box[4] = {{-250, -20}, {-200, -20}, {-200, 0}, {-250, 0}}, under[4] = {{-50, -20}, {50, -20}, {50, 0}, {-50, 0}};
+    McShape b[2] = {{MC_SOLID, far_box, 4, 0}, {MC_SOLID, under, 4, 0}};
+    const McCollision *c; char why[200];
+    CHECK(mc_build_collision(b, 2, &c, why, sizeof why) == 0);
+    CHECK(mc_load_collision(c) == 0);
+    steps(5, NULL);
+    CHECK(fox().airborne == 0 && fabsf(fox().y) < 0.001f && fox().action == 14);   /* still standing (Wait) */
+  }
   /* many switches between two rooms: no leak, still standing on the right floor */
   uint32_t lines_at = 0;
   for (int i = 0; i < 200; i++) {

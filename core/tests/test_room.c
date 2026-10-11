@@ -41,6 +41,19 @@ static void test_validation(void) {
   CHECK(refused(c, "group"));
   static McJoint bad_j[1] = {{{0, 1, 1, 1, 1}, {2, 0, 0, 0, 0}, -10, 0, 10, 0, 0, 2}};
   c = ok(); c.joints = bad_j; CHECK(refused(c, "joint"));
+  /* links must be mutual and share the vertex: a floor chain that loops back hangs Melee's island builder */
+  static McVec2 v3[4] = {{0, 0}, {10, 0}, {20, 0}, {30, 0}};
+  static McLine loop[3] = {{0, 1, -1, 1, -1, -1, MC_LINE_FLOOR, 0}, {1, 2, 0, 2, -1, -1, MC_LINE_FLOOR, 0}, {2, 3, 1, 1, -1, -1, MC_LINE_FLOOR, 0}};
+  static McJoint j3[1] = {{{0, 3, 3, 3, 3}, {3, 0, 0, 0, 0}, 0, 0, 30, 0, 0, 4}};
+  McCollision l3 = {v3, 4, loop, 3, {0, 3, 3, 3, 3}, {3, 0, 0, 0, 0}, j3, 1, 0};
+  CHECK(refused(l3, "link"));
+  loop[2].next0 = -1;
+  CHECK(mc_check_collision(&l3, why, sizeof why) == 0);
+  static McLine apart[2] = {{0, 1, -1, 1, -1, -1, MC_LINE_FLOOR, 0}, {2, 3, 0, -1, -1, -1, MC_LINE_FLOOR, 0}};   /* linked but not touching */
+  McCollision a2 = {v3, 4, apart, 2, {0, 2, 2, 2, 2}, {2, 0, 0, 0, 0}, j3, 1, 0};
+  static McJoint j2[1] = {{{0, 2, 2, 2, 2}, {2, 0, 0, 0, 0}, 0, 0, 30, 0, 0, 4}};
+  a2.joints = j2;
+  CHECK(refused(a2, "link"));
 }
 
 static const McLine *line_of_kind(const McCollision *c, uint16_t kind, int nth) {

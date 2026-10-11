@@ -35,6 +35,12 @@ int mc_check_collision(const McCollision *c, char *why, size_t n) {
     const int16_t link[4] = {l->prev0, l->next0, l->prev1, l->next1};
     for (int k = 0; k < 4; k++)
       if (link[k] < -1 || link[k] >= c->n_lines) return fail(why, n, "line %d has a link to missing line %d", i, link[k]);
+    /* id0 links form Melee's chains (islands walk next0/prev0): mutual, touching, never self */
+    if (l->next0 >= 0 && (l->next0 == i || c->lines[l->next0].prev0 != i || c->lines[l->next0].v0 != l->v1))
+      return fail(why, n, "line %d next0 link to %d is not mutual or does not share vertex %u", i, l->next0, l->v1);
+    if (l->prev0 >= 0 && (l->prev0 == i || c->lines[l->prev0].next0 != i || c->lines[l->prev0].v1 != l->v0))
+      return fail(why, n, "line %d prev0 link to %d is not mutual or does not share vertex %u", i, l->prev0, l->v0);
+    if (l->next1 == i || l->prev1 == i) return fail(why, n, "line %d has a link to itself", i);
     if ((l->lo_flags & 0xFFu) > 19) return fail(why, n, "line %d material %u: must be 0..19", i, l->lo_flags & 0xFFu);
   }
   for (int j = 0; j < c->n_joints; j++) {
