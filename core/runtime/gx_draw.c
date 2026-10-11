@@ -41,6 +41,7 @@ static McGxVert *out_v; static int cap_v;
 static McGxRun *out_r; static int cap_r;
 static Tex *texs; static int ntex, captex;
 static int depth_dl;
+static uint32_t state_epoch = 1;   /* bumped by every state load: cached vertices are only valid within one epoch */
 #define PLAY_DEPTH 500.0f
 static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_stats) */
 
@@ -575,6 +576,10 @@ static void bake(DrawSetup *d, Vtx *vs, int n) {
   for (int i = 0; i < n; i++) vs[i].col = (C4){1, 1, 1, 1};
 }
 
+#define VCACHE 4096
+typedef struct { uint32_t epoch, hash, size; uint8_t bytes[64]; Vtx v; } VCacheEntry;
+static VCacheEntry vcache[VCACHE];
+
 static int draw(Rd *r, int op) {
   int prim = op & 0xF8, vat = op & 7;
   if (!rd_ok(r, 2)) return 0;
@@ -589,9 +594,23 @@ static int draw(Rd *r, int op) {
   setup_draw(&d);
   static Vtx *vs; static int capvs;
   if (n > capvs) { Vtx *p = realloc(vs, (size_t)n * sizeof *p); if (!p) return 0; vs = p; capvs = n; }
-  const uint8_t *first = r->p;
-  for (int i = 0; i < n; i++) if (!read_vertex(r, vat, &d, &vs[i])) return 0;
-  if ((uint32_t)(r->p - first) != vertex_size(vat) * (uint32_t)n) size_mismatches++;   /* the skip path must agree */
+  uint32_t vsz = vertex_size(vat);
+  for (int i = 0; i < n; i++) {
+    const uint8_t *at = r->p;
+    if (vsz && vsz <= 64 && rd_ok(r, vsz)) {   /* the same vertex bytes under the same state give the same vertex */
+      uint32_t h = fnv(at, vsz) ^ (uint32_t)vat * 0x9E3779B9u, slot = h & (VCACHE - 1);
+      VCacheEntry *e = &vcache[slot];
+      if (e->epoch == state_epoch && e->hash == h && e->size == vsz && memcmp(e->bytes, at, vsz) == 0) {
+        vs[i] = e->v; r->p += vsz; continue;
+      }
+      if (!read_vertex(r, vat, &d, &vs[i])) return 0;
+      if ((uint32_t)(r->p - at) != vsz) { size_mismatches++; continue; }   /* the skip path must agree */
+      e->epoch = state_epoch; e->hash = h; e->size = vsz; memcpy(e->bytes, at, vsz); e->v = vs[i];
+      continue;
+    }
+    if (!read_vertex(r, vat, &d, &vs[i])) return 0;
+    if ((uint32_t)(r->p - at) != vsz) size_mismatches++;
+  }
   if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
   switch (prim) {
     case 0x80: for (int i = 0; i + 3 < n; i += 4) { emit_tri(&vs[i], &vs[i + 1], &vs[i + 2], &d); emit_tri(&vs[i], &vs[i + 2], &vs[i + 3], &d); } break;
@@ -605,6 +624,7 @@ static int draw(Rd *r, int op) {
 
 /* ---- command processor ---- */
 static void load_cp(uint32_t reg, uint32_t v) {
+  state_epoch++;
   switch (reg & 0xF0) {
     case 0x30: S.matidx_a = v; break;
     case 0x40: S.matidx_b = v; break;
@@ -618,10 +638,12 @@ static void load_cp(uint32_t reg, uint32_t v) {
   }
 }
 static void load_xf(uint32_t addr, uint32_t v) {
+  state_epoch++;
   if (addr < 0x800) S.xf[addr] = v;
   else if (addr >= 0x1000 && addr < 0x1100) S.xfr[addr - 0x1000] = v;
 }
 static void load_bp(uint32_t w) {
+  state_epoch++;
   uint32_t reg = w >> 24, v = w & 0xFFFFFF;
   if (reg == 0xFE) { S.bpmask = v; return; }
   if (S.bpmask != 0xFFFFFF) { v = (S.bp[reg] & ~S.bpmask) | (v & S.bpmask); S.bpmask = 0xFFFFFF; }
@@ -724,10 +746,13 @@ static void to_atlas(Tri *tr) {
   tr->tex = MC_GX_ATLAS;
 }
 
-static int cmp_tri(const void *a, const void *b) {
-  float da = ((const Tri *)a)->depth, db = ((const Tri *)b)->depth;
-  return da < db ? -1 : da > db ? 1 : 0;   /* view z: more negative is farther: drawn first */
+typedef struct { float depth; int index; } Key;
+static int cmp_key(const void *a, const void *b) {
+  const Key *x = a, *y = b;
+  if (x->depth != y->depth) return x->depth < y->depth ? -1 : 1;   /* view z: more negative is farther: drawn first */
+  return x->index - y->index;                                       /* stable: equal depths keep Melee's order */
 }
+static Key *keys; static int cap_keys;
 
 static void init_live(void) {
   memset(&live, 0, sizeof live);
@@ -775,14 +800,17 @@ int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const
     at = end > at ? end : at;
   }
   for (int i = 0; i < ntris; i++) to_atlas(&tris[i]);
-  qsort(tris, (size_t)ntris, sizeof *tris, cmp_tri);
+  if (ntris > cap_keys) { Key *p = realloc(keys, (size_t)ntris * sizeof *p); if (!p) return -1; keys = p; cap_keys = ntris; }
+  for (int i = 0; i < ntris; i++) keys[i] = (Key){tris[i].depth, i};
+  qsort(keys, (size_t)ntris, sizeof *keys, cmp_key);
   if (3 * ntris > cap_v) { McGxVert *p = realloc(out_v, (size_t)(3 * ntris) * sizeof *p); if (!p) return -1; out_v = p; cap_v = 3 * ntris; }
   int nr = 0;
   for (int i = 0; i < ntris; i++) {
-    memcpy(&out_v[3 * i], tris[i].v, sizeof tris[i].v);
-    if (nr == 0 || out_r[nr - 1].tex != tris[i].tex || out_r[nr - 1].blend != tris[i].blend) {
+    const Tri *t = &tris[keys[i].index];
+    memcpy(&out_v[3 * i], t->v, sizeof t->v);
+    if (nr == 0 || out_r[nr - 1].tex != t->tex || out_r[nr - 1].blend != t->blend) {
       if (nr == cap_r) { int cap = cap_r ? cap_r * 2 : 256; McGxRun *p = realloc(out_r, (size_t)cap * sizeof *p); if (!p) return -1; out_r = p; cap_r = cap; }
-      out_r[nr++] = (McGxRun){(uint32_t)(3 * i), 0, tris[i].tex, tris[i].blend, tris[i].p_link, 0, 0, tris[i].gobj};
+      out_r[nr++] = (McGxRun){(uint32_t)(3 * i), 0, t->tex, t->blend, t->p_link, 0, 0, t->gobj};
     }
     out_r[nr - 1].count += 3;
   }
@@ -814,6 +842,7 @@ void gx_draw_free(void) {
   free(tris); tris = NULL; ntris = captris = 0;
   free(out_v); out_v = NULL; cap_v = 0;
   free(out_r); out_r = NULL; cap_r = 0;
+  free(keys); keys = NULL; cap_keys = 0;
 }
 
 uint32_t mc_gx_size_mismatches(void) { return size_mismatches; }
