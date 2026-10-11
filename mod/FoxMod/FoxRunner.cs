@@ -116,7 +116,7 @@ namespace FoxMelee {
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
-                }
+                } else if (PlayerData.instance.GetBool("atBench")) Rest(hero);
                 combat?.ReleaseAll();
                 return;
             }
@@ -381,6 +381,23 @@ namespace FoxMelee {
             DontDestroyOnLoad(copy);
             foreach (var r in copy.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = true;
             return copy;
+        }
+
+        // Sitting at a bench: Fox crouches where he stood (Melee keeps running with the stick held down), so resting
+        // is plain to see; Hollow Knight has the Knight and the controller.
+        float restClock;
+        void Rest(HeroController hero) {
+            if (gx == null) return;
+            restClock += Time.unscaledDeltaTime;
+            int frames = 0;
+            while (restClock >= Frame && frames < 4) {
+                restClock -= Frame;
+                core.SetInput(0, new McInput { StickY = -127 });
+                if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                frames++;
+            }
+            if (restClock > Frame) restClock = 0;
+            if (frames > 0 && core.ReadFighter(0, out fox)) gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z);
         }
 
         // Fox not moving for 3 s while the controller is pushed: log what is in the way (once per standstill)
