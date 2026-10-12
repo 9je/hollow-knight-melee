@@ -570,6 +570,13 @@ int mc_bounce(int port, float vy) {
   return 0;
 }
 
+int mc_ko(int port) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3) return -1;
+  m->ko_pending[port] = 1;                                       /* at the next frame boundary (room.c) */
+  return 0;
+}
+
 int mc_set_percent(int port, float percent) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3 || !isfinite(percent)) return -1;

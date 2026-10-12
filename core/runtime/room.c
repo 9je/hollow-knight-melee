@@ -244,6 +244,51 @@ void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y) {
   place_gobj(c, gobj, x, fy, 1, 0);
 }
 
+#define FN_EF_SPAWN 0x8005FDDCu         /* efSync_Spawn(kind, gobj, ...): an effect */
+#define FN_FT_PLAY_SFX 0x80088148u      /* ft_PlaySFX(fp, id, vol, pan) */
+#define FN_FT_VOICE 0x800D38B8u         /* ftCo_800D38B8(fp, id): a voice line */
+#define EF_KO_BLAST 0x42Bu
+#define ADDR_FT_COMMON_DATA 0x804D6554u /* p_ftCommonData */
+/* mc_ko: what ftCo_800D3BC8 (DeadDown) does that shows: the blast effect pointing up from the fighter, the blast sound, the
+ * KO voice; the fighter then goes invisible (setDeadInvisible). Its action, stocks and Melee's camera are left alone. While
+ * KO'd it is held where it was. */
+static void ko_boundary_jobs(Cpu *c) {
+  Machine *m = g_m;
+  for (int p = 0; p < 4; p++) {
+    uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + 0xB0u);
+    if (!gobj) { m->ko_pending[p] = m->ko[p] = 0; continue; }
+    uint32_t fp = ld32(c, gobj + 0x2C);
+    if (m->ko_pending[p] && !m->ko[p]) {
+      m->ko[p] = 1;
+      m->ko_x[p] = ldf(c, fp + 0xB0); m->ko_y[p] = ldf(c, fp + 0xB4);
+      uint32_t sp = c->gpr[1], f = (sp - 0x40u) & ~15u;   /* frame: +0 back chain, +0x10 pos, +0x1C angle */
+      st32(c, f, sp);
+      stf(c, f + 0x10, m->ko_x[p]); stf(c, f + 0x14, m->ko_y[p]); stf(c, f + 0x18, ldf(c, fp + 0xB8));
+      stf(c, f + 0x1C, 0.0f);
+      uint32_t c1 = ld32(c, 0x804D650Cu), c2 = ld32(c, 0x804D6508u);   /* the blast's colours, Player_GetUnk45's slot 0 */
+      c->gpr[1] = f;
+      c->gpr[5] = f + 0x10; c->gpr[6] = f + 0x1C; c->gpr[7] = ld32(c, ADDR_FT_COMMON_DATA) + 0x4F4u;
+      c->gpr[8] = (uint32_t)ld8(c, c1) << 16 | (uint32_t)ld8(c, c1 + 1) << 8 | ld8(c, c1 + 2);
+      c->gpr[9] = (uint32_t)ld8(c, c2) << 16 | (uint32_t)ld8(c, c2 + 1) << 8 | ld8(c, c2 + 2);
+      call_guest(c, FN_EF_SPAWN, EF_KO_BLAST, gobj);
+      c->gpr[1] = sp;
+      c->gpr[5] = 0x7F; c->gpr[6] = 0x40;
+      call_guest(c, FN_FT_PLAY_SFX, fp, 0x61);
+      uint32_t sfx = ld32(c, ld32(c, fp + 0x10Cu) + 0x4Cu);
+      call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 4));
+      call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 8));
+      st8(c, fp + 0x221Eu, (uint8_t)(ld8(c, fp + 0x221Eu) | 0x80u));
+      st8(c, fp + 0x221Fu, (uint8_t)(ld8(c, fp + 0x221Fu) | 0x40u));
+    }
+    m->ko_pending[p] = 0;
+    if (!m->ko[p]) continue;
+    static const uint32_t vel[] = {0x80, 0x84, 0x88, 0x8C, 0x90, 0x94, 0xEC};   /* self, kb, ground */
+    for (unsigned k = 0; k < sizeof vel / sizeof vel[0]; k++) stf(c, fp + vel[k], 0.0f);
+    stf(c, fp + 0xB0, m->ko_x[p]); stf(c, fp + 0xB4, m->ko_y[p]);
+    call_guest(c, FN_MPCOLL_SET_POS, fp + 0x6F0u, fp + 0xB0u);
+  }
+}
+
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
   standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
@@ -265,6 +310,11 @@ void room_boundary_jobs(Cpu *c) {
       if (!gobj) continue;
       uint32_t fp = ld32(c, gobj + 0x2C);
       if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep: Fall would wake it */
+      if (m->place_pending[p] && !follower && m->ko[p]) {   /* back from mc_ko */
+        m->ko[p] = 0;
+        st8(c, fp + 0x221Eu, (uint8_t)(ld8(c, fp + 0x221Eu) & ~0x80u));   /* invisible */
+        st8(c, fp + 0x221Fu, (uint8_t)(ld8(c, fp + 0x221Fu) & ~0x40u));
+      }
       if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] - 1);
       else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
@@ -282,6 +332,7 @@ void room_boundary_jobs(Cpu *c) {
         st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u));
       }
   edge_assist_boundary(c);
+  ko_boundary_jobs(c);
   for (int p = 0; p < 4; p++) {   /* mc_bounce (hazard pogo): the aerial ends in Fall, going up; no fast fall; double jump back */
     if (!m->bounce_pending[p]) continue;
     m->bounce_pending[p] = 0;

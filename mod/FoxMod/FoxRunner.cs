@@ -118,6 +118,7 @@ namespace FoxMelee {
             HideKnightDeaths(hero, !session.KnightVisible(f));
             Prompts.Active = !session.KnightVisible(f);
             if (session.Owner(f) == HeroOwner.Hollow) {
+                if (Ko(hero, gm, f)) return;
                 enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
                 // normal physics (entering a room drops him with gravity onto the floor).
@@ -239,6 +240,37 @@ namespace FoxMelee {
             }
             if (model == null) DrawPlaceholder(hk);
             effects?.Draw(core, fox, room);
+        }
+
+        // Hollow Knight's death: Melee's KO (the blast and Fox's cry) where Fox stands, played out for KoFrames while Hollow
+        // Knight runs its death; the next placement (the respawn) shows him again.
+        const int KoFrames = 60;
+        int koLeft = -1;                          // Melee frames of the KO left to show; -1: none started this death
+        bool Ko(HeroController hero, GameManager gm, HeroFlags f) {
+            if (!f.Dead) { koLeft = -1; return false; }
+            if (koLeft < 0) {
+                if (state != State.Running || room == null || !core.Ko(0)) { koLeft = 0; return false; }
+                koLeft = KoFrames;
+                accumulator = 0;
+                combat?.ReleaseAll(); grab?.Release();
+                Log("KO");
+            }
+            if (koLeft == 0) return false;
+            accumulator += Time.unscaledDeltaTime;
+            int frames = 0;
+            while (accumulator >= Frame && koLeft > 0 && frames < 4) {
+                accumulator -= Frame;
+                frames++; koLeft--;
+                core.SetInput(0, new McInput());
+                if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return true; }
+                sfx?.Frame(core);
+            }
+            if (koLeft == 0) { gx?.Hide(); return false; }
+            bool fresh = frames > 0 || !(gx?.Shown ?? false);
+            if (gx == null || !gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z, fresh)) koLeft = 0;
+            model?.Hide(); effects?.Hide();
+            if (placeholder) placeholder.SetActive(false);
+            return true;
         }
 
         // D-pad left/right: Hollow Knight gets the Knight back and presses "up" for him; FoxSession keeps him there
@@ -460,7 +492,10 @@ namespace FoxMelee {
         bool deathsHidden;
         readonly List<GameObject> spawnedDeaths = new List<GameObject>();
         readonly List<Renderer> deathRenderers = new List<Renderer>();
+        HeroController deathsHiddenOn;
         void HideKnightDeaths(HeroController hero, bool hide) {
+            // a new Knight (back from the main menu) has its own death object; and its death spawns into it as it plays
+            if (hero != deathsHiddenOn || (hide && hero.cState.dead)) { deathsHiddenOn = hero; deathsHidden = !hide; }
             if (hide != deathsHidden) {
                 deathsHidden = hide;
                 if (hero.heroDeathPrefab != null)

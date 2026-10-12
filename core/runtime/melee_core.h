@@ -51,6 +51,10 @@ int mc_set_edge_assist(int on);
 /* Hazard pogo (spec §5.4, not Melee): an airborne fighter's vertical speed becomes vy (Melee units per frame), a fast fall
  * ends and its double jump is back. 0 done, 1 not airborne (nothing), -1 error. */
 int mc_bounce(int port, float vy);
+/* Hollow Knight's death while the fighter plays: Melee's KO, the blast (as at the bottom blast line, ftCo_800D3BC8) and the
+ * fighter's KO voice where it stands, without the stock loss or rebirth; then it is invisible and held there until its next
+ * placement (mc_place_fighter, mc_respawn_fighter) brings it back. Runs at the next frame boundary. 0 done, -1 error. */
+int mc_ko(int port);
 /* Move gating (spec §6): locked moves (MC_GATE_* bits) don't start. A locked special does nothing when its input comes, a
  * locked double jump counts as already used in the air, a locked wall jump is turned off as for a fighter without one. */
 #define MC_GATE_DOUBLE_JUMP 1u

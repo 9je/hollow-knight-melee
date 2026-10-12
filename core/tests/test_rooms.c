@@ -867,6 +867,31 @@ static void test_edge_assist_steps(void) {
   mc_shutdown();
 }
 
+/* mc_ko (Hollow Knight's death while Fox plays): Melee's KO blast and cry where Fox is, then he is gone (invisible, held in
+ * place) until the next placement (the respawn) brings him back. */
+static void test_ko(void) {
+  McInput idle = {0};
+  McSfx ev[64];
+  solo_fox(); steps(180, &idle);
+  while (mc_read_sfx(ev, 64) > 0) {}
+  McFighter before = fox();
+  CHECK(mc_ko(0) == 0);
+  steps(1, &idle);
+  int n = mc_read_sfx(ev, 64), starts = 0;
+  for (int i = 0; i < n; i++) starts += ev[i].kind == 0;
+  CHECK(starts >= 2);                                     /* the blast and Fox's KO voice */
+  uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2C);
+  CHECK(mc_peek32(fp + 0x221C) & 0x8000u);                /* invisible (fp+0x221E bit 0) */
+  steps(90, &idle);
+  McFighter held = fox();
+  CHECK(fabsf(held.x - before.x) < 0.01f && fabsf(held.y - before.y) < 1.0f);
+  CHECK(mc_respawn_fighter(0, before.x, before.y + 20) == 0);
+  steps(60, &idle);
+  CHECK(!(mc_peek32(fp + 0x221C) & 0x8000u));
+  CHECK(fox().airborne == 0);
+  mc_shutdown();
+}
+
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
 static void test_standin_wake_keeps_percent(void) {
   McInput idle = {0};
@@ -1011,6 +1036,7 @@ int main(int argc, char **argv) {
   test_standin_grab_pummel_throw();
   test_edge_assist();
   test_edge_assist_steps();
+  test_ko();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();
