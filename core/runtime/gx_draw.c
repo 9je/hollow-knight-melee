@@ -854,6 +854,8 @@ static void init_live(void) {
   /* loaded once by GXInit at boot, before any capture: GX_IDENTITY (texture matrix 60) and GX_PTIDENTITY (post 125) */
   static const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
   for (int i = 0; i < 12; i++) { memcpy(&live.xf[60 * 4 + i], &id[i], 4); memcpy(&live.xf[0x500 + 61 * 4 + i], &id[i], 4); }
+  /* and dual texgen on (XF 0x1012): HSD's texture matrices (scroll, scale, a mirrored quarter's x2) are post matrices */
+  live.xfr[0x12] = 1;
   memcpy(&start, &live, sizeof start);
   live_ready = 1;
 }

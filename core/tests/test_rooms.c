@@ -660,6 +660,31 @@ static void test_apply_hit(void) {
   mc_shutdown();
 }
 
+/* HSD's texture matrices are post-transform matrices (GX_PTTEXMTX), live only with dual texgen, which GXInit turns on
+ * before any capture. Firefox's flare and the shield's glint are a quarter texture mirrored by a x2 post matrix: without it
+ * one quarter filled the quad (a square). */
+static float mirror_uv_span(uint64_t mask) {
+  const McGxVert *v; int nv; const McGxRun *r; int nr; float span = 0;
+  CHECK(mc_gx_decode(mask, &v, &nv, &r, &nr) == 0);
+  for (int i = 0; i < nr; i++) {
+    if (r[i].wrap_s != 2 || r[i].wrap_t != 2) continue;
+    float u0 = 1e9f, u1 = -1e9f;
+    for (uint32_t k = r[i].first; k < r[i].first + r[i].count; k++) { u0 = fminf(u0, v[k].u); u1 = fmaxf(u1, v[k].u); }
+    if (u1 - u0 > span) span = u1 - u0;
+  }
+  return span;
+}
+static void test_gx_post_texture_matrices(void) {
+  const uint64_t EFFECTS = (1ull << 11) | (1ull << 12);
+  McInput idle = {0}, upb = {0};
+  upb.buttons = 0x0200; upb.stick_y = 127;
+  solo_fox(); steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(1, &upb); steps(44, &idle);   /* Firefox charging: the flare */
+  CHECK(mirror_uv_span(EFFECTS) > 1.5f);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -674,6 +699,7 @@ int main(int argc, char **argv) {
   test_items();
   test_gx_capture();
   test_gx_decode();
+  test_gx_post_texture_matrices();
   test_room_draws_fox_offscreen();
   test_sfx();
   test_laser_hits();
