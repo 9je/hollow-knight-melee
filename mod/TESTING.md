@@ -30,6 +30,9 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 3. Jump, double jump, fast fall. Compare Fox's full jump with the Knight's (WorldScale, default 6.0). Write down what feels right. If Fox's jump is too small for the rooms, lower WorldScale (the world gets smaller in Melee units); if he clears everything too easily, raise it.
 4. Wavedash (jump, air dodge diagonally into the floor), waveland onto a ledge-top.
 5. Ledges: run off and grab one (CliffCatch); ledge-hop.
+   Edge assist (`EdgeAssist`, on by default; not Melee): walking into an edge, Fox teeters (Ottotto) whatever your tilt.
+   In Melee only a walk below 75% tilt stops at an edge; a faster walk goes off. Dash, run, jump or drift to leave the
+   edge. `EdgeAssist: false` gives Melee's exact rule back.
 6. Walls stop Fox; ceilings stop his jumps.
 7. Walk through the exit to the next room: the transition plays, then Fox appears at the entry point and keeps moving.
 8. Spikes / pits: Hollow Knight's hazard respawn plays and Fox reappears where the Knight respawns.

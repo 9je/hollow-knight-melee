@@ -39,6 +39,9 @@ void mc_set_input(int port, const McInput *in);     /* NULL = no controller */
 #define MC_ONLINE_RNG 1u   /* flags: replay a Slippi online match (its per-frame RNG sync, seeded by `seed`) */
 int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags);
 void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
+/* Edge assist (a deviation from Melee, off by default): port 0's walk stops at a floor's edge (Ottotto) whatever the
+ * stick's tilt, as Melee's walk does below 75% tilt. Dash, run and air movement still go off edges. */
+int mc_set_edge_assist(int on);
 void mc_fox_standin_start(uint8_t out[MC_START_SIZE]);   /* plan 7: Fox, and a second Fox at port 1 (standin.h) */
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
 /* The fighter's joint world matrices (3x4 row-major, Melee units), depth first, as Melee's render pass leaves

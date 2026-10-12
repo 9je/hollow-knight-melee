@@ -78,6 +78,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ApplyHitFn(int port, ref McHit hit);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInSetFn(int port);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int OnFn(int on);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
@@ -89,7 +90,7 @@ namespace FoxMelee {
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
-        readonly StartFn start; readonly InputFn input; readonly ReadFn read;
+        readonly StartFn start; readonly OnFn edgeAssist; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -110,6 +111,7 @@ namespace FoxMelee {
             standinWake = NativeLib.Symbol<StandInWakeFn>(lib, "mc_standin_wake");
             standinSleep = NativeLib.Symbol<IntFn>(lib, "mc_standin_sleep");
             standinHeld = NativeLib.Symbol<IntFn>(lib, "mc_standin_held");
+            edgeAssist = NativeLib.Symbol<OnFn>(lib, "mc_set_edge_assist");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
             read = NativeLib.Symbol<ReadFn>(lib, "mc_read_fighter");
@@ -164,6 +166,8 @@ namespace FoxMelee {
         public bool StandInWake(float x, float y, float facing) { Sync(); return Ok(standinWake(x, y, facing)); }
         public bool StandInSleep() { Sync(); return Ok(standinSleep()); }
         public int StandInHeld() { Sync(); return standinHeld(); }
+        /// Edge assist (not Melee): port 0's walk teeters at an edge whatever the tilt, as Melee's walk does below 75% tilt.
+        public bool SetEdgeAssist(bool on) { Sync(); return Ok(edgeAssist(on ? 1 : 0)); }
         public void SetInput(int port, McInput? value) {
             Sync();
             if (value is McInput v) { Marshal.StructureToPtr(v, inputBuf, false); input(port, inputBuf); }

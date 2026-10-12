@@ -278,5 +278,22 @@ namespace FoxMelee.Tests {
             Assert.True(core.StandInSleep() && core.Step() && core.Step(), core.Error);
             Assert.True(core.ReadFighter(1, out s) && s.Action == 11);
         }
+
+        [Fact]
+        public void EdgeAssistTeetersAFullTiltWalk() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.SetEdgeAssist(true), core.Error);
+            core.SetInput(0, new McInput { StickX = -40 });
+            Assert.True(core.Step() && core.Step(), core.Error);
+            core.SetInput(0, new McInput { StickX = -127 });
+            for (int i = 0; i < 240; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out var f) && f.Airborne == 0);
+        }
     }
 }

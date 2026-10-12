@@ -40,7 +40,8 @@ typedef struct Machine {
   uint32_t standin_gobj;                /* its fighter GObj, refreshed at each boundary */
   int standin_req;                      /* next boundary: 1 wake, 2 sleep */
   float standin_x, standin_y, standin_facing;
-  int standin_depth;                    /* > 0 while one of its procs runs: its sounds are dropped */
+  int standin_depth;
+  int edge_assist;                      /* mc_set_edge_assist: port 0's walks teeter at edges */                    /* > 0 while one of its procs runs: its sounds are dropped */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */

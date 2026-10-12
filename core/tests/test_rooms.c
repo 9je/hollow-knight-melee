@@ -795,6 +795,32 @@ static void test_standin_grab_pummel_throw(void) {
   mc_shutdown();
 }
 
+/* Edge assist (mc_set_edge_assist): a full-tilt walk teeters at an edge as a slow walk does (Melee: |stick x| < 0.75 stops at
+ * an edge, faster walks off); off, Fox walks off. A dash still goes off. */
+static int walk_to_left_edge(int assist) {
+  McInput idle = {0}, slow = {0}, full = {0};
+  slow.stick_x = -40; full.stick_x = -127;
+  solo_fox(); steps(180, &idle);
+  CHECK(mc_set_edge_assist(assist) == 0);
+  steps(2, &slow);                     /* a walk, not a dash */
+  int fell = 0;
+  for (int i = 0; i < 240 && !fell; i++) { steps(1, &full); fell = fox().airborne != 0; }
+  return fell;
+}
+static void test_edge_assist(void) {
+  CHECK(walk_to_left_edge(0) == 1); mc_shutdown();
+  CHECK(walk_to_left_edge(1) == 0);
+  uint32_t a = fox().action;
+  CHECK(a == 245 || a == 246 || a == 15);   /* Ottotto, OttottoWait, or walking against the edge */
+  McInput idle = {0}, smash = {0};
+  smash.stick_x = -127;
+  steps(10, &idle);
+  int fell = 0;
+  for (int i = 0; i < 60 && !fell; i++) { steps(1, &smash); fell = fox().airborne != 0; }
+  CHECK(fell);                          /* a dash from the edge goes off */
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -820,6 +846,7 @@ int main(int argc, char **argv) {
   test_standin_push_and_no_hits();
   test_standin_survives_room_load();
   test_standin_grab_pummel_throw();
+  test_edge_assist();
   puts("rooms tests passed");
   return 0;
 }

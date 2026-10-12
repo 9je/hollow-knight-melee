@@ -296,6 +296,7 @@ namespace FoxMelee {
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
             for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
             for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
+            if (!core.SetEdgeAssist(s.EdgeAssist)) { Fail("mc_set_edge_assist: " + core.Error); return false; }
             if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
             if (s.ShowModel) {
                 var path = Path.Combine(dir, "fox.model");

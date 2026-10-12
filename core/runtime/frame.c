@@ -1,3 +1,4 @@
+#include <string.h>
 /* frame.c - the frame boundary, the scene-info hook and indirect calls. */
 #include "mc_internal.h"
 #include "guest_table.h"
@@ -79,6 +80,15 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
 }
 
 #define FN_PROC_ATTACK_COLL 0x8006CB94u   /* Fighter_procAttackColl: the victim side of every hit */
+#define FN_WALK_COLL 0x800C9788u          /* ftCo_Walk_Coll: ft_80084280, which stops at an edge if |lstick x| < 0.75 */
+#define EDGE_STOP_TILT 0.7375f            /* the largest tilt below 0.75 the GameCube stick gives (59/80) */
+
+int mc_set_edge_assist(int on) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  m->edge_assist = on != 0;
+  return 0;
+}
 
 uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   Machine *m = g_m;
@@ -116,6 +126,18 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);
+  if (target == FN_WALK_COLL && m->edge_assist && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
+    /* edge assist: the edge check sees a tilt below 0.75, so the walk stops at the edge as a slower walk does */
+    uint32_t fp = ld32(c, c->gpr[3] + 0x2C), was = ld32(c, fp + 0x620u);
+    float x; memcpy(&x, &was, 4);
+    if (x > EDGE_STOP_TILT || x < -EDGE_STOP_TILT) {
+      float t = x > 0 ? EDGE_STOP_TILT : -EDGE_STOP_TILT; uint32_t u; memcpy(&u, &t, 4);
+      st32(c, fp + 0x620u, u);
+      uint32_t r = f(c);
+      st32(c, fp + 0x620u, was);
+      return r;
+    }
+  }
   uint32_t gobj = c->gpr[3];   /* a GObj's render callback (HSD_GObj_80390CD4 calls render_cb(gobj, pass)) */
   if (m->gx_on && gobj >= 0x80000000u && gobj < 0x80000000u + MEM1_SIZE - 0x30 && ld32(c, gobj + 0x1C) == target) {
     gx_mark(c, gobj);
