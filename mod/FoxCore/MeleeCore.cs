@@ -81,6 +81,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int OnFn(int on);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate ulong FrameFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BounceFn(int port, float vy);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GatesFn(int port, uint locked);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
@@ -92,7 +93,7 @@ namespace FoxMelee {
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
-        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly InputFn input; readonly ReadFn read;
+        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -118,6 +119,7 @@ namespace FoxMelee {
             edgeAssist = NativeLib.Symbol<OnFn>(lib, "mc_set_edge_assist");
             frameNo = NativeLib.Symbol<FrameFn>(lib, "mc_frame");
             bounce = NativeLib.Symbol<BounceFn>(lib, "mc_bounce");
+            gates = NativeLib.Symbol<GatesFn>(lib, "mc_set_gates");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
             read = NativeLib.Symbol<ReadFn>(lib, "mc_read_fighter");
@@ -185,6 +187,8 @@ namespace FoxMelee {
         /// Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up at vy, fast fall ended, double jump back.
         /// 0 done, 1 not airborne, -1 error.
         public int Bounce(int port, float vy) { Sync(); localError = null; return bounce(port, vy); }
+        /// Move gating (spec §6): MoveGates bits of the moves that don't start.
+        public bool SetGates(int port, uint locked) { Sync(); return Ok(gates(port, locked)); }
         /// Frame boundaries reached since Init.
         public ulong Frame { get { Sync(); return frameNo(); } }
         /// Runs the next frame up to Melee's hit resolution for port 0, where ReportHit lands in this frame; Step()

@@ -126,6 +126,7 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);
+  if (m->any_gates && gates_block(c, target)) RET;   /* spec §6: a locked special */
   if (target == FN_WALK_COLL && m->edge_assist && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
     /* edge assist: the edge check sees a tilt below 0.75, so the walk stops at the edge as a slower walk does */
     uint32_t fp = ld32(c, c->gpr[3] + 0x2C), was = ld32(c, fp + 0x620u);

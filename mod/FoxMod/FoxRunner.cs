@@ -170,6 +170,7 @@ namespace FoxMelee {
                     if (!lying || !neutral) getUp = false;   // a roll, a get-up attack: Melee's own options
                     else if (fox.Action == ActionDownWaitU || fox.Action == ActionDownWaitD) { input = new McInput { StickY = 127 }; getUp = false; }
                 }
+                if (!Gate()) return;
                 if (grab != null && !grab.Before(core, room, (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero)))) { Fail("stand-in: " + core.Error); return; }
                 if (combat != null) combat.Held = grab?.Held;
                 core.SetInput(0, input);
@@ -283,6 +284,25 @@ namespace FoxMelee {
             if (step.Heal) focusEffects.Healed(hero);
             focusing = step.Focusing;
             return focusing;
+        }
+
+        // spec §6: the moves locked by what the Knight has (MoveGating); set when it changes
+        uint gatesSet = uint.MaxValue;
+        bool Gate() {
+            uint locked = 0;
+            if (FoxMod.Instance.Settings.MoveGating) {
+                var pd = PlayerData.instance;
+                locked = MoveGates.Locked(new HkUnlocks {
+                    VengefulSpirit = pd.GetInt("fireballLevel") > 0, MothwingCloak = pd.GetBool("hasDash"),
+                    MantisClaw = pd.GetBool("hasWalljump"), CrystalHeart = pd.GetBool("hasSuperDash"),
+                    DesolateDive = pd.GetInt("quakeLevel") > 0, MonarchWings = pd.GetBool("hasDoubleJump"),
+                });
+            }
+            if (locked == gatesSet) return true;
+            if (!core.SetGates(0, locked)) { Fail("mc_set_gates: " + core.Error); return false; }
+            gatesSet = locked;
+            Log($"locked moves: {locked}");
+            return true;
         }
 
         bool Boot() {

@@ -84,6 +84,11 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
     `Velocity` (Melee units per frame, 2.8), `GraceFrames` (8). Try it on King's Pass's first spikes.
 
+17. Move gating (spec §6), **off by default** (`MoveGating: false`) so your current save keeps every move. On, Fox's
+    moves wait for the Knight's unlocks: Shine ← Vengeful Spirit, Illusion ← Mothwing Cloak, wall jump ← Mantis Claw,
+    Fire Fox ← Crystal Heart, blaster ← Desolate Dive, double jump ← Monarch Wings. A locked special does nothing when
+    pressed; a locked double jump is as if already used. The log says `locked moves: N` when the set changes.
+
 15. Frame rate: Melee's drawing (about three quarters of each Melee frame) now runs on the core's own thread while
     Unity goes on (`DrawOffThread`, on). No added input lag: Fox's picture was already drawn a frame behind. The
     `perf:` log line's "Melee ms/frame" is now the main thread's share only (about 1.7 ms instead of about 6). If

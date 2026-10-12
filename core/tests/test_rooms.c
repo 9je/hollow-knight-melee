@@ -898,6 +898,37 @@ static void test_bounce(void) {
   mc_shutdown();
 }
 
+/* Move gating (spec §6): a locked special does nothing when its input comes; a locked double jump counts as used; a locked
+ * wall jump is Fox without one. Unlocked again, each works. */
+static float rise_after_second_jump(void) {
+  McInput idle = {0}, jump = {0};
+  jump.buttons = 0x0800;
+  steps(1, &jump); steps(15, &idle);
+  float y = fox().y;
+  steps(1, &jump); steps(8, &idle);
+  float d = fox().y - y;
+  steps(80, &idle);                                    /* landed again */
+  return d;
+}
+static void test_gates(void) {
+  McInput idle = {0}, shine = {0};
+  shine.buttons = 0x0200; shine.stick_y = -127;
+  solo_fox(); steps(180, &idle);
+  uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
+  CHECK(mc_set_gates(0, MC_GATE_SPECIAL_LW | MC_GATE_DOUBLE_JUMP | MC_GATE_WALL_JUMP) == 0);
+  steps(1, &shine); steps(1, &idle);
+  CHECK(fox().action == 14);                           /* no shine: still Wait */
+  CHECK(!(mc_peek32(fp + 0x2224) & 0x01000000u));      /* can_walljump off */
+  CHECK(rise_after_second_jump() < 0);                 /* no double jump: still falling */
+  CHECK(mc_set_gates(0, 0) == 0);
+  steps(1, &idle);
+  CHECK(mc_peek32(fp + 0x2224) & 0x01000000u);
+  CHECK(rise_after_second_jump() > 5);
+  steps(1, &shine); steps(1, &idle);
+  CHECK(fox().action != 14);                           /* shine */
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -927,6 +958,7 @@ int main(int argc, char **argv) {
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();
+  test_gates();
   puts("rooms tests passed");
   return 0;
 }

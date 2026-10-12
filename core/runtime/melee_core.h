@@ -51,6 +51,15 @@ int mc_set_edge_assist(int on);
 /* Hazard pogo (spec §5.4, not Melee): an airborne fighter's vertical speed becomes vy (Melee units per frame), a fast fall
  * ends and its double jump is back. 0 done, 1 not airborne (nothing), -1 error. */
 int mc_bounce(int port, float vy);
+/* Move gating (spec §6): locked moves (MC_GATE_* bits) don't start. A locked special does nothing when its input comes, a
+ * locked double jump counts as already used in the air, a locked wall jump is turned off as for a fighter without one. */
+#define MC_GATE_DOUBLE_JUMP 1u
+#define MC_GATE_WALL_JUMP 2u
+#define MC_GATE_SPECIAL_N 4u    /* Fox: blaster */
+#define MC_GATE_SPECIAL_S 8u    /* Illusion */
+#define MC_GATE_SPECIAL_HI 16u  /* Fire Fox */
+#define MC_GATE_SPECIAL_LW 32u  /* Shine */
+int mc_set_gates(int port, uint32_t locked);   /* 0 ok, -1 error */
 void mc_fox_standin_start(uint8_t out[MC_START_SIZE]);   /* plan 7: Fox, and a second Fox at port 1 (standin.h) */
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
 /* The fighter's joint world matrices (3x4 row-major, Melee units), depth first, as Melee's render pass leaves

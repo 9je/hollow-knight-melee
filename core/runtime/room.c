@@ -233,6 +233,7 @@ void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y) {
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
   standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
+  gates_boundary_jobs(c);     /* spec §6: locked jumps */
   int loaded = m->room_pending;
   if (m->room_pending) {
     m->room_pending = 0;
