@@ -23,6 +23,20 @@ namespace FoxMelee.Lab {
                         if (k == 0) a[i].Buttons = X;
                         if (k == 4) { a[i].Buttons = R; a[i].TriggerR = 140; a[i].StickX = 56; a[i].StickY = -56; }
                         break;
+                    case "climb-left": {   // after 30 frames: full jump, double jump at its peak, drifting left (then right: back onto a ledge)
+                        int k2 = i - 30;
+                        if (k2 >= 0 && k2 < 6) a[i].Buttons = X;
+                        if (k2 >= 38 && k2 < 40) a[i].Buttons = X;
+                        if (k2 >= 0) a[i].StickX = -100;
+                        break;
+                    }
+                    case "firefox-up": {   // after 30 frames: jump, then up-B straight up
+                        int k2 = i - 30;
+                        if (k2 >= 0 && k2 < 6) a[i].Buttons = X;
+                        if (k2 >= 20 && k2 < 22) { a[i].Buttons = 0x0200; a[i].StickY = 127; }
+                        if (k2 >= 22 && k2 < 60) a[i].StickY = 127;
+                        break;
+                    }
                     default: throw new System.ArgumentException($"unknown script {name}");
                 }
             }

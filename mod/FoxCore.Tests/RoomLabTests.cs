@@ -113,5 +113,27 @@ namespace FoxMelee.Tests {
             Assert.True(endHk.Y < 58, $"Fox fell down the shaft (ends at {endHk.X:F2}, {endHk.Y:F2})");
             Assert.Equal(0u, (uint)end.Airborne);
         }
+    
+        // Crossroads_25: Firefox straight up at x = 33 hits the ceiling and must stay there (a near-zero ceiling line
+        // threw Fox 14 units sideways onto the stalactite hazard: "it keeps resetting me back")
+        [Fact]
+        public void FirefoxIntoCrossroads25CeilingStaysPut() {
+            var file = Path.Combine(DevConfig.Repo, "build/roomlab/rooms/Crossroads_25.json");
+            if (!DevConfig.Available || !File.Exists(file)) return;
+            var room = RoomFile.Load(file);
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            var c = Rooms.Convert(core, room, 6);
+            Assert.True(c.Ok, c.Error);
+            var trace = Rooms.Run(core, c, 33, 6.1, Scripts.Get("firefox-up", 130));
+            for (int i = 1; i < trace.Count; i++) {
+                double step = System.Math.Abs(trace[i].X - trace[i - 1].X) + System.Math.Abs(trace[i].Y - trace[i - 1].Y);
+                Assert.True(step < 12, $"frame {i}: Fox moved {step:F1} Melee units in one frame");
+            }
+        }
     }
 }

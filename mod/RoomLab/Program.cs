@@ -54,8 +54,11 @@ namespace FoxMelee.Lab {
                     double inward = Opt(a, "--inward", 3), centre = (c.Min.X + c.Max.X) / 2;
                     bool side = gate.Name.StartsWith("left") || gate.Name.StartsWith("right");   // top/bottom gates: drop straight in
                     double sx = side ? gate.X + (gate.X < centre ? inward : -inward) : gate.X, sy = gate.Y - gate.H / 2 + 1;
+                    var from = OptS(a, "--from");   // x,y in Hollow Knight units: start there instead of at a gate
+                    if (from != null) { var xy = from.Split(','); sx = double.Parse(xy[0], System.Globalization.CultureInfo.InvariantCulture); sy = double.Parse(xy[1], System.Globalization.CultureInfo.InvariantCulture); }
                     var trace = Rooms.Run(core, c, sx, sy, Scripts.Get(OptS(a, "--script") ?? "idle", (int)Opt(a, "--frames", 300)));
                     File.WriteAllText(OptS(a, "--trace") ?? "trace.json", JsonSerializer.Serialize(trace.Select(t => new { frame = t.Frame, x = t.X, y = t.Y, action = t.Action, air = t.Air })));
+                    if (OptS(a, "--print") != null) foreach (var t in trace) if (t.Frame % (int)Opt(a, "--print", 10) == 0) { var h = c.Transform.ToHk(new V2(t.X, t.Y)); Console.WriteLine($"  f{t.Frame,3} hk ({h.X:F2}, {h.Y:F2}) action {t.Action} air {t.Air}"); }
                     Console.WriteLine($"{c.Scene}: {trace.Count} frames from ({sx:F1}, {sy:F1}) via {gate.Name}; end action {trace[^1].Action} at ({trace[^1].X:F1}, {trace[^1].Y:F1})");
                     return 0;
                 }

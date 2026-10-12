@@ -8,6 +8,21 @@ namespace FoxMelee.Tests {
             new ColliderOutline { Points = new[] { new V2(x0, y0), new V2(x1, y0), new V2(x1, y1), new V2(x0, y1) }, OneWay = oneWay };
         static readonly RoomTransform Unit = new RoomTransform { Scale = 1, Origin = new V2(0, 0) };
 
+        // HK colliders that almost meet leave corners a hair apart; Melee's collision follows a zero-length line to the
+        // far end of its chain (Crossroads_25: Fox, hitting a ceiling, was thrown 14 units onto a stalactite)
+        [Fact]
+        public void NoEdgeShorterThanMinEdge() {
+            var r = RoomGeometry.Build(new[] { Box(0, 0, 10, 2), Box(10, 0.004, 20, 2.004) }, Unit);
+            foreach (var s in r) {
+                int n = s.XY.Length / 2;
+                for (int i = 0; i < n; i++) {
+                    int j = (i + 1) % n;
+                    double len = System.Math.Sqrt(System.Math.Pow(s.XY[2 * j] - s.XY[2 * i], 2) + System.Math.Pow(s.XY[2 * j + 1] - s.XY[2 * i + 1], 2));
+                    Assert.True(len >= RoomGeometry.MinEdge, $"edge {i}: {len}");
+                }
+            }
+        }
+
         [Fact]
         public void TouchingBoxesBecomeOneSolidWithFourCorners() {
             var r = RoomGeometry.Build(new[] { Box(0, 0, 10, 2), Box(10, 0, 20, 2) }, Unit);

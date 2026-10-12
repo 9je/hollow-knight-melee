@@ -29,6 +29,7 @@ namespace FoxMelee {
     /// Hollow Knight terrain colliders to Melee room shapes (merged outlines, holes, platforms).
     public static class RoomGeometry {
         public const double EdgeThickness = 0.2;
+        public const double MinEdge = 0.1;   // HK units (0.6 Melee units): shorter edges are merged into their neighbours
         const double Eps = 1e-4;
         const int Precision = 4;   // Clipper2 decimal places for the union (0.0001 HK units)
 
@@ -74,7 +75,8 @@ namespace FoxMelee {
             }
         }
 
-        /// Drops duplicate and collinear points of a closed outline.
+        /// Drops duplicate and collinear points of a closed outline, and points closer than MinEdge to the one before:
+        /// Melee's collision follows a near-zero line to the far end of its chain.
         static V2[] Simplify(PathD path) {
             var p = path.Select(q => new V2(q.x, q.y)).ToList();
             bool changed = true;
@@ -83,7 +85,7 @@ namespace FoxMelee {
                 for (int i = 0; i < p.Count && p.Count >= 3; i++) {
                     V2 a = p[(i + p.Count - 1) % p.Count], b = p[i], c = p[(i + 1) % p.Count];
                     double cross = (b.X - a.X) * (c.Y - b.Y) - (b.Y - a.Y) * (c.X - b.X);
-                    bool dup = Math.Abs(b.X - a.X) < Eps && Math.Abs(b.Y - a.Y) < Eps;
+                    bool dup = (b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y) < MinEdge * MinEdge;
                     double len = Math.Sqrt((c.X - a.X) * (c.X - a.X) + (c.Y - a.Y) * (c.Y - a.Y));
                     if (dup || Math.Abs(cross) <= Eps * Math.Max(len, 1)) { p.RemoveAt(i); changed = true; i--; }
                 }
