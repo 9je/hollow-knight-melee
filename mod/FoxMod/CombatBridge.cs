@@ -26,6 +26,11 @@ namespace FoxMelee {
         /// The enemy in Fox's grab (GrabBridge): hits on it land through the stand-in, so they are not landed here too.
         public GameObject Held;
         readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
+        /// Melee's knockback for Fox's hits (null: Hollow Knight's recoil); launches wait for the hitlag to end.
+        public EnemyLauncher Launcher;
+        public KnockbackTuning Knockback;
+        readonly Dictionary<GameObject, (double speed, double angle, int hitstun)> launches = new Dictionary<GameObject, (double, double, int)>();
+        readonly Dictionary<HealthManager, int> maxHp = new Dictionary<HealthManager, int>();
         MeleeCore core;
         readonly HitlagTimers hitlag = new HitlagTimers();
         readonly Dictionary<object, EnemyFreeze> frozen = new Dictionary<object, EnemyFreeze>();
@@ -88,7 +93,7 @@ namespace FoxMelee {
             if (!core.ReadFighter(0, out var fox)) return false;
             foreach (var (go, dir, frames) in landed) {
                 if (go == null) continue;
-                if (hitlag.Freeze(go, frames >= 0 ? frames : (int)fox.Hitlag)) frozen[go] = new EnemyFreeze(go, dir);
+                if (hitlag.Freeze(go, frames >= 0 ? frames : (int)fox.Hitlag)) { Launcher?.Stop(go); frozen[go] = new EnemyFreeze(go, dir); }
                 else if (frozen.TryGetValue(go, out var f)) f.Rehit(dir);
             }
             landed.Clear();
@@ -97,13 +102,40 @@ namespace FoxMelee {
 
         /// Room changes, Hollow Knight taking over, failures: nothing stays frozen, no nail triggers linger.
         public void ReleaseAll() {
+            launches.Clear();
             foreach (var k in hitlag.ReleaseAll()) Thaw(k);
+            Launcher?.StopAll();
             landed.Clear();
             foreach (var t in nailTriggers) t.gameObject.SetActive(false);
         }
 
         void Thaw(object k) {
-            if (frozen.TryGetValue(k, out var f)) { f.Release(); frozen.Remove(k); }
+            if (!frozen.TryGetValue(k, out var f)) return;
+            frozen.Remove(k);
+            var go = k as GameObject;
+            if (go != null && Launcher != null && launches.TryGetValue(go, out var l)) {   // Melee's launch, after the hitlag
+                launches.Remove(go);
+                f.Release(recoil: false);
+                Launcher.Launch(go, room, l.speed, l.angle, l.hitstun);
+            } else f.Release();
+        }
+
+        /// The launch Melee would give this hit (MeleeKnockback), for an enemy that takes one (not bosses or big ones).
+        void PlanLaunch(HitEvent h, HealthManager hm, Component target, float fromX) {
+            launches.Remove(hm.gameObject);
+            if (Launcher == null || Knockback == null || hm.GetIsDead() || !EnemyLauncher.CanLaunch(hm.gameObject)) return;
+            if (maxHp.Count > 512) maxHp.Clear();   // enemies of rooms long gone
+            if (!maxHp.TryGetValue(hm, out int max)) maxHp[hm] = max = Mathf.Max(1, hm.hp + HitRules.HkDamage(h.Box.Damage, PlayerData.instance.GetInt("nailDamage")));
+            var col = hm.GetComponent<Collider2D>();
+            var size = col != null ? col.bounds.size : Vector3.one;
+            if (!MeleeKnockback.Launches(Knockback, max, size.x, size.y)) return;
+            double percent = MeleeKnockback.Percent(Knockback, hm.hp, max);
+            double kb = MeleeKnockback.Knockback(h.Box.Damage, h.Box.Growth, h.Box.SetKb, h.Box.BaseKb, percent, Knockback.Weight);
+            if (kb <= 0) return;
+            bool grounded = col != null && Physics2D.Raycast(new Vector2(col.bounds.center.x, col.bounds.min.y + 0.05f), Vector2.down, 0.2f, 1 << 8).collider != null;
+            double angle = MeleeKnockback.LaunchAngle(h.Box.Angle, kb, grounded);
+            if (target.transform.position.x <= fromX) angle = 180 - angle;   // away from Fox (or the laser), as Melee
+            launches[hm.gameObject] = (MeleeKnockback.Speed(kb) * Knockback.Scale, angle, MeleeKnockback.Hitstun(kb));
         }
 
         // Tag-driven objects (lifeblood cocoons, stalactites, geo rocks) read the hit's direction from the nail slash's
@@ -187,6 +219,7 @@ namespace FoxMelee {
                 MagnitudeMultiplier = 1f,
             });
             if (!enemy) return;
+            PlanLaunch(h, hm, target, fromX);
             real.Add(h);
             if (!HitRules.IsItem(h.Box) && !Struck.Contains(hm.gameObject)) Struck.Add(hm.gameObject);
             int dir = DirectionUtils.GetCardinalDirection(direction);

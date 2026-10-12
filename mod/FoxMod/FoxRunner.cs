@@ -29,6 +29,7 @@ namespace FoxMelee {
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
         GrabBridge grab;                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
         PogoBridge pogo;                        // spec §5.4 hazard pogo; null when Pogo is off
+        EnemyLauncher launcher;                 // Melee's knockback on enemies; null when Knockback is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
         readonly float[] bones = new float[128 * 12];
@@ -197,6 +198,7 @@ namespace FoxMelee {
                 profSfxMs += profWatch.Elapsed.TotalMilliseconds - st;
                 st = profWatch.Elapsed.TotalMilliseconds;
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
+                launcher?.Frame();
                 profBridgeMs += profWatch.Elapsed.TotalMilliseconds - st;
                 enemies?.AfterFrame(hero);
                 if (grab != null && !grab.After(core, room)) { Fail("stand-in: " + core.Error); return; }
@@ -331,8 +333,9 @@ namespace FoxMelee {
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
             if (s.FoxHits) combat = new CombatBridge();
+            if (combat != null && (s.Knockback?.Enabled ?? false)) { launcher = new EnemyLauncher(); combat.Launcher = launcher; combat.Knockback = s.Knockback; }
             if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
-            if (grabs) grab = new GrabBridge(s.Grabs, enemies);
+            if (grabs) grab = new GrabBridge(s.Grabs, enemies) { Launcher = launcher };
             if (s.Pogo?.Enabled ?? false) pogo = new PogoBridge(s.Pogo, () => holdingBody && state == State.Running);
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
             if (s.MeleeGraphics) {

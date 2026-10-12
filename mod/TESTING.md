@@ -41,8 +41,12 @@ Launch with `bash mod/launch.sh`: it backs up your saves again, sets Steam to In
 10. Fox hits enemies (King's Pass crawlers and flies): jab, tilts, smashes, aerials. Each hit does Melee's % × your nail
     damage / 5 (old nail: Fox's jab = 4), gives Soul like a nail hit, and both Fox and the enemy freeze for Melee's
     hitlag (jab: 4 frames; bigger hits longer), then the enemy is knocked back. Down-air hits
-    several times (as in Melee); a single hitbox never hits the same enemy twice. Enemies get Hollow Knight's knockback
-    away from Fox (a back air sends an enemy behind him further behind), after the freeze. Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail, and Fox can then walk through (ModLog says "terrain changed, collision rebuilt").
+    several times (as in Melee); a single hitbox never hits the same enemy twice. After the freeze, small enemies fly with
+    Melee's knockback (`Knockback`, on): Melee's formula on the move's damage, angle and knockback values, with the
+    enemy's "percent" from its health (0% at full, 100% near death, so hurt enemies fly further), Melee's launch speed
+    and decay, and hitstun, during which the enemy's AI waits, so you can combo them. Bosses and big or tough enemies
+    keep Hollow Knight's own small knockback. Settings: `Knockback` (`Enabled`, `Weight` 100, `PercentAtFullHp`/`NoHp`,
+    `MaxHp`, `MaxWidth`/`MaxHeight`, `Scale`). Cutting grass gives no hitlag. Try the King's Pass breakable walls: they should break as they do to the nail, and Fox can then walk through (ModLog says "terrain changed, collision rebuilt").
 
 11. Melee's graphics: Fox, his blaster, lasers and every effect are drawn from Melee's own graphics, as Melee draws
     them: shield bubble (red, shrinking and fading like Melee's), shine (blue flash and sparkles), Firefox (charge burst,

@@ -20,6 +20,7 @@ namespace FoxMelee {
         readonly Dictionary<HealthManager, int> maxHp = new Dictionary<HealthManager, int>();
         readonly GameObject strike;   // the pummel's and throw's Source, as CombatBridge's
         HealthManager held, target;
+        public EnemyLauncher Launcher;   // an enemy grabbed mid-flight stops flying (its state machines stay the grab's)
         EnemyFreeze freeze;
         float feetOffset;             // HK units from the held enemy's transform down to its feet
         float foxX;
@@ -60,6 +61,7 @@ namespace FoxMelee {
                     if (hm == null) break;
                     held = hm;
                     feetOffset = held.transform.position.y - Feet(held);
+                    Launcher?.Stop(held.gameObject);
                     freeze = new EnemyFreeze(held.gameObject, AwayFromFox(held));
                     break;
                 case GrabEvent.Pummel: Damage(held, damage, fox.Facing > 0 ? 0f : 180f); break;

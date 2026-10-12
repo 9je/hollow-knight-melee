@@ -36,13 +36,14 @@ namespace FoxMelee {
             foreach (var r in recoils) if (r != null) r.CancelRecoil();
         }
 
-        /// Puts everything back; parts destroyed meanwhile (a killed enemy) are skipped.
-        public void Release() {
+        /// Puts everything back; parts destroyed meanwhile (a killed enemy) are skipped. recoil false: no Hollow Knight
+        /// knockback (Melee's launch follows instead, EnemyLauncher).
+        public void Release(bool recoil = true) {
             if (body != null) { body.constraints = constraints; body.velocity = velocity; body.angularVelocity = angular; }
             foreach (var (f, manual) in fsms) if (f != null) f.Fsm.ManualUpdate = manual;
             foreach (var (a, paused) in sprites) if (a != null) a.Paused = paused;
             foreach (var (a, speed) in animators) if (a != null) a.speed = speed;
-            foreach (var r in recoils) if (r != null) r.RecoilByDirection(recoilDirection, 1f);
+            if (recoil) foreach (var r in recoils) if (r != null) r.RecoilByDirection(recoilDirection, 1f);
         }
     }
 }
