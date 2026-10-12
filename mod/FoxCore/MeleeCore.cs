@@ -77,6 +77,8 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HitlagFn(int damage);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ApplyHitFn(int port, ref McHit hit);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInSetFn(int port);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxAtlasDirtyFn(out uint x, out uint y, out uint w, out uint h);
@@ -86,7 +88,8 @@ namespace FoxMelee {
 
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits;
-        readonly SoloFn solo; readonly StartFn start; readonly InputFn input; readonly ReadFn read;
+        readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
+        readonly StartFn start; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -102,6 +105,11 @@ namespace FoxMelee {
             step = NativeLib.Symbol<IntFn>(lib, "mc_step");
             stepToHits = NativeLib.Symbol<IntFn>(lib, "mc_step_to_hits");
             solo = NativeLib.Symbol<SoloFn>(lib, "mc_solo_fox_start");
+            standinStart = NativeLib.Symbol<SoloFn>(lib, "mc_fox_standin_start");
+            standinSet = NativeLib.Symbol<StandInSetFn>(lib, "mc_standin_set");
+            standinWake = NativeLib.Symbol<StandInWakeFn>(lib, "mc_standin_wake");
+            standinSleep = NativeLib.Symbol<IntFn>(lib, "mc_standin_sleep");
+            standinHeld = NativeLib.Symbol<IntFn>(lib, "mc_standin_held");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
             read = NativeLib.Symbol<ReadFn>(lib, "mc_read_fighter");
@@ -144,6 +152,18 @@ namespace FoxMelee {
             solo(s);
             return Ok(start(s, 1, 0));
         }
+        /// Fox at port 0 and the grab/push stand-in's fighter at port 1 (plan 7).
+        public bool StartFoxWithStandIn() {
+            Sync();
+            var s = new byte[StartSize];
+            standinStart(s);
+            return Ok(start(s, 1, 0));
+        }
+        /// The stand-in (plan 7): asleep from the next frame; woken at (x, y) facing ±1; held in a grab (1), not (0), none (-1).
+        public bool SetStandIn(int port) { Sync(); return Ok(standinSet(port)); }
+        public bool StandInWake(float x, float y, float facing) { Sync(); return Ok(standinWake(x, y, facing)); }
+        public bool StandInSleep() { Sync(); return Ok(standinSleep()); }
+        public int StandInHeld() { Sync(); return standinHeld(); }
         public void SetInput(int port, McInput? value) {
             Sync();
             if (value is McInput v) { Marshal.StructureToPtr(v, inputBuf, false); input(port, inputBuf); }
@@ -181,6 +201,7 @@ namespace FoxMelee {
         public int ApplyHit(McHit hit) { Sync(); localError = null; return applyHit(0, ref hit); }
         /// Port 0's percent (Focus, benches and deaths reset it).
         public bool SetPercent(float percent) { Sync(); return Ok(setPercent(0, percent)); }
+        public bool SetPercent(int port, float percent) { Sync(); return Ok(setPercent(port, percent)); }
         /// Capture Melee's graphics each frame (off by default; it changes nothing in the game).
         public bool GxCapture(bool on) { Sync(); return Ok(gxCapture(on ? 1 : 0)); }
         /// Decodes the last frame's drawing by the objects in `plinkMask` (GxFrame.FoxAndEffects) into `frame`.

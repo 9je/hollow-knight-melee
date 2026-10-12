@@ -254,5 +254,29 @@ namespace FoxMelee.Tests {
             Assert.True(core.ReadFighter(0, out f));
             Assert.Equal(0f, f.Percent);
         }
+
+        [Fact]
+        public void StandInSleepsAndWakes() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartFoxWithStandIn(), core.Error);
+            core.SetInput(0, new McInput()); core.SetInput(1, new McInput());
+            for (int p = 2; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.SetStandIn(1), core.Error);
+            Assert.True(core.Step() && core.Step(), core.Error);
+            Assert.True(core.ReadFighter(1, out var s) && s.Action == 11);
+            Assert.True(core.ReadFighter(0, out var f));
+            Assert.True(core.StandInWake(f.X + 30, f.Y, -1), core.Error);
+            Assert.True(core.Step() && core.Step(), core.Error);
+            Assert.True(core.ReadFighter(1, out s) && s.Action == 14);
+            Assert.Equal(0, core.StandInHeld());
+            Assert.True(core.SetPercent(1, 40f), core.Error);
+            Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(1, out s) && s.Percent == 40f);
+            Assert.True(core.StandInSleep() && core.Step() && core.Step(), core.Error);
+            Assert.True(core.ReadFighter(1, out s) && s.Action == 11);
+        }
     }
 }
