@@ -17,7 +17,8 @@ int mc_step(void);                 /* runs exactly one frame (or the rest of one
 int mc_step_to_hits(void);
 /* Runs the frame (from its start or a hit pause) up to Melee's drawing (the first GObj render callback): the frame's logic
  * is done, and what mc_read_* report is what the frame ends with. mc_step() finishes the frame (the drawing), which the host
- * may run on another thread while it does other work. 0 paused there (or already), 1 the frame ended first, -1 error. */
+ * may run on another thread while it does other work. mc_step_to_render and mc_step_to_hits finish a frame left paused
+ * here before running their own. 0 paused there, 1 the frame ended first, -1 error. */
 int mc_step_to_render(void);
 int mc_finish_frame(void);         /* finishes a frame paused by mc_step_to_render; nothing otherwise. 0 ok, -1 error */
 uint64_t mc_frame(void);           /* frame boundaries reached since mc_init */
@@ -47,6 +48,9 @@ void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
 /* Edge assist (a deviation from Melee, off by default): port 0's walk stops at a floor's edge (Ottotto) whatever the
  * stick's tilt, as Melee's walk does below 75% tilt. Dash, run and air movement still go off edges. */
 int mc_set_edge_assist(int on);
+/* Hazard pogo (spec §5.4, not Melee): an airborne fighter's vertical speed becomes vy (Melee units per frame), a fast fall
+ * ends and its double jump is back. 0 done, 1 not airborne (nothing), -1 error. */
+int mc_bounce(int port, float vy);
 void mc_fox_standin_start(uint8_t out[MC_START_SIZE]);   /* plan 7: Fox, and a second Fox at port 1 (standin.h) */
 int mc_read_fighter(int port, int follower, McFighter *out);   /* 0 ok, 1 no such fighter, -1 error */
 /* The fighter's joint world matrices (3x4 row-major, Melee units), depth first, as Melee's render pass leaves

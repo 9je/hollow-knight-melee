@@ -126,6 +126,7 @@ int mc_step(void) { return run_frame(); }
 int mc_step_to_hits(void) {
   Machine *m = g_m;
   if (m && !m->dead && m->at_hits) return 0;
+  if (m && !m->dead && m->at_render && run_frame() < 0) return -1;   /* a frame left paused at its drawing: finish it */
   if (m) m->hit_pause = 1;
   int rc = run_frame();
   if (m && !m->dead) m->hit_pause = 0;
@@ -133,7 +134,7 @@ int mc_step_to_hits(void) {
 }
 int mc_step_to_render(void) {
   Machine *m = g_m;
-  if (m && !m->dead && m->at_render) return 0;
+  if (m && !m->dead && m->at_render && run_frame() < 0) return -1;   /* a frame left paused at its drawing: finish it */
   if (m) m->render_pause = 1;
   int rc = run_frame();
   if (m && !m->dead) m->render_pause = 0;
@@ -558,6 +559,18 @@ int mc_apply_hit(int port, const McHit *hit) {
   ApplyArgs a = {port, hit, -1};
   worker_call(apply_on_worker, &a);
   return m->dead ? -1 : a.result;
+}
+
+int mc_bounce(int port, float vy) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3 || !isfinite(vy)) return -1;
+  Cpu *c = &m->cpu;
+  uint32_t fp = fighter_at(c, port, 0);
+  if (!fp || ld32(c, fp + 0xE0) == 0) return 1;                  /* no fighter, or grounded */
+  stf32(c, fp + 0x84, vy);                                         /* self_vel.y */
+  st8(c, fp + 0x221A, (uint8_t)(ld8(c, fp + 0x221A) & ~0x08u));   /* fall_fast */
+  if (ld8(c, fp + 0x1968) > 1) st8(c, fp + 0x1968, 1);             /* x1968_jumpsUsed: the double jump is back */
+  return 0;
 }
 
 int mc_set_percent(int port, float percent) {

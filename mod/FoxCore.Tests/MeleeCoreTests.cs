@@ -320,5 +320,20 @@ namespace FoxMelee.Tests {
                 Assert.True(frame.VertexCount > 9000);
             }
         }
+
+        [Fact]
+        public void StepAfterARenderPauseRunsAFrame() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            ulong f0 = core.Frame;
+            Assert.Equal(0, core.StepToRender());
+            Assert.True(core.Step(), core.Error);   // finishes the paused frame, then runs one
+            Assert.Equal(f0 + 2, core.Frame);
+        }
     }
 }

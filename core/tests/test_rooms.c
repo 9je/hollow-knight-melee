@@ -861,8 +861,40 @@ static void test_render_pause(void) {
     McFighter after = fox();
     CHECK(same(at, after));
   }
+  /* a frame left paused: the next step call finishes it first, then runs its own frame */
+  uint64_t fr = mc_frame();
+  CHECK(mc_step_to_render() == 0);
+  CHECK(mc_step_to_hits() == 0 && mc_frame() == fr + 1);
+  CHECK(mc_step_to_render() == 0 && mc_frame() == fr + 1);
+  CHECK(mc_step_to_render() == 0 && mc_frame() == fr + 2);
+  CHECK(mc_step() == 0 && mc_frame() == fr + 3);
+  CHECK(mc_step_to_render() == 0 && mc_frame() == fr + 3);
+  CHECK(mc_step() == 0 && mc_frame() == fr + 4);
   const McGxVert *v; int nv; const McGxRun *r; int nr;
   CHECK(mc_gx_decode(FIGHTER, &v, &nv, &r, &nr) == 0 && nv > 9000);   /* the frame was drawn */
+  mc_shutdown();
+}
+
+/* Hazard pogo (spec §5.4, not Melee): mc_bounce sends an airborne fighter up, ends a fast fall and gives the double jump back */
+static void test_bounce(void) {
+  McInput idle = {0}, jump = {0}, down = {0};
+  jump.buttons = 0x0800;            /* X */
+  down.stick_y = -127;
+  solo_fox(); steps(180, &idle);
+  CHECK(mc_bounce(0, 2.8f) == 1);                       /* grounded: nothing */
+  steps(1, &jump); steps(12, &idle);
+  steps(1, &jump); steps(1, &idle);                     /* the double jump, used */
+  for (int i = 0; i < 60 && fox().self_vel_y >= 0; i++) steps(1, &idle);
+  steps(1, &down); steps(2, &idle);                     /* fast falling */
+  uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
+  CHECK(fox().airborne && (mc_peek32(fp + 0x1968) >> 24) == 2 && (mc_peek32(fp + 0x2218) & 0x0800));
+  CHECK(mc_bounce(0, 2.8f) == 0);
+  steps(1, &idle);
+  CHECK(fox().self_vel_y > 2.0f);                       /* up, less one frame of gravity */
+  CHECK((mc_peek32(fp + 0x1968) >> 24) == 1 && !(mc_peek32(fp + 0x2218) & 0x0800));
+  float y = fox().y;
+  steps(1, &jump); steps(10, &idle);
+  CHECK(fox().y > y + 5);                               /* the double jump again */
   mc_shutdown();
 }
 
@@ -894,6 +926,7 @@ int main(int argc, char **argv) {
   test_edge_assist();
   test_standin_wake_keeps_percent();
   test_render_pause();
+  test_bounce();
   puts("rooms tests passed");
   return 0;
 }

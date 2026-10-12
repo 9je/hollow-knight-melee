@@ -79,6 +79,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInSetFn(int port);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int OnFn(int on);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate ulong FrameFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxTextureFn(int id, out GxFrame.Texture t);
@@ -90,7 +91,7 @@ namespace FoxMelee {
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
-        readonly StartFn start; readonly OnFn edgeAssist; readonly InputFn input; readonly ReadFn read;
+        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -114,6 +115,7 @@ namespace FoxMelee {
             standinSleep = NativeLib.Symbol<IntFn>(lib, "mc_standin_sleep");
             standinHeld = NativeLib.Symbol<IntFn>(lib, "mc_standin_held");
             edgeAssist = NativeLib.Symbol<OnFn>(lib, "mc_set_edge_assist");
+            frameNo = NativeLib.Symbol<FrameFn>(lib, "mc_frame");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
             read = NativeLib.Symbol<ReadFn>(lib, "mc_read_fighter");
@@ -175,7 +177,11 @@ namespace FoxMelee {
             if (value is McInput v) { Marshal.StructureToPtr(v, inputBuf, false); input(port, inputBuf); }
             else input(port, IntPtr.Zero);
         }
-        public bool Step() { Sync(); return Ok(step()); }
+        /// Runs one frame (or the rest of one paused at the hit pause). A frame left paused at Melee's drawing
+        /// (StepToRender) is finished first, then a whole frame runs.
+        public bool Step() { Sync(); if (finishFrame() != 0) return Ok(-1); return Ok(step()); }
+        /// Frame boundaries reached since Init.
+        public ulong Frame { get { Sync(); return frameNo(); } }
         /// Runs the next frame up to Melee's hit resolution for port 0, where ReportHit lands in this frame; Step()
         /// finishes the frame. 0 paused there, 1 the frame ended without reaching it, -1 error.
         public int StepToHits() { Sync(); localError = null; return stepToHits(); }
