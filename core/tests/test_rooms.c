@@ -824,6 +824,18 @@ static void test_edge_assist(void) {
   for (int i = 0; i < 60 && !fell; i++) { steps(1, &smash); fell = fox().airborne != 0; }
   CHECK(fell);                          /* a dash from the edge goes off */
   mc_shutdown();
+  /* teetering, a tilt past 75% (reached slowly: a walk, not a dash) walks off, as in Melee; a slight tilt keeps the teeter */
+  CHECK(walk_to_left_edge(1) == 0);
+  McInput slight = {0};
+  slight.stick_x = -30;
+  steps(50, &idle);
+  steps(30, &slight);
+  CHECK(fox().action == 245 || fox().action == 246);
+  steps(10, &idle);
+  fell = 0;
+  for (int i = 0; i < 90 && !fell; i++) { McInput r = {0}; r.stick_x = (int8_t)-(i * 6 < 110 ? i * 6 : 110); steps(1, &r); fell = fox().airborne != 0; }
+  CHECK(fell);
+  mc_shutdown();
 }
 
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
@@ -885,12 +897,16 @@ static void test_bounce(void) {
   steps(1, &jump); steps(12, &idle);
   steps(1, &jump); steps(1, &idle);                     /* the double jump, used */
   for (int i = 0; i < 60 && fox().self_vel_y >= 0; i++) steps(1, &idle);
-  steps(1, &down); steps(2, &idle);                     /* fast falling */
+  McInput dair = {0};
+  dair.cstick_y = -127;
+  steps(1, &down); steps(1, &dair); steps(2, &idle);    /* fast falling, down-air */
+  CHECK(fox().action == 69);
   uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
   CHECK(fox().airborne && (mc_peek32(fp + 0x1968) >> 24) == 2 && (mc_peek32(fp + 0x2218) & 0x0800));
   CHECK(mc_bounce(0, 2.8f) == 0);
   steps(1, &idle);
   CHECK(fox().self_vel_y > 2.0f);                       /* up, less one frame of gravity */
+  CHECK(fox().action == 29);                            /* the down-air ends: Fall, as an aerial ending mid-rise */
   CHECK((mc_peek32(fp + 0x1968) >> 24) == 1 && !(mc_peek32(fp + 0x2218) & 0x0800));
   float y = fox().y;
   steps(1, &jump); steps(10, &idle);

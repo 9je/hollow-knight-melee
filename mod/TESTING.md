@@ -79,10 +79,11 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       `MaxWidth/MaxHeight` (HK units), `MaxHp`, `PercentAtFullHp`/`PercentAtNoHp`, `LaunchScale`.
     - Cost: about 2.5 ms more per Melee frame while a small enemy is near Fox (the perf log line shows it).
 
-16. Hazard pogo (spec §5.4, the one deliberate exception to Melee): down-air onto spikes or thorns bounces Fox up (about
-    a short hop), ends a fast fall and gives his double jump back; that touch doesn't hurt him. Acid, pits and enemies
+16. Hazard pogo (spec §5.4, the one deliberate exception to Melee): down-air onto spikes or thorns ends the down-air and
+    bounces Fox up (about a full hop) into Melee's normal fall, ends a fast fall and gives his double jump back; that
+    touch doesn't hurt him. Down-air again to chain pogos. Acid, pits and enemies
     are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
-    `Velocity` (Melee units per frame, 2.8), `GraceFrames` (8). Try it on King's Pass's first spikes.
+    `BounceSpeed` (Melee units per frame, 3.5), `GraceFrames` (8). Try it on King's Pass's first spikes.
 
 17. Move gating (spec §6), **off by default** (`MoveGating: false`) so your current save keeps every move. On, Fox's
     moves wait for the Knight's unlocks: Shine ← Vengeful Spirit, Illusion ← Mothwing Cloak, wall jump ← Mantis Claw,

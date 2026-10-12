@@ -3,7 +3,7 @@ namespace FoxMelee {
     /// double jump back, and that touch doesn't hurt him.
     public sealed class PogoTuning {
         public bool Enabled = true;
-        public double Velocity = 2.8;     // Melee units per frame upward (about a short hop's height at WorldScale 6)
+        public double BounceSpeed = 3.5;  // Melee units per frame upward (about a full hop; Fox's full jump is 3.68)
         public int GraceFrames = 8;       // Melee frames after a bounce in which spikes don't hurt Fox
     }
 

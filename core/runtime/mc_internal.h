@@ -44,6 +44,8 @@ typedef struct Machine {
   float standin_x, standin_y, standin_facing;
   int standin_depth;                   /* > 0 while one of its procs runs: its sounds are dropped */
   int edge_assist;                      /* mc_set_edge_assist: port 0's walks teeter at edges */
+  int edge_teetered;
+  int bounce_pending[4]; float bounce_vy[4];   /* mc_bounce, run at the next boundary (room.c) */                    /* port 0 teetered and eased the stick: Melee's own edge rule again */
   uint32_t gates[4];                    /* mc_set_gates: locked moves per port (gates.c) */
   uint8_t walljump_off[4];              /* gates.c turned that fighter's can_walljump off */
   uint32_t special_entry[8], special_saved[8];   /* gates.c: blanked ftData_Special* entries and their functions */
@@ -67,6 +69,7 @@ void service(Cpu *c);
 void room_boundary_jobs(Cpu *c);
 void standin_boundary_jobs(Cpu *c);   /* standin.c: wake or sleep the stand-in */
 void gates_boundary_jobs(Cpu *c);     /* gates.c: locked moves */
+void edge_assist_boundary(Cpu *c);    /* frame.c */
 int standin_captured(Cpu *c);           /* its action is CapturePulledHi..CaptureDamageLw */
 int standin_hit_sound(Cpu *c, int32_t id);   /* a hit sound on the stand-in, which is heard */
 void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */

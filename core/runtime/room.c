@@ -267,6 +267,19 @@ void room_boundary_jobs(Cpu *c) {
         if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep */
         st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u));
       }
+  edge_assist_boundary(c);
+  for (int p = 0; p < 4; p++) {   /* mc_bounce (hazard pogo): the aerial ends in Fall, going up; no fast fall; double jump back */
+    if (!m->bounce_pending[p]) continue;
+    m->bounce_pending[p] = 0;
+    uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + 0xB0u);
+    if (!gobj) continue;
+    uint32_t fp = ld32(c, gobj + 0x2C);
+    if (ld32(c, fp + 0xE0) == 0) continue;                       /* landed meanwhile */
+    call_guest(c, FN_FALL_ENTER, gobj, 0);
+    stf(c, fp + 0x84, m->bounce_vy[p]);                          /* self_vel.y */
+    st8(c, fp + 0x221A, (uint8_t)(ld8(c, fp + 0x221A) & ~0x08u)); /* fall_fast */
+    if (ld8(c, fp + 0x1968) > 1) st8(c, fp + 0x1968, 1);         /* x1968_jumpsUsed: the double jump is back */
+  }
   gates_boundary_jobs(c);   /* spec §6: locked moves, after placements (a placed fighter's jumps) */
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u

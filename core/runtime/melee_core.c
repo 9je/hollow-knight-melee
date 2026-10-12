@@ -564,12 +564,9 @@ int mc_apply_hit(int port, const McHit *hit) {
 int mc_bounce(int port, float vy) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3 || !isfinite(vy)) return -1;
-  Cpu *c = &m->cpu;
-  uint32_t fp = fighter_at(c, port, 0);
-  if (!fp || ld32(c, fp + 0xE0) == 0) return 1;                  /* no fighter, or grounded */
-  stf32(c, fp + 0x84, vy);                                         /* self_vel.y */
-  st8(c, fp + 0x221A, (uint8_t)(ld8(c, fp + 0x221A) & ~0x08u));   /* fall_fast */
-  if (ld8(c, fp + 0x1968) > 1) st8(c, fp + 0x1968, 1);             /* x1968_jumpsUsed: the double jump is back */
+  uint32_t fp = fighter_at(&m->cpu, port, 0);
+  if (!fp || ld32(&m->cpu, fp + 0xE0) == 0) return 1;            /* no fighter, or grounded */
+  m->bounce_pending[port] = 1; m->bounce_vy[port] = vy;          /* at the next frame boundary (room.c) */
   return 0;
 }
 

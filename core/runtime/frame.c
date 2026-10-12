@@ -83,6 +83,20 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
 #define FN_WALK_COLL 0x800C9788u          /* ftCo_Walk_Coll: ft_80084280, which stops at an edge if |lstick x| < 0.75 */
 #define EDGE_STOP_TILT 0.7375f            /* the largest tilt below 0.75 the GameCube stick gives (59/80) */
 
+/* Once Fox teeters and the stick eases below 75% tilt, the assist has done its job: pushing on (a walk past 75%) goes off as
+ * in Melee. Without this, that walk was stopped at the edge again each frame and Fox restarted his teeter on a loop. A
+ * stick held at full tilt throughout keeps him at the edge. A turn, a dash or leaving the ground ends it. */
+void edge_assist_boundary(Cpu *c) {
+  Machine *m = g_m;
+  if (!m->edge_assist) return;
+  uint32_t gobj = ld32(c, 0x80453080u + 0xB0u);
+  if (!gobj) return;
+  uint32_t fp = ld32(c, gobj + 0x2C), a = ld32(c, fp + 0x10u), u = ld32(c, fp + 0x620u);
+  float x; memcpy(&x, &u, 4);
+  if (a == 245u || a == 246u) { if (x < 0.75f && x > -0.75f) m->edge_teetered = 1; }   /* Ottotto, OttottoWait */
+  else if (a < 15u || a > 17u) m->edge_teetered = 0;                                   /* not WalkSlow/Middle/Fast */
+}
+
 int mc_set_edge_assist(int on) {
   Machine *m = g_m;
   if (!m || m->dead) return -1;
@@ -126,7 +140,7 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);
-  if (target == FN_WALK_COLL && m->edge_assist && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
+  if (target == FN_WALK_COLL && m->edge_assist && !m->edge_teetered && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
     /* edge assist: the edge check sees a tilt below 0.75, so the walk stops at the edge as a slower walk does */
     uint32_t fp = ld32(c, c->gpr[3] + 0x2C), was = ld32(c, fp + 0x620u);
     float x; memcpy(&x, &was, 4);
