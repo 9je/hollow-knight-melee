@@ -16,18 +16,23 @@ int mc_set_gates(int port, uint32_t locked) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;
   m->gates[port] = locked;
-  m->any_gates = (m->gates[0] | m->gates[1] | m->gates[2] | m->gates[3]) != 0;
   return 0;
 }
 
-/* at each frame boundary: the jump and wall-jump gates, which Melee keeps in the fighter */
+/* at each frame boundary (after placements):
+ * - a locked special's ftData_Special* entry for the gated fighter's kind is NULL, as for a fighter without that special:
+ *   Melee's input checks test it first, so the press is no special at all (no turn, friction or skipped checks);
+ * - the double jump and wall jump, which Melee keeps in the fighter. */
 void gates_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
+  uint32_t special_locks = 0, kind = 0;
   for (int p = 0; p < 4; p++) {
+    uint32_t g = m->gates[p];
+    if (!g && !m->walljump_off[p]) continue;
     uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + 0xB0u);
     if (!gobj) continue;
-    uint32_t fp = ld32(c, gobj + 0x2C), g = m->gates[p];
-    if (!g && !m->walljump_off[p]) continue;
+    uint32_t fp = ld32(c, gobj + 0x2C);
+    if (g && !special_locks) { special_locks = g; kind = ld32(c, fp + 0x04u); }
     if ((g & MC_GATE_DOUBLE_JUMP) && ld32(c, fp + 0xE0)) {          /* airborne: every jump counts as used */
       uint32_t max = ld32(c, fp + 0x168);                            /* co_attrs.max_jumps */
       if (max < 256 && ld8(c, fp + 0x1968) < max) st8(c, fp + 0x1968, (uint8_t)max);
@@ -39,19 +44,15 @@ void gates_boundary_jobs(Cpu *c) {
       m->walljump_off[p] = 0; st8(c, fp + 0x2224, b | 1u);
     }
   }
-}
-
-/* in guest_call_indirect: a locked special's entry, called for a port's fighter, does nothing */
-int gates_block(Cpu *c, uint32_t target) {
-  Machine *m = g_m;
-  uint32_t gobj = c->gpr[3];
-  for (int p = 0; p < 4; p++) {
-    if (!m->gates[p] || gobj != ld32(c, PLAYER_BLOCK(p) + 0xB0u)) continue;
-    uint32_t kind = ld32(c, ld32(c, gobj + 0x2C) + 0x04u);
-    if (kind > 0x20) return 0;
-    for (unsigned k = 0; k < sizeof specials / sizeof specials[0]; k++)
-      if ((m->gates[p] & specials[k].gate) && ld32(c, specials[k].table + 4u * kind) == target) return 1;
-    return 0;
+  for (unsigned k = 0; k < sizeof specials / sizeof specials[0]; k++) {
+    int lock = (special_locks & specials[k].gate) && kind <= 0x20;
+    if (lock && !m->special_saved[k]) {
+      m->special_entry[k] = specials[k].table + 4u * kind;
+      m->special_saved[k] = ld32(c, m->special_entry[k]);
+      st32(c, m->special_entry[k], 0);
+    } else if (!lock && m->special_saved[k]) {
+      st32(c, m->special_entry[k], m->special_saved[k]);
+      m->special_saved[k] = 0;
+    }
   }
-  return 0;
 }

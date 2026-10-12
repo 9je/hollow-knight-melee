@@ -10,11 +10,16 @@ namespace FoxMelee {
         readonly Pogo pogo;
         readonly System.Func<bool> foxDrives;
         readonly McHitbox[] boxes = new McHitbox[8];
-        readonly Collider2D[] found = new Collider2D[16];
+        readonly Collider2D[] found = new Collider2D[64];
+        ContactFilter2D filter;   // every layer, triggers included (spikes are triggers on their own layers)
+        const float FeetProbe = 4f;   // Melee units around Fox's feet: down-air frames without an active hitbox still pogo
 
         public PogoBridge(PogoTuning tuning, System.Func<bool> foxDrives) {
             this.tuning = tuning; this.foxDrives = foxDrives;
             pogo = new Pogo(tuning);
+            filter = new ContactFilter2D();
+            filter.NoFilter();
+            filter.useTriggers = true;
             On.HeroController.TakeDamage += TakeDamage;
         }
 
@@ -23,24 +28,32 @@ namespace FoxMelee {
             orig(self, go, side, amount, hazardType);
         }
 
-        /// After each Melee frame (its logic done): bounce if a down-air hitbox touches spikes. False if the core failed.
+        /// After each Melee frame (its logic done): bounce if Fox's down-air touches spikes. False if the core failed.
         public bool Frame(MeleeCore core, RoomTransform room, McFighter fox) {
             bool touching = false;
-            if (fox.Action == 69) {   // AttackAirLw: only then are hitboxes looked at
-                int n = core.ReadHitboxes(boxes);
+            if (fox.Action == 69) {   // AttackAirLw: only then is anything looked at
+                touching = TouchesSpikes(room, fox.X, fox.Y, FeetProbe);
+                int n = touching ? 0 : core.ReadHitboxes(boxes);
                 if (n < 0) return false;
                 for (int i = 0; i < n && !touching; i++) {
                     if (HitRules.IsItem(boxes[i])) continue;
-                    var p = room.ToHk(new V2(boxes[i].X, boxes[i].Y));
-                    int k = Physics2D.OverlapCircleNonAlloc(new Vector2((float)p.X, (float)p.Y), (float)(boxes[i].Radius / room.Scale), found);
-                    for (int j = 0; j < k && !touching; j++) {
-                        var d = found[j].GetComponentInParent<DamageHero>();
-                        touching = d != null && d.hazardType == Spikes;
-                    }
+                    for (int k = 0; k <= 2 && !touching; k++)   // swept from last frame's centre, as CombatBridge does
+                        touching = TouchesSpikes(room, boxes[i].PrevX + (boxes[i].X - boxes[i].PrevX) * k / 2f,
+                                           boxes[i].PrevY + (boxes[i].Y - boxes[i].PrevY) * k / 2f, boxes[i].Radius);
                 }
             }
             if (!pogo.Frame(fox.Action, fox.SelfVelY, touching)) return true;
             return core.Bounce(0, (float)tuning.Velocity) >= 0;
+        }
+
+        bool TouchesSpikes(RoomTransform room, float x, float y, float radius) {
+            var p = room.ToHk(new V2(x, y));
+            int k = Physics2D.OverlapCircle(new Vector2((float)p.X, (float)p.Y), (float)(radius / room.Scale), filter, found);
+            for (int j = 0; j < k; j++) {
+                var d = found[j].GetComponentInParent<DamageHero>();
+                if (d != null && d.hazardType == Spikes) return true;
+            }
+            return false;
         }
     }
 }

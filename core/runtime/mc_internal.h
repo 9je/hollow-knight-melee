@@ -42,10 +42,11 @@ typedef struct Machine {
   uint32_t standin_gobj;                /* its fighter GObj, refreshed at each boundary */
   int standin_req;                      /* next boundary: 1 wake, 2 sleep */
   float standin_x, standin_y, standin_facing;
-  int standin_depth;
-  int edge_assist;
-  uint32_t gates[4]; int any_gates;                    /* mc_set_gates: locked moves per port (gates.c) */
-  uint8_t walljump_off[4];              /* gates.c turned that fighter's can_walljump off */                      /* mc_set_edge_assist: port 0's walks teeter at edges */                    /* > 0 while one of its procs runs: its sounds are dropped */
+  int standin_depth;                   /* > 0 while one of its procs runs: its sounds are dropped */
+  int edge_assist;                      /* mc_set_edge_assist: port 0's walks teeter at edges */
+  uint32_t gates[4];                    /* mc_set_gates: locked moves per port (gates.c) */
+  uint8_t walljump_off[4];              /* gates.c turned that fighter's can_walljump off */
+  uint32_t special_entry[8], special_saved[8];   /* gates.c: blanked ftData_Special* entries and their functions */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */
@@ -64,12 +65,11 @@ void tb_advance_to(uint64_t t);
 uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4);
 void service(Cpu *c);
 void room_boundary_jobs(Cpu *c);
-void standin_boundary_jobs(Cpu *c);
-void gates_boundary_jobs(Cpu *c);     /* gates.c */
-int gates_block(Cpu *c, uint32_t target);   /* gates.c: a locked special's entry */   /* standin.c: wake or sleep the stand-in */
-int standin_captured(Cpu *c);
+void standin_boundary_jobs(Cpu *c);   /* standin.c: wake or sleep the stand-in */
+void gates_boundary_jobs(Cpu *c);     /* gates.c: locked moves */
+int standin_captured(Cpu *c);           /* its action is CapturePulledHi..CaptureDamageLw */
 int standin_hit_sound(Cpu *c, int32_t id);   /* a hit sound on the stand-in, which is heard */
-void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */           /* its action is CapturePulledHi..CaptureDamageLw */
+void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */
 void worker_call(void (*fn)(void *), void *arg);   /* worker.c: run fn on the core's own thread, wait */
 void worker_stop(void);
 void sfx_reset(void);   /* sfx.c: empty the sound event queue */   /* room.c: pending room loads and placements */

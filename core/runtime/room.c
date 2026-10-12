@@ -233,7 +233,6 @@ void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y) {
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
   standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
-  gates_boundary_jobs(c);     /* spec §6: locked jumps */
   int loaded = m->room_pending;
   if (m->room_pending) {
     m->room_pending = 0;
@@ -268,6 +267,7 @@ void room_boundary_jobs(Cpu *c) {
         if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep */
         st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u));
       }
+  gates_boundary_jobs(c);   /* spec §6: locked moves, after placements (a placed fighter's jumps) */
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u
 

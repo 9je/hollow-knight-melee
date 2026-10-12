@@ -27,8 +27,8 @@ namespace FoxMelee {
         EnemyBridge enemies;                    // enemies hitting Fox through Melee
         RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
-        GrabBridge grab;
-        PogoBridge pogo;                        // spec §5.4 hazard pogo; null when Pogo is off                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
+        GrabBridge grab;                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
+        PogoBridge pogo;                        // spec §5.4 hazard pogo; null when Pogo is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
         readonly float[] bones = new float[128 * 12];

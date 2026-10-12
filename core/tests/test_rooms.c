@@ -915,9 +915,19 @@ static void test_gates(void) {
   shine.buttons = 0x0200; shine.stick_y = -127;
   solo_fox(); steps(180, &idle);
   uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
-  CHECK(mc_set_gates(0, MC_GATE_SPECIAL_LW | MC_GATE_DOUBLE_JUMP | MC_GATE_WALL_JUMP) == 0);
+  CHECK(mc_set_gates(0, MC_GATE_SPECIAL_LW | MC_GATE_SPECIAL_S | MC_GATE_DOUBLE_JUMP | MC_GATE_WALL_JUMP) == 0);
   steps(1, &shine); steps(1, &idle);
-  CHECK(fox().action == 14);                           /* no shine: still Wait */
+  CHECK(fox().action < 341);                           /* no shine (Fox's specials are 341 and up): down crouches */
+  steps(30, &idle);
+  McInput side = {0};
+  side.buttons = 0x0200; side.stick_x = (int8_t)(fox().facing > 0 ? -127 : 127);
+  McInput jump = {0};
+  jump.buttons = 0x0800;
+  steps(1, &jump); steps(8, &idle);                    /* in the air, where only a special turns Fox */
+  float facing = fox().facing;
+  steps(1, &side); steps(1, &idle);
+  CHECK(fox().facing == facing);                       /* a locked side-B doesn't even turn Fox (Melee: no special at all) */
+  steps(30, &idle);
   CHECK(!(mc_peek32(fp + 0x2224) & 0x01000000u));      /* can_walljump off */
   CHECK(rise_after_second_jump() < 0);                 /* no double jump: still falling */
   CHECK(mc_set_gates(0, 0) == 0);
@@ -925,7 +935,7 @@ static void test_gates(void) {
   CHECK(mc_peek32(fp + 0x2224) & 0x01000000u);
   CHECK(rise_after_second_jump() > 5);
   steps(1, &shine); steps(1, &idle);
-  CHECK(fox().action != 14);                           /* shine */
+  CHECK(fox().action >= 341);                          /* shine */
   mc_shutdown();
 }
 
