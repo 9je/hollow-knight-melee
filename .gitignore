@@ -13,3 +13,4 @@ mod/lib/
 mod/**/bin/
 mod/**/obj/
 build/
+docs/
