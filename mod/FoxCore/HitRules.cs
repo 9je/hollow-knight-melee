@@ -15,6 +15,9 @@ namespace FoxMelee {
             b.Damage > 0 && b.Element != Catch && b.Element != Inert && (b.Flags & HitsFighters) != 0;
 
         /// A hitbox on one of Fox's items (a laser): its group is the item (core mc_read_hitboxes).
+        /// Fox's hitboxes hurt Hollow Knight enemies, except the pummel's: it lands through the stand-in (plan 7, GrabBridge).
+        public static bool FoxActionHurtsEnemies(uint action) => action != 0xD9;
+
         public static bool IsItem(McHitbox b) => b.Group >= 0x80000000u;
 
         /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.

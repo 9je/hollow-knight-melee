@@ -90,5 +90,10 @@ namespace FoxMelee.Tests {
             Assert.True(HitRules.IsItem(new McHitbox { Group = 0x80123450, Slot = 4 }));
             Assert.False(HitRules.IsItem(new McHitbox { Group = 2, Slot = 1 }));
         }
+
+        [Theory]
+        [InlineData(0xD9u, false)]   // CatchAttack: the pummel lands through the stand-in
+        [InlineData(44u, true)]      // jab
+        public void PummelIsNotAnEnemyHit(uint action, bool hurts) => Assert.Equal(hurts, HitRules.FoxActionHurtsEnemies(action));
     }
 }
