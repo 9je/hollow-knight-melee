@@ -28,6 +28,7 @@ static int in_mem1(uint32_t ea, uint32_t n) { return ea >= 0x80000000u && ea - 0
 /* int HSD_AudioSFXStartParam(int id, u8 vol, u8 pan, int track, int channel): the checks it makes before taking a
  * voice, then the handle it will return: (vidhigh << 7) | voice index, -1 with no free voice. */
 void tap_HSD_AudioSFXStartParam(Cpu *c) {
+  if (g_m->standin_depth) return;   /* the stand-in is never heard */
   int32_t id = (int32_t)c->gpr[3], track = (int32_t)c->gpr[6], ch = (int32_t)c->gpr[7];
   int32_t nbanks = (int32_t)ld32(c, ADDR_NBANKS), nscripts = (int32_t)ld32(c, ADDR_NSCRIPTS);
   uint32_t base = ld32(c, ADDR_BANK_BASE);

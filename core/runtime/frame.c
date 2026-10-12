@@ -78,6 +78,8 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
   RET;
 }
 
+#define FN_PROC_ATTACK_COLL 0x8006CB94u   /* Fighter_procAttackColl: the victim side of every hit */
+
 uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   Machine *m = g_m;
   if (target == MAGIC_ONLOAD || target == MAGIC_UNLOAD) {
@@ -101,6 +103,16 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
     m->hit_slots = 0;
     coro_yield();
     m->at_hits = 0;
+  }
+  if (m->standin_gobj && c->gpr[3] == m->standin_gobj) {   /* plan 7: the stand-in's procs */
+    if (ld32(c, m->standin_gobj + 0x1C) == target) RET;      /* its render pass: never drawn */
+    if (target == FN_PROC_ATTACK_COLL && !standin_captured(c)) RET;   /* hit only while held (pummels, throws) */
+    GuestFn g = guest_lookup(target);
+    if (!g) mc_die("indirect call to %08X, which is not recompiled code", target);
+    m->standin_depth++;
+    uint32_t r = g(c);
+    m->standin_depth--;
+    return r;
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);

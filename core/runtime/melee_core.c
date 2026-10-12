@@ -61,6 +61,7 @@ int mc_init(const char *mem1_path, const char *iso_path) {
   Machine *m = calloc(1, sizeof *m);
   if (!m) return init_fail("out of memory");
   g_m = m;
+  m->standin_port = -1;
   sfx_reset();
   Cpu *c = &m->cpu;
   c->mem = malloc(MEM1_SIZE);
@@ -192,6 +193,13 @@ void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
     const char *h = i == 0 ? fox : i < 4 ? none : none45;
     for (int j = 0; j < 0x24; j++) { unsigned v; sscanf(h + 2 * j, "%2x", &v); out[0x60 + 0x24 * i + j] = (uint8_t)v; }
   }
+}
+
+/* plan 7: Fox at port 0 and a second Fox at port 1 (the stand-in, mc_standin_set) */
+void mc_fox_standin_start(uint8_t out[MC_START_SIZE]) {
+  mc_solo_fox_start(out);
+  memcpy(out + 0x60 + 0x24, out + 0x60, 0x24);
+  out[0x60 + 0x24 + 3] = 1;   /* its own costume slot */
 }
 
 static float f32at(Cpu *c, uint32_t ea) { uint32_t v = ld32(c, ea); float f; memcpy(&f, &v, 4); return f; }

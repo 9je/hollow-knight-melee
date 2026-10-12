@@ -36,6 +36,11 @@ typedef struct Machine {
   int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
   int at_hits;                          /* paused there, mid-frame */
   int hit_slots;                        /* mc_apply_hit descriptors used at this pause */
+  int standin_port;                     /* -1 none (plan 7, standin.c) */
+  uint32_t standin_gobj;                /* its fighter GObj, refreshed at each boundary */
+  int standin_req;                      /* next boundary: 1 wake, 2 sleep */
+  float standin_x, standin_y, standin_facing;
+  int standin_depth;                    /* > 0 while one of its procs runs: its sounds are dropped */
   int online;                           /* MC_ONLINE_RNG: Slippi online's per-frame RNG sync */
   uint32_t onload_slot, onload_orig, unload_slot, unload_orig;   /* hijacked GameMode callbacks */
   /* frame-boundary jobs (room.c), run inside the guest at the start of the next mc_step */
@@ -54,6 +59,9 @@ void tb_advance_to(uint64_t t);
 uint32_t call_guest(Cpu *c, uint32_t addr, uint32_t r3, uint32_t r4);
 void service(Cpu *c);
 void room_boundary_jobs(Cpu *c);
+void standin_boundary_jobs(Cpu *c);   /* standin.c: wake or sleep the stand-in */
+int standin_captured(Cpu *c);
+void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */           /* its action is CapturePulledHi..CaptureDamageLw */
 void worker_call(void (*fn)(void *), void *arg);   /* worker.c: run fn on the core's own thread, wait */
 void worker_stop(void);
 void sfx_reset(void);   /* sfx.c: empty the sound event queue */   /* room.c: pending room loads and placements */

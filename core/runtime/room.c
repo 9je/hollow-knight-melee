@@ -215,8 +215,24 @@ static void place_gobj(Cpu *c, uint32_t gobj, float x, float y, int moved, int r
   call_guest(c, FN_CAMERA_SNAP, fp, 0);
 }
 
+#define FN_SET_GROUNDED 0x8007D6A4u      /* ftCommon_8007D6A4(fp) */
+/* plan 7: a freshly spawned stand-in onto the floor within 10 units of (x, y), as a placement does; left airborne if
+ * none. Its floor line is set first: ftCommon_8007D6A4 asserts the fighter stands on a line */
+void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y) {
+  uint32_t fp = ld32(c, gobj + 0x2C);
+  float fy, n[3]; uint32_t fl;
+  int line = floor_under(c, x, y, &fy, &fl, n);
+  if (line < 0) return;
+  st32(c, fp + 0x83C, (uint32_t)line);
+  st32(c, fp + 0x840, fl);
+  for (int k = 0; k < 3; k++) stf(c, fp + 0x844 + 4u * k, n[k]);
+  call_guest(c, FN_SET_GROUNDED, fp, 0);
+  place_gobj(c, gobj, x, fy, 1, 0);
+}
+
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
+  standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
   int loaded = m->room_pending;
   if (m->room_pending) {
     m->room_pending = 0;
@@ -234,6 +250,7 @@ void room_boundary_jobs(Cpu *c) {
       uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
       if (!gobj) continue;
       uint32_t fp = ld32(c, gobj + 0x2C);
+      if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep: Fall would wake it */
       if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] - 1);
       else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
@@ -245,7 +262,10 @@ void room_boundary_jobs(Cpu *c) {
     for (int p = 0; p < 4; p++)
       for (int follower = 0; follower < 2; follower++) {
         uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
-        if (gobj) { uint32_t fp = ld32(c, gobj + 0x2C); st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u)); }
+        if (!gobj) continue;
+        uint32_t fp = ld32(c, gobj + 0x2C);
+        if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep */
+        st8(c, fp + 0x2229u, (uint8_t)(ld8(c, fp + 0x2229u) | 0x10u));
       }
 }
 #define ADDR_STAGE_INFO 0x8049E6C8u

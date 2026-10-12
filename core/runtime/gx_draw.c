@@ -897,7 +897,8 @@ int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const
     uint32_t end = i + 1 < nmk ? mk[i + 1].offset : len;
     if (i >= 0) {
       span_gobj = mk[i].gobj; span_plink = mk[i].p_link;
-      span_want = mk[i].gobj && mk[i].p_link < 64 && ((plink_mask >> mk[i].p_link) & 1);
+      span_want = mk[i].gobj && mk[i].p_link < 64 && ((plink_mask >> mk[i].p_link) & 1)
+                  && !(m->standin_gobj && (mk[i].gobj == m->standin_gobj || mk[i].owner == m->standin_gobj));   /* plan 7 */
       if (span_want) { invert_view(mk[i].view, inv_view); state_epoch++; }   /* cached vertices are in world space */
     } else span_want = 0;
     if (end > at) { Rd r = {fifo + at, fifo + end}; run(&r); }

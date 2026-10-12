@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "melee_core.h"
+#include "standin.h"
 
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %s:%d: %s (%s)\n", __FILE__, __LINE__, #x, mc_error()); exit(1); } } while (0)
 static const char *g_mem1, *g_iso;
@@ -685,6 +686,115 @@ static void test_gx_post_texture_matrices(void) {
   mc_shutdown();
 }
 
+/* plan 7: a second Fox at port 1 stands in for a Hollow Knight enemy */
+static void fox_and_standin(void) {
+  uint8_t start[MC_START_SIZE];
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_fox_standin_start(start);
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  McInput idle = {0};
+  mc_set_input(0, &idle); mc_set_input(1, &idle);
+  for (int p = 2; p < 4; p++) mc_set_input(p, NULL);
+}
+static McFighter standin(void) { McFighter f; CHECK(mc_read_fighter(1, 0, &f) == 0); return f; }
+
+/* the stand-in sleeps (Melee's Sleep, action 11), is never drawn and is woken where it is asked */
+static void test_standin_sleeps_and_wakes(void) {
+  const uint64_t FIGHTER = 1ull << 8, EFFECTS = (1ull << 11) | (1ull << 12);
+  McInput idle = {0};
+  fox_and_standin(); steps(180, &idle);
+  CHECK(mc_standin_set(1) == 0);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(2, &idle);
+  CHECK(standin().action == 11);
+  CHECK(mc_standin_held() == 0);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(FIGHTER | EFFECTS, &v, &nv, &r, &nr) == 0);
+  McFighter f = fox();
+  for (int i = 0; i < nv; i++) CHECK(fabsf(v[i].x - f.x) < 20);   /* Fox only */
+  CHECK(mc_standin_wake(f.x + 30, f.y, -1) == 0);
+  steps(2, &idle);
+  McFighter s = standin();
+  CHECK(s.action == 14 && s.airborne == 0 && fabsf(s.x - (f.x + 30)) < 1);
+  CHECK(mc_gx_decode(FIGHTER | EFFECTS, &v, &nv, &r, &nr) == 0);
+  for (int i = 0; i < nv; i++) CHECK(fabsf(v[i].x - f.x) < 20);   /* awake, still never drawn */
+  CHECK(mc_standin_sleep() == 0);
+  steps(2, &idle);
+  CHECK(standin().action == 11);
+  mc_shutdown();
+}
+
+/* awake, it pushes and is pushed as Melee's fighters are; Fox's attacks and lasers pass through it */
+static void test_standin_push_and_no_hits(void) {
+  McInput idle = {0}, jab = {0}, laser = {0};
+  jab.buttons = 0x0100; laser.buttons = 0x0200;
+  fox_and_standin(); steps(180, &idle);
+  CHECK(mc_standin_set(1) == 0);
+  steps(2, &idle);
+  McFighter f = fox();
+  CHECK(mc_standin_wake(f.x + 2, f.y, -1) == 0);      /* overlapping Fox */
+  steps(20, &idle);
+  CHECK(fabsf(fox().x - f.x) > 0.5f);                  /* Melee's push moved Fox */
+  float pct = standin().percent;
+  steps(1, &jab); steps(20, &idle);
+  steps(1, &laser); steps(30, &idle);
+  CHECK(standin().percent == pct);                     /* not hit */
+  CHECK(fox().hitlag == 0);
+  mc_shutdown();
+}
+
+/* asleep across a room load: room.c's placement must not wake it */
+static void test_standin_survives_room_load(void) {
+  McInput idle = {0};
+  fox_and_standin(); steps(180, &idle);
+  CHECK(mc_standin_set(1) == 0);
+  steps(2, &idle);
+  const McCollision *now = mc_get_collision();
+  McCollision c = copy(now);
+  CHECK(mc_load_collision(&c) == 0);
+  steps(3, &idle);
+  CHECK(standin().action == 11);
+  mc_shutdown();
+}
+
+/* Fox's real grab catches the stand-in; pummel and forward throw act on it as on any fighter */
+static void test_standin_grab_pummel_throw(void) {
+  McInput idle = {0}, grab = {0}, a = {0}, fwd = {0};
+  grab.buttons = 0x0010;            /* Z */
+  a.buttons = 0x0100;
+  fox_and_standin(); steps(180, &idle);
+  CHECK(mc_standin_set(1) == 0);
+  steps(2, &idle);
+  McFighter f = fox();
+  fwd.stick_x = f.facing > 0 ? 127 : -127;
+  CHECK(mc_standin_wake(f.x + 8 * f.facing, f.y, -f.facing) == 0);
+  steps(2, &idle);
+  steps(1, &grab);
+  int held = 0;
+  for (int i = 0; i < 20 && !held; i++) { steps(1, &idle); held = mc_standin_held() == 1; }
+  CHECK(held);
+  steps(10, &idle);
+  CHECK(fox().action >= 0xD5 && fox().action <= 0xD8);
+  float p0 = standin().percent;
+  steps(1, &a); steps(15, &idle);
+  CHECK(standin().percent > p0);                /* pummel */
+  float p1 = standin().percent;
+  int released = 0;
+  for (int i = 0; i < 30 && fox().action != 0xD8; i++) steps(1, &idle);   /* the pummel ends: CatchWait */
+  for (int i = 0; i < 60 && !released; i++) {
+    steps(1, &fwd);   /* a throw takes a fresh tilt (Melee's lstick tilt timer), not a stick held since the pummel */
+    if (mc_standin_held() == 0) {
+      released = 1;
+      McFighter s = standin();
+      CHECK(fox().action >= 0xDB && fox().action <= 0xDE);
+      CHECK(s.percent > p1);
+      CHECK(fabsf(s.kb_vel_x) + fabsf(s.kb_vel_y) > 0.1f);
+    }
+  }
+  CHECK(released);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -706,6 +816,10 @@ int main(int argc, char **argv) {
   test_apply_hit();
   test_respawn_after_hit();
   test_tumble_fighter();
+  test_standin_sleeps_and_wakes();
+  test_standin_push_and_no_hits();
+  test_standin_survives_room_load();
+  test_standin_grab_pummel_throw();
   puts("rooms tests passed");
   return 0;
 }
