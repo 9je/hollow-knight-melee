@@ -402,31 +402,30 @@ namespace FoxMelee {
         }
 
         // The Knight's death effects (shattering on spikes, acid, lava; the death animation) are their own objects:
-        // while Fox plays they keep their logic (the death one leaves the shade) but draw nothing.
+        // while Fox plays they keep their logic (the death one leaves the shade) but draw nothing. The hazard ones are
+        // Hollow Knight's own pooled objects, untouched but for their renderers (copies of them misbehaved: the acid
+        // splash's screen-blend shader left the room's picture smeared until the next room).
         bool deathsHidden;
-        GameObject[] deathShown, deathHiddenCopies;
+        readonly List<GameObject> spawnedDeaths = new List<GameObject>();
+        readonly List<Renderer> deathRenderers = new List<Renderer>();
         void HideKnightDeaths(HeroController hero, bool hide) {
-            if (hide == deathsHidden) return;
-            deathsHidden = hide;
-            if (hero.heroDeathPrefab != null)
-                foreach (var r in hero.heroDeathPrefab.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = hide;
-            if (deathShown == null) {
-                deathShown = new[] { hero.spikeDeathPrefab, hero.acidDeathPrefab, hero.lavaDeathPrefab };
-                deathHiddenCopies = Array.ConvertAll(deathShown, HiddenCopy);
+            if (hide != deathsHidden) {
+                deathsHidden = hide;
+                if (hero.heroDeathPrefab != null)
+                    foreach (var r in hero.heroDeathPrefab.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = hide;
+                if (!hide) {
+                    foreach (var r in deathRenderers) if (r != null) r.enabled = true;
+                    deathRenderers.Clear();
+                }
             }
-            var use = hide ? deathHiddenCopies : deathShown;
-            hero.spikeDeathPrefab = use[0]; hero.acidDeathPrefab = use[1]; hero.lavaDeathPrefab = use[2];
-        }
-
-        static GameObject HiddenCopy(GameObject prefab) {
-            if (prefab == null) return null;
-            bool was = prefab.activeSelf;
-            prefab.SetActive(false);                 // the copy starts inactive: it plays nothing where it is made
-            var copy = Instantiate(prefab);
-            prefab.SetActive(was);
-            DontDestroyOnLoad(copy);
-            foreach (var r in copy.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = true;
-            return copy;
+            if (!hide) return;
+            foreach (var prefab in new[] { hero.spikeDeathPrefab, hero.acidDeathPrefab, hero.lavaDeathPrefab }) {
+                if (prefab == null) continue;
+                ObjectPool.GetSpawned(prefab, spawnedDeaths, false);
+                foreach (var go in spawnedDeaths)
+                    foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+                        if (r.enabled) { r.enabled = false; deathRenderers.Add(r); }
+            }
         }
 
         // Sitting at a bench: Fox crouches where he stood (Melee keeps running with the stick held down), so resting
