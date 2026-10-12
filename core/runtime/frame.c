@@ -139,7 +139,14 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
     }
   }
   uint32_t gobj = c->gpr[3];   /* a GObj's render callback (HSD_GObj_80390CD4 calls render_cb(gobj, pass)) */
-  if (m->gx_on && gobj >= 0x80000000u && gobj < 0x80000000u + MEM1_SIZE - 0x30 && ld32(c, gobj + 0x1C) == target) {
+  int render_cb = (m->gx_on || m->render_pause) && gobj >= 0x80000000u && gobj < 0x80000000u + MEM1_SIZE - 0x30 && ld32(c, gobj + 0x1C) == target;
+  if (render_cb && m->render_pause) {   /* mc_step_to_render: the frame's logic is done; the host reads it here */
+    m->render_pause = 0;
+    m->at_render = 1;
+    coro_yield();
+    m->at_render = 0;
+  }
+  if (render_cb && m->gx_on) {
     gx_mark(c, gobj);
     uint32_t r = f(c);
     gx_mark(c, 0);

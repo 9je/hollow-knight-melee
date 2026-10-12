@@ -35,6 +35,8 @@ typedef struct Machine {
   int gx_nmarks[2], gx_capmarks[2], gx_cur;
   int hit_pause;                        /* mc_step_to_hits: pause at port 0's Fighter_procCollResolve */
   int at_hits;                          /* paused there, mid-frame */
+  int render_pause;                     /* mc_step_to_render: pause at the frame's first render callback */
+  int at_render;                        /* paused there, mid-frame */
   int hit_slots;                        /* mc_apply_hit descriptors used at this pause */
   int standin_port;                     /* -1 none (plan 7, standin.c) */
   uint32_t standin_gobj;                /* its fighter GObj, refreshed at each boundary */

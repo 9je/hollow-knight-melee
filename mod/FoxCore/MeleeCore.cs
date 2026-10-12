@@ -88,7 +88,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DobjsFn(int port, int follower, byte[] hidden, byte[] joint, int max);
 
         const int StartSize = 0x138;
-        readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits;
+        readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
         readonly StartFn start; readonly OnFn edgeAssist; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
@@ -105,6 +105,8 @@ namespace FoxMelee {
             error = NativeLib.Symbol<ErrorFn>(lib, "mc_error");
             step = NativeLib.Symbol<IntFn>(lib, "mc_step");
             stepToHits = NativeLib.Symbol<IntFn>(lib, "mc_step_to_hits");
+            stepToRender = NativeLib.Symbol<IntFn>(lib, "mc_step_to_render");
+            finishFrame = NativeLib.Symbol<IntFn>(lib, "mc_finish_frame");
             solo = NativeLib.Symbol<SoloFn>(lib, "mc_solo_fox_start");
             standinStart = NativeLib.Symbol<SoloFn>(lib, "mc_fox_standin_start");
             standinSet = NativeLib.Symbol<StandInSetFn>(lib, "mc_standin_set");
@@ -177,6 +179,15 @@ namespace FoxMelee {
         /// Runs the next frame up to Melee's hit resolution for port 0, where ReportHit lands in this frame; Step()
         /// finishes the frame. 0 paused there, 1 the frame ended without reaching it, -1 error.
         public int StepToHits() { Sync(); localError = null; return stepToHits(); }
+        /// Runs the frame up to Melee's drawing: its logic is done, and reads report what it ends with. 0 paused there,
+        /// 1 the frame ended first, -1 error. FinishFrameAsync (or any step) finishes it.
+        public int StepToRender() { Sync(); localError = null; return stepToRender(); }
+        /// Finishes a frame paused by StepToRender (Melee's drawing, about three quarters of a frame's time) on another
+        /// thread; nothing if none is paused. Every other call waits for it first; a failure shows in the next call.
+        public void FinishFrameAsync() {
+            Sync();
+            pending = System.Threading.Tasks.Task.Run(() => { finishFrame(); });
+        }
         public bool ReadFighter(int port, out McFighter f) { Sync(); return Ok(read(port, 0, out f)); }
         public bool LoadCollision(IntPtr collision) { Sync(); return Ok(load(collision)); }
         public bool SetBounds(McBox blast, McBox camera) { Sync(); return Ok(bounds(ref blast, ref camera)); }
@@ -215,10 +226,12 @@ namespace FoxMelee {
         }
 
         /// The same on another thread (it takes milliseconds): every other call waits for it first, so Melee does not
-        /// move on while the decode reads its memory, and the frame decoded is the one it started on.
+        /// move on while the decode reads its memory, and the frame decoded is the one it started on (after a frame
+        /// FinishFrameAsync is still drawing).
         public System.Threading.Tasks.Task<bool> GxDecodeAsync(ulong plinkMask, GxFrame frame) {
-            Sync();
-            var t = System.Threading.Tasks.Task.Run(() => DecodeInto(plinkMask, frame));
+            var before = pending;   // a frame still drawing (FinishFrameAsync): decoded once it is done
+            var t = before == null ? System.Threading.Tasks.Task.Run(() => DecodeInto(plinkMask, frame))
+                                   : before.ContinueWith(_ => DecodeInto(plinkMask, frame), System.Threading.Tasks.TaskScheduler.Default);
             pending = t;
             return t;
         }

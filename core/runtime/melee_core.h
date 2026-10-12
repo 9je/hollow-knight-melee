@@ -15,6 +15,11 @@ int mc_step(void);                 /* runs exactly one frame (or the rest of one
  * attack collision), where a hit reported with mc_report_hit lands in this frame. mc_step() finishes the frame.
  * 0 paused there (or already), 1 the frame ended without reaching it (no fighter), -1 error. */
 int mc_step_to_hits(void);
+/* Runs the frame (from its start or a hit pause) up to Melee's drawing (the first GObj render callback): the frame's logic
+ * is done, and what mc_read_* report is what the frame ends with. mc_step() finishes the frame (the drawing), which the host
+ * may run on another thread while it does other work. 0 paused there (or already), 1 the frame ended first, -1 error. */
+int mc_step_to_render(void);
+int mc_finish_frame(void);         /* finishes a frame paused by mc_step_to_render; nothing otherwise. 0 ok, -1 error */
 uint64_t mc_frame(void);           /* frame boundaries reached since mc_init */
 uint32_t mc_mem_crc32(void);       /* CRC-32 of MEM1 (determinism checks) */
 uint32_t mc_peek32(uint32_t ea);   /* big-endian MEM1 read; 0 outside MEM1 or with no machine */

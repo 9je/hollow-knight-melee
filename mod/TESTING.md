@@ -79,6 +79,12 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       `MaxWidth/MaxHeight` (HK units), `MaxHp`, `PercentAtFullHp`/`PercentAtNoHp`, `LaunchScale`.
     - Cost: about 2.5 ms more per Melee frame while a small enemy is near Fox (the perf log line shows it).
 
+15. Frame rate: Melee's drawing (about three quarters of each Melee frame) now runs on the core's own thread while
+    Unity goes on (`DrawOffThread`, on). No added input lag: Fox's picture was already drawn a frame behind. The
+    `perf:` log line's "Melee ms/frame" is now the main thread's share only (about 1.7 ms instead of about 6). If
+    anything looks wrong (Fox's picture tearing, flickering or lagging more than before), set `DrawOffThread: false`
+    and tell me.
+
 ## What to send back
 
 - `ModLog.txt` (whole file).

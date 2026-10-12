@@ -16,6 +16,7 @@ namespace FoxMelee {
         public double FocusSeconds = 1.141;         // Hollow Knight's Focus time for one mask (D-pad down)
         public bool EnemiesHitFox = true;           // enemies' hits go through Melee (shield, dodges, DI); off: the Knight takes them
         public EnemyHitTuning EnemyHits = new EnemyHitTuning();   // how a Hollow Knight hit becomes a Melee hit
+        public bool DrawOffThread = true;           // Melee's drawing (3/4 of its frame) runs on the core's thread while Unity goes on
         public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
         public GrabTuning Grabs = new GrabTuning();   // spec §5 Grab: Fox's grab and Melee's push against small enemies (plan 7)
     }

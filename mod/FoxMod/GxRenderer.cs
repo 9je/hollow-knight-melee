@@ -66,7 +66,10 @@ namespace FoxMelee {
                 failed = !ok || frame.VertexCount == 0;
                 if (failed) Hide(); else Build(core, room, like, z);
             }
-            if (fresh) decoding = core.GxDecodeAsync(GxFrame.FoxAndEffects, back);
+            if (fresh) {
+                core.FinishFrameAsync();   // a frame paused at Melee's drawing (StepToRender) draws on the core's thread,
+                decoding = core.GxDecodeAsync(GxFrame.FoxAndEffects, back);   // then is decoded there
+            }
             return !failed;
         }
 

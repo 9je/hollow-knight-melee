@@ -183,8 +183,12 @@ namespace FoxMelee {
                     if (at == 0 && combat != null && enemies != null) foreach (var go in combat.Struck) enemies.Guard(go);
                     if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position)) { Fail("applying a hit to Fox: " + core.Error); return; }
                 }
-                // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0)
-                if ((!pause || at == 0) && !core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0). With
+                // DrawOffThread (and Melee's graphics) the frame runs to Melee's drawing here; GxRenderer.Draw finishes it
+                // on the core's thread, then decodes it there, while Unity goes on. A next frame finishes it first.
+                bool split = gx != null && FoxMod.Instance.Settings.DrawOffThread;
+                int ended = !pause || at == 0 ? (split ? core.StepToRender() : core.Step() ? 1 : -1) : 1;
+                if (ended < 0) { Fail("libmelee_core stopped: " + core.Error); return; }
                 session.Stepped();
                 var st = profWatch.Elapsed.TotalMilliseconds;
                 sfx?.Frame(core);
@@ -194,11 +198,11 @@ namespace FoxMelee {
                 profBridgeMs += profWatch.Elapsed.TotalMilliseconds - st;
                 enemies?.AfterFrame(hero);
                 if (grab != null && !grab.After(core, room)) { Fail("stand-in: " + core.Error); return; }
+                if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             profMeleeMs += profWatch.Elapsed.TotalMilliseconds; profMeleeFrames += frames;
             Profile();
-            if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
             WatchStuck(frames);
             // Fox's percent follows his masks (EnemyHits.PercentFor): held there between hits, down again with a heal
             var pd = PlayerData.instance;

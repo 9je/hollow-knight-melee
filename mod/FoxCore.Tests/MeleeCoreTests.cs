@@ -295,5 +295,30 @@ namespace FoxMelee.Tests {
             for (int i = 0; i < 240; i++) Assert.True(core.Step(), core.Error);
             Assert.True(core.ReadFighter(0, out var f) && f.Airborne == 0);
         }
+
+        [Fact]
+        public void FrameFinishesDrawingOnAnotherThread() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartSoloFox(), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) Assert.True(core.Step(), core.Error);
+            Assert.True(core.GxCapture(true), core.Error);
+            var frame = new GxFrame();
+            for (int i = 0; i < 30; i++) {
+                core.SetInput(0, new McInput { StickX = (sbyte)(i < 15 ? 60 : -60) });
+                Assert.Equal(0, core.StepToHits());
+                Assert.Equal(0, core.StepToRender());
+                Assert.True(core.ReadFighter(0, out var at), core.Error);
+                core.FinishFrameAsync();                       // the drawing runs while the caller goes on
+                var decode = core.GxDecodeAsync(GxFrame.FoxAndEffects, frame);   // after it, on the same chain
+                Assert.True(core.ReadFighter(0, out var after), core.Error);
+                Assert.Equal(at.X, after.X);
+                Assert.True(decode.Result);
+                Assert.True(frame.VertexCount > 9000);
+            }
+        }
     }
 }

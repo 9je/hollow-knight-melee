@@ -131,6 +131,19 @@ int mc_step_to_hits(void) {
   if (m && !m->dead) m->hit_pause = 0;
   return rc < 0 ? -1 : g_m->at_hits ? 0 : 1;
 }
+int mc_step_to_render(void) {
+  Machine *m = g_m;
+  if (m && !m->dead && m->at_render) return 0;
+  if (m) m->render_pause = 1;
+  int rc = run_frame();
+  if (m && !m->dead) m->render_pause = 0;
+  return rc < 0 ? -1 : g_m->at_render ? 0 : 1;
+}
+int mc_finish_frame(void) {
+  Machine *m = g_m;
+  if (!m || m->dead) return -1;
+  return m->at_render ? run_frame() : 0;
+}
 uint64_t mc_frame(void) { return g_m ? g_m->frames : 0; }
 uint32_t mc_mem_crc32(void) { return g_m ? crc32_buf(g_m->cpu.mem, MEM1_SIZE) : 0; }
 static int in_mem1(uint32_t ea, uint32_t n) { return ea >= 0x80000000u && ea - 0x80000000u <= MEM1_SIZE - n; }

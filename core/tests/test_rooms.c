@@ -840,6 +840,32 @@ static void test_standin_wake_keeps_percent(void) {
   mc_shutdown();
 }
 
+/* mc_step_to_render pauses each frame where Melee starts drawing: its logic is done (the fighters are as they will be after
+ * the frame), and mc_step finishes the frame (the drawing). From the hit pause too. */
+static void test_render_pause(void) {
+  const uint64_t FIGHTER = 1ull << 8;
+  McInput idle = {0}, b = {0};
+  b.buttons = 0x0200;
+  solo_fox(); steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  for (int i = 0; i < 120; i++) {
+    mc_set_input(0, (i % 6) < 2 ? &b : &idle);
+    uint64_t fr = mc_frame();
+    if (i % 2) CHECK(mc_step_to_hits() == 0);
+    CHECK(mc_step_to_render() == 0);
+    CHECK(mc_frame() == fr);
+    McFighter at = fox();
+    CHECK(i % 3 ? mc_finish_frame() == 0 : mc_step() == 0);
+    CHECK(mc_frame() == fr + 1);
+    CHECK(mc_finish_frame() == 0 && mc_frame() == fr + 1);   /* nothing paused: nothing run */
+    McFighter after = fox();
+    CHECK(same(at, after));
+  }
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(FIGHTER, &v, &nv, &r, &nr) == 0 && nv > 9000);   /* the frame was drawn */
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -867,6 +893,7 @@ int main(int argc, char **argv) {
   test_standin_grab_pummel_throw();
   test_edge_assist();
   test_standin_wake_keeps_percent();
+  test_render_pause();
   puts("rooms tests passed");
   return 0;
 }
