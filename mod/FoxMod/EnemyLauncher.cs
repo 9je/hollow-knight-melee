@@ -10,6 +10,7 @@ namespace FoxMelee {
             public Rigidbody2D Body; public Collider2D Col; public KnockbackFlight Flight; public Vector2 Kb; public float PerMeleeUnit;
             public bool OwnGravity;   // false: the enemy's own code keeps it up (gravity scale 0); it falls as a Melee victim does
             public readonly List<(PlayMakerFSM fsm, bool manual)> Fsms = new List<(PlayMakerFSM, bool)>();
+            public readonly List<Behaviour> Movers = new List<Behaviour>();   // walkers, crawlers: switched off while launched
         }
         readonly Dictionary<GameObject, Flying> flying = new Dictionary<GameObject, Flying>();
         readonly List<GameObject> done = new List<GameObject>();
@@ -23,6 +24,9 @@ namespace FoxMelee {
             if (!flying.TryGetValue(go, out var f)) {
                 f = new Flying();
                 foreach (var fsm in go.GetComponentsInChildren<PlayMakerFSM>()) { f.Fsms.Add((fsm, fsm.Fsm.ManualUpdate)); fsm.Fsm.ManualUpdate = true; }
+                // their own movement sets the body's velocity each frame (a walk, a crawl), which would undo the launch
+                foreach (var b in go.GetComponents<Behaviour>())
+                    if ((b is Walker || b is Crawler || b is Climber) && b.enabled) { b.enabled = false; f.Movers.Add(b); }
                 flying[go] = f;
             }
             foreach (var r in go.GetComponentsInChildren<Recoil>()) r.CancelRecoil();
@@ -66,6 +70,7 @@ namespace FoxMelee {
         public void Stop(GameObject go) {
             if (go == null || !flying.TryGetValue(go, out var f)) { if (go != null) flying.Remove(go); else Prune(); return; }
             foreach (var (fsm, manual) in f.Fsms) if (fsm != null) fsm.Fsm.ManualUpdate = manual;
+            foreach (var b in f.Movers) if (b != null) b.enabled = true;
             flying.Remove(go);
         }
 
