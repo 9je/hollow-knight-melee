@@ -776,8 +776,13 @@ static void test_standin_grab_pummel_throw(void) {
   steps(10, &idle);
   CHECK(fox().action >= 0xD5 && fox().action <= 0xD8);
   float p0 = standin().percent;
-  steps(1, &a); steps(15, &idle);
+  McSfx ev[64];
+  int impact = 0;
+  while (mc_read_sfx(ev, 64) > 0) {}
+  steps(1, &a);
+  for (int i = 0; i < 15; i++) { steps(1, &idle); for (int n = mc_read_sfx(ev, 64), k = 0; k < n; k++) impact |= ev[k].kind == MC_SFX_START && ev[k].id == 91; }
   CHECK(standin().percent > p0);                /* pummel */
+  CHECK(impact);                                /* its impact is heard, though the stand-in is not */
   float p1 = standin().percent;
   int released = 0;
   for (int i = 0; i < 30 && fox().action != 0xD8; i++) steps(1, &idle);   /* the pummel ends: CatchWait */

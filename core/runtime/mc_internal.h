@@ -62,6 +62,7 @@ void service(Cpu *c);
 void room_boundary_jobs(Cpu *c);
 void standin_boundary_jobs(Cpu *c);   /* standin.c: wake or sleep the stand-in */
 int standin_captured(Cpu *c);
+int standin_hit_sound(Cpu *c, int32_t id);   /* a hit sound on the stand-in, which is heard */
 void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */           /* its action is CapturePulledHi..CaptureDamageLw */
 void worker_call(void (*fn)(void *), void *arg);   /* worker.c: run fn on the core's own thread, wait */
 void worker_stop(void);

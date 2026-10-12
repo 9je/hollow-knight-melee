@@ -12,6 +12,10 @@
 #define ACT_SLEEP 11u
 #define ACT_CAPTURE_FIRST 0xDFu          /* CapturePulledHi */
 #define ACT_CAPTURE_LAST 0xE4u           /* CaptureDamageLw */
+#define ACT_DAMAGE_FIRST 0x4Bu           /* DamageHi1 */
+#define ACT_DAMAGE_LAST 0x5Bu            /* DamageFlyRoll */
+#define ACT_THROWN_FIRST 0xEFu           /* ThrownF */
+#define ACT_THROWN_LAST 0xF3u            /* ThrownLwWomen */
 
 static int set_error(const char *why) { snprintf(g_m->error, sizeof g_m->error, "%s", why); return -1; }
 static void stf(Cpu *c, uint32_t ea, float f) { uint32_t v; memcpy(&v, &f, 4); st32(c, ea, v); }
@@ -47,6 +51,14 @@ int mc_standin_held(void) {
 int standin_captured(Cpu *c) {
   uint32_t a = ld32(c, ld32(c, g_m->standin_gobj + 0x2C) + 0x10u);
   return a >= ACT_CAPTURE_FIRST && a <= ACT_CAPTURE_LAST;
+}
+
+/* A common-bank sound (hits, impacts: id < 10000) started while the stand-in is held, thrown or reeling from a hit: a throw's or
+ * pummel's impact, which Melee plays from the victim's side. Its own voice, steps and landings stay silent. */
+int standin_hit_sound(Cpu *c, int32_t id) {
+  if (id < 0 || id >= 10000) return 0;
+  uint32_t a = ld32(c, ld32(c, g_m->standin_gobj + 0x2C) + 0x10u);
+  return standin_captured(c) || (a >= ACT_DAMAGE_FIRST && a <= ACT_DAMAGE_LAST) || (a >= ACT_THROWN_FIRST && a <= ACT_THROWN_LAST);
 }
 
 void standin_boundary_jobs(Cpu *c) {
