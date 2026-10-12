@@ -67,7 +67,14 @@ static inline double ni_sub(double a, double b) { double r = a - b; return isnan
 static inline double ni_mul(double a, double b) { double r = a * b; return isnan(r) ? nan2(a, b) : r; }
 static inline double ni_div(double a, double b) { double r = a / b; return isnan(r) ? nan2(a, b) : r; }
 
-static double ni_madd_msub(int sub, int single, double a, double c, double b) {
+/* fused multiply-adds: the CPU's FMA instruction where it has one (exactly rounded, the same result as libm's fma), chosen
+ * at load time; libm's otherwise */
+#if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
+#define FMA_CLONES __attribute__((target_clones("fma", "default")))
+#else
+#define FMA_CLONES
+#endif
+static inline double ni_madd_msub(int sub, int single, double a, double c, double b) {
   double result;
   if (!single) {
     result = fma(a, c, sub ? -b : b);
@@ -174,10 +181,10 @@ double gekko_fadd(uint32_t f, double a, double b) { (void)f; return ni_add(a, b)
 double gekko_fsub(uint32_t f, double a, double b) { (void)f; return ni_sub(a, b); }
 double gekko_fmul(uint32_t f, double a, double c) { (void)f; return ni_mul(a, c); }
 double gekko_fdiv(uint32_t f, double a, double b) { (void)f; return ni_div(a, b); }
-double gekko_fmadd (uint32_t f, double a, double c, double b) { (void)f; return ni_madd_msub(0, 0, a, c, b); }
-double gekko_fmsub (uint32_t f, double a, double c, double b) { (void)f; return ni_madd_msub(1, 0, a, c, b); }
-double gekko_fnmadd(uint32_t f, double a, double c, double b) { (void)f; double t = ni_madd_msub(0, 0, a, c, b); return isnan(t) ? t : -t; }
-double gekko_fnmsub(uint32_t f, double a, double c, double b) { (void)f; double t = ni_madd_msub(1, 0, a, c, b); return isnan(t) ? t : jit_nmsub_zero(-t, a, c, b); }
+FMA_CLONES double gekko_fmadd (uint32_t f, double a, double c, double b) { (void)f; return ni_madd_msub(0, 0, a, c, b); }
+FMA_CLONES double gekko_fmsub (uint32_t f, double a, double c, double b) { (void)f; return ni_madd_msub(1, 0, a, c, b); }
+FMA_CLONES double gekko_fnmadd(uint32_t f, double a, double c, double b) { (void)f; double t = ni_madd_msub(0, 0, a, c, b); return isnan(t) ? t : -t; }
+FMA_CLONES double gekko_fnmsub(uint32_t f, double a, double c, double b) { (void)f; double t = ni_madd_msub(1, 0, a, c, b); return isnan(t) ? t : jit_nmsub_zero(-t, a, c, b); }
 
 /* ---- scalar single ---- */
 static inline GekkoPS fill(float x) { GekkoPS r; r.ps0 = r.ps1 = (double)x; return r; }
@@ -185,10 +192,10 @@ GekkoPS gekko_fadds(uint32_t f, double a, double b) { return fill(force_single(f
 GekkoPS gekko_fsubs(uint32_t f, double a, double b) { return fill(force_single(f, ni_sub(a, b))); }
 GekkoPS gekko_fmuls(uint32_t f, double a, double c) { return fill(force_single(f, ni_mul(a, force25(c)))); }
 GekkoPS gekko_fdivs(uint32_t f, double a, double b) { return fill(force_single(f, ni_div(a, b))); }
-GekkoPS gekko_fmadds (uint32_t f, double a, double c, double b) { return fill(force_single(f, ni_madd_msub(0, 1, a, c, b))); }
-GekkoPS gekko_fmsubs (uint32_t f, double a, double c, double b) { return fill(force_single(f, ni_madd_msub(1, 1, a, c, b))); }
-GekkoPS gekko_fnmadds(uint32_t f, double a, double c, double b) { float t = force_single(f, ni_madd_msub(0, 1, a, c, b)); return fill(isnan(t) ? t : -t); }
-GekkoPS gekko_fnmsubs(uint32_t f, double a, double c, double b) { float t = force_single(f, ni_madd_msub(1, 1, a, c, b)); return fill(isnan(t) ? t : (float)jit_nmsub_zero(-t, a, force25(c), b)); }
+FMA_CLONES GekkoPS gekko_fmadds (uint32_t f, double a, double c, double b) { return fill(force_single(f, ni_madd_msub(0, 1, a, c, b))); }
+FMA_CLONES GekkoPS gekko_fmsubs (uint32_t f, double a, double c, double b) { return fill(force_single(f, ni_madd_msub(1, 1, a, c, b))); }
+FMA_CLONES GekkoPS gekko_fnmadds(uint32_t f, double a, double c, double b) { float t = force_single(f, ni_madd_msub(0, 1, a, c, b)); return fill(isnan(t) ? t : -t); }
+FMA_CLONES GekkoPS gekko_fnmsubs(uint32_t f, double a, double c, double b) { float t = force_single(f, ni_madd_msub(1, 1, a, c, b)); return fill(isnan(t) ? t : (float)jit_nmsub_zero(-t, a, force25(c), b)); }
 GekkoPS gekko_frsp(uint32_t f, double b) { return fill(force_single(f, b)); }
 GekkoPS gekko_fres(double b) { GekkoPS r; r.ps0 = r.ps1 = approx_recip(b); return r; } /* Fill(double): not rounded */
 double gekko_frsqrte(double b) { return approx_rsqrt(b); }
@@ -225,16 +232,16 @@ GekkoPS gekko_ps_mul(uint32_t f, GekkoPS a, GekkoPS c) {
   double c0 = force25(c.ps0), c1 = force25(c.ps1);
   return mk(force_single(f, ni_mul(a.ps0, c0)), force_single(f, ni_mul(a.ps1, c1)));
 }
-GekkoPS gekko_ps_madd(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_madd(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   return mk(force_single(f, ni_madd_msub(0, 1, a.ps0, c.ps0, b.ps0)), force_single(f, ni_madd_msub(0, 1, a.ps1, c.ps1, b.ps1)));
 }
-GekkoPS gekko_ps_msub(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_msub(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   return mk(force_single(f, ni_madd_msub(1, 1, a.ps0, c.ps0, b.ps0)), force_single(f, ni_madd_msub(1, 1, a.ps1, c.ps1, b.ps1)));
 }
-GekkoPS gekko_ps_nmadd(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_nmadd(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   return mk(negf(force_single(f, ni_madd_msub(0, 1, a.ps0, c.ps0, b.ps0))), negf(force_single(f, ni_madd_msub(0, 1, a.ps1, c.ps1, b.ps1))));
 }
-GekkoPS gekko_ps_nmsub(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_nmsub(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   double r0 = negf(force_single(f, ni_madd_msub(1, 1, a.ps0, c.ps0, b.ps0)));
   double r1 = negf(force_single(f, ni_madd_msub(1, 1, a.ps1, c.ps1, b.ps1)));
   return mk(isnan(r0) ? r0 : jit_nmsub_zero(r0, a.ps0, force25(c.ps0), b.ps0), isnan(r1) ? r1 : jit_nmsub_zero(r1, a.ps1, force25(c.ps1), b.ps1));
@@ -247,10 +254,10 @@ GekkoPS gekko_ps_muls1(uint32_t f, GekkoPS a, GekkoPS c) {
   double c1 = force25(c.ps1);
   return mk(force_single(f, ni_mul(a.ps0, c1)), force_single(f, ni_mul(a.ps1, c1)));
 }
-GekkoPS gekko_ps_madds0(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_madds0(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   return mk(force_single(f, ni_madd_msub(0, 1, a.ps0, c.ps0, b.ps0)), force_single(f, ni_madd_msub(0, 1, a.ps1, c.ps0, b.ps1)));
 }
-GekkoPS gekko_ps_madds1(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
+FMA_CLONES GekkoPS gekko_ps_madds1(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
   return mk(force_single(f, ni_madd_msub(0, 1, a.ps0, c.ps1, b.ps0)), force_single(f, ni_madd_msub(0, 1, a.ps1, c.ps1, b.ps1)));
 }
 GekkoPS gekko_ps_sum0(uint32_t f, GekkoPS a, GekkoPS c, GekkoPS b) {
