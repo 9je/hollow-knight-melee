@@ -23,6 +23,8 @@ namespace FoxMelee {
         readonly List<HitEvent> real = new List<HitEvent>();               // hits on live enemies: Melee hears of these
         /// Enemies Fox's own attacks (not lasers) landed on this frame (their HealthManager objects): EnemyBridge.Guard.
         public readonly List<GameObject> Struck = new List<GameObject>();
+        /// The enemy in Fox's grab (GrabBridge): hits on it land through the stand-in, so they are not landed here too.
+        public GameObject Held;
         readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
         MeleeCore core;
         readonly HitlagTimers hitlag = new HitlagTimers();
@@ -60,8 +62,7 @@ namespace FoxMelee {
             if (n < 0) return false;
             hurting.Clear();
             if (!core.ReadFighter(0, out var foxNow)) return false;
-            bool hurts = HitRules.FoxActionHurtsEnemies(foxNow.Action);   // the pummel lands through the stand-in (GrabBridge)
-            for (int i = 0; i < n; i++) if (hurts && HitRules.HurtsEnemies(boxes[i])) hurting.Add(boxes[i]);
+            for (int i = 0; i < n; i++) if (HitRules.HurtsEnemiesDuring(boxes[i], foxNow.Action)) hurting.Add(boxes[i]);   // the pummel lands through the stand-in (GrabBridge)
             this.room = room;
             if (hurting.Count > 0) {
                 if (!core.ReadFighter(0, out var fox)) return false;
@@ -171,6 +172,7 @@ namespace FoxMelee {
             if (target == null) return;           // destroyed by an earlier hit this frame
             strike.transform.position = Hk(h.Box.X, h.Box.Y);
             var hm = target.GetComponentInParent<HealthManager>();
+            if (hm != null && Held != null && hm.gameObject == Held) return;
             bool enemy = hm != null && !hm.GetIsDead();   // grass, corpses and scenery: hit, but no Melee hitlag
             if (enemy && Evasion != null) Evasion.SetValue(hm, 0f);
             // away from the attacker (ftColl_8007A06C): Fox, or the laser itself

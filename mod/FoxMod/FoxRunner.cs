@@ -170,6 +170,7 @@ namespace FoxMelee {
                     else if (fox.Action == ActionDownWaitU || fox.Action == ActionDownWaitD) { input = new McInput { StickY = 127 }; getUp = false; }
                 }
                 if (grab != null && !grab.Before(core, room, (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero)))) { Fail("stand-in: " + core.Error); return; }
+                if (combat != null) combat.Held = grab?.Held;
                 core.SetInput(0, input);
                 int at = 0;
                 bool pause = combat != null || enemies != null;
@@ -344,7 +345,7 @@ namespace FoxMelee {
             var blast = new McBox { Left = cam.Left - FarBlast, Right = cam.Right + FarBlast, Top = cam.Top + FarBlast, Bottom = cam.Bottom - FarBlast };
             if (!core.SetBounds(blast, cam)) { Fail($"{scene}: mc_set_bounds: {core.Error}"); return false; }
             room = t;
-            combat?.ReleaseAll(); grab?.Release();
+            combat?.ReleaseAll(); grab?.NewRoom();
             session.RoomConverted(scene, true);
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");

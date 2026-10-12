@@ -62,7 +62,9 @@ void standin_boundary_jobs(Cpu *c) {
       st16(c, blk + 0x60u + 2u * slot, 0);
     }
     stf(c, blk + 0x40u, m->standin_facing);
+    uint32_t percent = ld32(c, fp + 0x1830u);   /* mc_set_percent's, which Fighter_Spawn would reload from the player block */
     call_guest(c, FN_FIGHTER_SPAWN, gobj, 0);
+    st32(c, fp + 0x1830u, percent);
     /* Fighter_Spawn's own floor check fails for a fighter that slept (it leaves it airborne): ground it as a placement does */
     room_ground_fighter(c, gobj, m->standin_x, m->standin_y);
     call_guest(c, FN_WAIT_OR_FALL, gobj, 0);

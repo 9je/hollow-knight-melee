@@ -95,5 +95,14 @@ namespace FoxMelee.Tests {
         [InlineData(0xD9u, false)]   // CatchAttack: the pummel lands through the stand-in
         [InlineData(44u, true)]      // jab
         public void PummelIsNotAnEnemyHit(uint action, bool hurts) => Assert.Equal(hurts, HitRules.FoxActionHurtsEnemies(action));
+
+        [Fact]
+        public void LasersStillHitDuringThePummel() {
+            var laser = new McHitbox { Group = 0x80000001u, Damage = 3, Flags = 7 };
+            var punch = new McHitbox { Group = 1, Damage = 3, Flags = 7 };
+            Assert.True(HitRules.HurtsEnemiesDuring(laser, 0xD9));
+            Assert.False(HitRules.HurtsEnemiesDuring(punch, 0xD9));
+            Assert.True(HitRules.HurtsEnemiesDuring(punch, 44));
+        }
     }
 }

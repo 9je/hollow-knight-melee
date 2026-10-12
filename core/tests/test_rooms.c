@@ -821,6 +821,20 @@ static void test_edge_assist(void) {
   mc_shutdown();
 }
 
+/* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
+static void test_standin_wake_keeps_percent(void) {
+  McInput idle = {0};
+  fox_and_standin(); steps(180, &idle);
+  CHECK(mc_standin_set(1) == 0);
+  steps(2, &idle);
+  McFighter f = fox();
+  CHECK(mc_standin_wake(f.x + 30, f.y, -1) == 0);
+  CHECK(mc_set_percent(1, 40.0f) == 0);
+  steps(1, &idle);
+  CHECK(standin().percent == 40.0f);
+  mc_shutdown();
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
@@ -847,6 +861,7 @@ int main(int argc, char **argv) {
   test_standin_survives_room_load();
   test_standin_grab_pummel_throw();
   test_edge_assist();
+  test_standin_wake_keeps_percent();
   puts("rooms tests passed");
   return 0;
 }

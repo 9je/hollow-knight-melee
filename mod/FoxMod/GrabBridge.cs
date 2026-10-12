@@ -86,7 +86,13 @@ namespace FoxMelee {
         }
 
         /// Hollow Knight takes the Knight, a room changes: unfreeze, and the stand-in sleeps next frame.
-        public void Release() { Unfreeze(); target = null; maxHp.Clear(); machine.Reset(); }
+        public void Release() { Unfreeze(); target = null; machine.Reset(); }
+
+        /// The enemy held in Fox's grab, if any.
+        public GameObject Held => held != null && machine.State == GrabMachine.Phase.Held ? held.gameObject : null;
+
+        /// A new room: the enemies seen so far are gone (their full health is measured when first seen).
+        public void NewRoom() { Release(); maxHp.Clear(); }
 
         void Unfreeze() { freeze?.Release(); freeze = null; held = null; }
 
