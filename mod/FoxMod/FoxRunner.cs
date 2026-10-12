@@ -27,6 +27,7 @@ namespace FoxMelee {
         EnemyBridge enemies;                    // enemies hitting Fox through Melee
         RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
+        GrabBridge grab;                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
         readonly float[] bones = new float[128 * 12];
@@ -71,7 +72,7 @@ namespace FoxMelee {
             holdingBody = false;
             if (placeholder) placeholder.SetActive(false);
             model?.Hide(); effects?.Hide(); gx?.Hide();
-            combat?.ReleaseAll();
+            combat?.ReleaseAll(); grab?.Release();
             sfx?.StopAll();
         }
 
@@ -97,7 +98,7 @@ namespace FoxMelee {
             if (hero == null || gm == null || !gm.IsGameplayScene() || gm.sceneName == "Quit_To_Menu") {
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();
-                combat?.ReleaseAll();
+                combat?.ReleaseAll(); grab?.Release();
                 if (holdingBody && hero != null) { GiveBodyBack(hero); hero.AffectedByGravity(true); }   // Hollow Knight's body again
                 holdingBody = false;
                 needPlace = true;
@@ -126,7 +127,7 @@ namespace FoxMelee {
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
                 } else if (PlayerData.instance.GetBool("atBench")) Rest(hero);
-                combat?.ReleaseAll();
+                combat?.ReleaseAll(); grab?.Release();
                 return;
             }
             if (!WatchTerrain(gm.sceneName)) return;
@@ -168,6 +169,7 @@ namespace FoxMelee {
                     if (!lying || !neutral) getUp = false;   // a roll, a get-up attack: Melee's own options
                     else if (fox.Action == ActionDownWaitU || fox.Action == ActionDownWaitD) { input = new McInput { StickY = 127 }; getUp = false; }
                 }
+                if (grab != null && !grab.Before(core, room, (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero)))) { Fail("stand-in: " + core.Error); return; }
                 core.SetInput(0, input);
                 int at = 0;
                 bool pause = combat != null || enemies != null;
@@ -190,6 +192,7 @@ namespace FoxMelee {
                 if (combat != null && !combat.AfterFrame(core)) { Fail("reading Fox: " + core.Error); return; }
                 profBridgeMs += profWatch.Elapsed.TotalMilliseconds - st;
                 enemies?.AfterFrame(hero);
+                if (grab != null && !grab.After(core, room)) { Fail("stand-in: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             profMeleeMs += profWatch.Elapsed.TotalMilliseconds; profMeleeFrames += frames;
@@ -287,10 +290,13 @@ namespace FoxMelee {
             if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
             if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
-            if (!core.StartSoloFox()) { Fail("mc_start_match: " + core.Error); return false; }
+            bool grabs = s.Grabs?.Enabled ?? false;
+            if (!(grabs ? core.StartFoxWithStandIn() : core.StartSoloFox())) { Fail("mc_start_match: " + core.Error); return false; }
             core.SetInput(0, new McInput());
-            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            if (grabs) core.SetInput(GrabBridge.Port, new McInput());
+            for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
             for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
+            if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
             if (s.ShowModel) {
                 var path = Path.Combine(dir, "fox.model");
                 try { model = FoxRenderer.Create(FoxModel.Load(path)); Log("drawing Fox's model"); }
@@ -298,6 +304,7 @@ namespace FoxMelee {
             }
             if (s.FoxHits) combat = new CombatBridge();
             if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
+            if (grabs) grab = new GrabBridge(s.Grabs, enemies);
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
             if (s.MeleeGraphics) {
                 try {
@@ -336,7 +343,7 @@ namespace FoxMelee {
             var blast = new McBox { Left = cam.Left - FarBlast, Right = cam.Right + FarBlast, Top = cam.Top + FarBlast, Bottom = cam.Bottom - FarBlast };
             if (!core.SetBounds(blast, cam)) { Fail($"{scene}: mc_set_bounds: {core.Error}"); return false; }
             room = t;
-            combat?.ReleaseAll();
+            combat?.ReleaseAll(); grab?.Release();
             session.RoomConverted(scene, true);
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");

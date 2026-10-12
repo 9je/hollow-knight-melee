@@ -59,7 +59,9 @@ namespace FoxMelee {
             Struck.Clear();
             if (n < 0) return false;
             hurting.Clear();
-            for (int i = 0; i < n; i++) if (HitRules.HurtsEnemies(boxes[i])) hurting.Add(boxes[i]);
+            if (!core.ReadFighter(0, out var foxNow)) return false;
+            bool hurts = HitRules.FoxActionHurtsEnemies(foxNow.Action);   // the pummel lands through the stand-in (GrabBridge)
+            for (int i = 0; i < n; i++) if (hurts && HitRules.HurtsEnemies(boxes[i])) hurting.Add(boxes[i]);
             this.room = room;
             if (hurting.Count > 0) {
                 if (!core.ReadFighter(0, out var fox)) return false;
