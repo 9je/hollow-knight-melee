@@ -29,7 +29,7 @@ namespace FoxMelee {
         /// Melee's knockback for Fox's hits (null: Hollow Knight's recoil); launches wait for the hitlag to end.
         public EnemyLauncher Launcher;
         public KnockbackTuning Knockback;
-        readonly Dictionary<GameObject, (double speed, double angle, int hitstun)> launches = new Dictionary<GameObject, (double, double, int)>();
+        readonly Dictionary<GameObject, (double speed, double angle, int hitstun, bool tumble)> launches = new Dictionary<GameObject, (double, double, int, bool)>();
         readonly Dictionary<HealthManager, int> maxHp = new Dictionary<HealthManager, int>();
         MeleeCore core;
         readonly HitlagTimers hitlag = new HitlagTimers();
@@ -116,7 +116,7 @@ namespace FoxMelee {
             if (go != null && Launcher != null && launches.TryGetValue(go, out var l)) {   // Melee's launch, after the hitlag
                 launches.Remove(go);
                 f.Release(recoil: false);
-                Launcher.Launch(go, room, l.speed, l.angle, l.hitstun);
+                Launcher.Launch(go, room, l.speed, l.angle, l.hitstun, l.tumble);
             } else f.Release();
         }
 
@@ -135,7 +135,9 @@ namespace FoxMelee {
             bool grounded = col != null && Physics2D.Raycast(new Vector2(col.bounds.center.x, col.bounds.min.y + 0.05f), Vector2.down, 0.2f, 1 << 8).collider != null;
             double angle = MeleeKnockback.LaunchAngle(h.Box.Angle, kb, grounded);
             if (target.transform.position.x <= fromX) angle = 180 - angle;   // away from Fox (or the laser), as Melee
-            launches[hm.gameObject] = (MeleeKnockback.Speed(kb) * Knockback.Scale, angle, MeleeKnockback.Hitstun(kb));
+            bool tumble = MeleeKnockback.Tumbles(kb, angle, grounded);
+            launches[hm.gameObject] = (MeleeKnockback.Speed(kb) * Knockback.Scale, angle, MeleeKnockback.Hitstun(kb), tumble);
+            FoxMod.Instance.Log($"launch {hm.name}: kb {kb:F1} angle {angle:F0} hitstun {MeleeKnockback.Hitstun(kb)}{(tumble ? " tumble" : "")}{(grounded ? " grounded" : "")}");
         }
 
         // Tag-driven objects (lifeblood cocoons, stalactites, geo rocks) read the hit's direction from the nail slash's

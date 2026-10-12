@@ -56,6 +56,40 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void ATumbleEndsInAKnockdownOnceItLands() {
+            var f = new KnockbackFlight(1.0, 45, hitstun: 2, tumble: true);
+            Assert.True(f.Step(grounded: false)); Assert.True(f.Step(grounded: false));
+            Assert.True(f.Step(grounded: false));             // hitstun over, still in the air: tumbling
+            Assert.False(f.Down);
+            for (int i = 0; i < KnockbackFlight.KnockdownFrames - 1; i++) { Assert.True(f.Step(grounded: true)); Assert.True(f.Down); }
+            Assert.False(f.Step(grounded: true));             // gets up
+        }
+
+        [Fact]
+        public void ATumbleThatNeverLandsEnds() {
+            var f = new KnockbackFlight(1.0, 45, hitstun: 0, tumble: true);
+            int n = 0;
+            while (f.Step(grounded: false)) n++;
+            Assert.Equal(KnockbackFlight.MaxTumbleFrames, n);
+        }
+
+        [Fact]
+        public void NoTumbleEndsWithTheHitstunInTheAir() {
+            var f = new KnockbackFlight(1.0, 45, hitstun: 1);
+            Assert.True(f.Step(grounded: false));
+            Assert.False(f.Step(grounded: false));
+        }
+
+        [Theory]
+        [InlineData(80, 45, false, true)]     // Melee's tumble: knockback 80 and up
+        [InlineData(79, 45, false, false)]
+        [InlineData(40, 270, true, true)]     // driven down into the ground (a down throw): knocked down
+        [InlineData(40, 270, false, false)]   // the same in the air: a weak spike, no tumble
+        [InlineData(40, 0, true, false)]
+        public void Tumbles(double kb, double angle, bool grounded, bool tumbles) =>
+            Assert.Equal(tumbles, MeleeKnockback.Tumbles(kb, angle, grounded));
+
+        [Fact]
         public void NeverReversesWhileDecaying() {
             var f = new KnockbackFlight(0.06, 0, 10);
             f.Step(); f.Step();
