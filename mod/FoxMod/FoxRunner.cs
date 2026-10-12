@@ -36,7 +36,7 @@ namespace FoxMelee {
         McFighter fox;
         const uint ActionWait = 14;             // Melee's Wait: Fox standing
         FocusRules focus;
-        bool focusing, interactHeld, focusHeld;
+        bool focusing, interactHeld, focusHeld, mapHeld;
         int focusDrain;                         // soul Focus has used but not yet taken (taken 3 at a time)
         McInput rawInput;                       // the controller this frame, before the respawn hold
         float stillFor; int stillFrames; float lastX, lastY; bool stuckLogged;
@@ -161,6 +161,11 @@ namespace FoxMelee {
                 var input = gc is McInput g2 ? HkControls.ForMelee(g2) : InputMapper.Map(pad);
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
+                // the quick map (GameCube: D-pad right held; keyboard: Tab): Hollow Knight opens it only for a Knight it
+                // controls (HeroController.CanQuickMap), so it gets him back as for an interact
+                bool map = GcInput.QuickMapHeld || (gc == null && Input.GetKey(KeyCode.Tab));
+                if (map && !mapHeld && fox.Airborne == 0) { mapHeld = true; QuickMap(hero); return; }
+                mapHeld = map;
                 if (Focus(hero, hkc.Focus)) input = new McInput();   // Fox stands still while focusing
                 if (GcInput.InventoryOpen || GcInput.QuickMapHeld) input = new McInput();   // the controller is Hollow Knight's menu's
                 rawInput = input;
@@ -245,6 +250,14 @@ namespace FoxMelee {
             hero.cState.onGround = true;
             int heard = PressUp(hero);
             Log($"interact ({heard} listening)");
+        }
+
+        void QuickMap(HeroController hero) {
+            session.BeginInteract();
+            hero.RegainControl();
+            hero.AcceptInput();
+            hero.cState.onGround = true;
+            Log($"quick map (can open: {hero.CanQuickMap()})");
         }
 
         // What Hollow Knight's ListenForUp does when "up" is pressed: send its wasPressed event, for every state machine

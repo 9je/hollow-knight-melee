@@ -838,6 +838,35 @@ static void test_edge_assist(void) {
   mc_shutdown();
 }
 
+/* Edge assist stops a walk only at a real drop: a step down shorter than Fox (a stair) is walked off at full tilt, the ledge
+ * past it still holds him. Ground y=0 to x=0, a step down to y=-8, then a 92-unit drop at x=100. */
+static void test_edge_assist_steps(void) {
+  static McVec2 stair[6] = {{-100, 0}, {0, 0}, {0, -8}, {100, -8}, {100, -100}, {-100, -100}};
+  McShape s[1] = {{MC_SOLID, stair, 6, 0}};
+  const McCollision *col; char why[200];
+  McInput idle = {0}, slow = {0}, full = {0};
+  slow.stick_x = 40; full.stick_x = 127;
+  solo_fox(); steps(180, &idle);
+  CHECK(mc_build_collision(s, 1, &col, why, sizeof why) == 0);
+  McBox blast = {-300, 300, 300, -200}, cam = {-250, 250, 250, -150};
+  CHECK(mc_load_collision(col) == 0);
+  CHECK(mc_set_bounds(&blast, &cam) == 0);
+  CHECK(mc_place_fighter(0, -60, 0) == 0);
+  steps(30, &idle);
+  CHECK(mc_set_edge_assist(1) == 0);
+  steps(2, &slow);
+  int past_step = 0, fell_off = 0;
+  for (int i = 0; i < 400; i++) {
+    steps(1, &full);
+    McFighter f = fox();
+    if (f.x > 10 && f.airborne == 0 && f.y < -7) past_step = 1;
+    if (f.y < -20) fell_off = 1;
+  }
+  CHECK(past_step);
+  CHECK(!fell_off);
+  mc_shutdown();
+}
+
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
 static void test_standin_wake_keeps_percent(void) {
   McInput idle = {0};
@@ -981,6 +1010,7 @@ int main(int argc, char **argv) {
   test_standin_survives_room_load();
   test_standin_grab_pummel_throw();
   test_edge_assist();
+  test_edge_assist_steps();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

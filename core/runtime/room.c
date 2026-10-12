@@ -151,11 +151,11 @@ int mc_tumble_fighter(int port, float x, float y) {
  *                   line_skip, joint_skip, joint_only, cb, gobj): the floor crossed by segment a->b.
  * Nine integer arguments: the ninth goes on the stack, so the call runs on a temporary guest frame
  * that also holds the outputs. Returns the line id, or -1; *y_out gets the contact height. */
-static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, float normal[3]) {
+static int floor_between(Cpu *c, float x, float top, float bottom, float *y_out, uint32_t *flags, float normal[3]) {
   uint32_t sp = c->gpr[1], f = (sp - 0x60u) & ~15u;   /* frame: +0 back chain, +8 arg 9, +0x10 vec, +0x1C line, +0x20 flags, +0x30 normal */
   st32(c, f, sp);
   st32(c, f + 8, 0);                                   /* gobj = NULL */
-  const float a[5] = {x, y + 10.0f, x, y - 10.0f, 0.0f};
+  const float a[5] = {x, top, x, bottom, 0.0f};
   for (int k = 0; k < 5; k++) c->fpr[1 + k].ps0 = c->fpr[1 + k].ps1 = (double)a[k];
   c->gpr[1] = f;
   c->gpr[5] = f + 0x20;                                /* flags_out */
@@ -169,6 +169,20 @@ static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, 
   *flags = ld32(c, f + 0x20);
   for (int k = 0; k < 3; k++) normal[k] = ldf(c, f + 0x30 + 4u * k);
   return (int)ld32(c, f + 0x1C);
+}
+static int floor_under(Cpu *c, float x, float y, float *y_out, uint32_t *flags, float normal[3]) {
+  return floor_between(c, x, y + 10.0f, y - 10.0f, y_out, flags, normal);
+}
+/* callable from inside a guest call (frame.c's hooks): the caller's registers are put back */
+int room_floor_between(Cpu *c, float x, float top, float bottom) {
+  uint32_t gpr[32], cr = c->cr, fpscr = c->fpscr, lr = c->spr[SPR_LR], ctr = c->spr[SPR_CTR];
+  GekkoPS fpr[32];
+  memcpy(gpr, c->gpr, sizeof gpr); memcpy(fpr, c->fpr, sizeof fpr);
+  float y, n[3]; uint32_t fl;
+  int hit = floor_between(c, x, top, bottom, &y, &fl, n) >= 0;
+  memcpy(c->gpr, gpr, sizeof gpr); memcpy(c->fpr, fpr, sizeof fpr);
+  c->cr = cr; c->fpscr = fpscr; c->spr[SPR_LR] = lr; c->spr[SPR_CTR] = ctr;
+  return hit;
 }
 
 /* Moves one fighter GObj to (x, y), keeping its action and velocity where Melee allows it:

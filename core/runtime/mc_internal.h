@@ -70,6 +70,7 @@ void room_boundary_jobs(Cpu *c);
 void standin_boundary_jobs(Cpu *c);   /* standin.c: wake or sleep the stand-in */
 void gates_boundary_jobs(Cpu *c);     /* gates.c: locked moves */
 void edge_assist_boundary(Cpu *c);    /* frame.c */
+int room_floor_between(Cpu *c, float x, float top, float bottom);   /* room.c: a floor crosses x between top and bottom */
 int standin_captured(Cpu *c);           /* its action is CapturePulledHi..CaptureDamageLw */
 int standin_hit_sound(Cpu *c, int32_t id);   /* a hit sound on the stand-in, which is heard */
 void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y);   /* room.c: onto the floor under (x, y), else Fall */
