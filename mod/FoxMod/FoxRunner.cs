@@ -27,7 +27,8 @@ namespace FoxMelee {
         EnemyBridge enemies;                    // enemies hitting Fox through Melee
         RoomTransform gxRoom;                   // the room gx last drew in
         CombatBridge combat;                    // Fox hitting enemies; null when FoxHits is off
-        GrabBridge grab;                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
+        GrabBridge grab;
+        PogoBridge pogo;                        // spec §5.4 hazard pogo; null when Pogo is off                        // Fox's grab and Melee's push against small enemies; null when Grabs is off
         FoxRenderer model;                      // Fox's Melee model; null = the placeholder box
         SfxPlayer sfx;                          // Melee's sound effects; null = silent
         readonly float[] bones = new float[128 * 12];
@@ -199,6 +200,7 @@ namespace FoxMelee {
                 enemies?.AfterFrame(hero);
                 if (grab != null && !grab.After(core, room)) { Fail("stand-in: " + core.Error); return; }
                 if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
+                if (pogo != null && !pogo.Frame(core, room, fox)) { Fail("pogo: " + core.Error); return; }
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             profMeleeMs += profWatch.Elapsed.TotalMilliseconds; profMeleeFrames += frames;
@@ -311,6 +313,7 @@ namespace FoxMelee {
             if (s.FoxHits) combat = new CombatBridge();
             if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
             if (grabs) grab = new GrabBridge(s.Grabs, enemies);
+            if (s.Pogo?.Enabled ?? false) pogo = new PogoBridge(s.Pogo, () => holdingBody && state == State.Running);
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
             if (s.MeleeGraphics) {
                 try {

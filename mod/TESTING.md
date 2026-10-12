@@ -79,6 +79,11 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       `MaxWidth/MaxHeight` (HK units), `MaxHp`, `PercentAtFullHp`/`PercentAtNoHp`, `LaunchScale`.
     - Cost: about 2.5 ms more per Melee frame while a small enemy is near Fox (the perf log line shows it).
 
+16. Hazard pogo (spec §5.4, the one deliberate exception to Melee): down-air onto spikes or thorns bounces Fox up (about
+    a short hop), ends a fast fall and gives his double jump back; that touch doesn't hurt him. Acid, pits and enemies
+    are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
+    `Velocity` (Melee units per frame, 2.8), `GraceFrames` (8). Try it on King's Pass's first spikes.
+
 15. Frame rate: Melee's drawing (about three quarters of each Melee frame) now runs on the core's own thread while
     Unity goes on (`DrawOffThread`, on). No added input lag: Fox's picture was already drawn a frame behind. The
     `perf:` log line's "Melee ms/frame" is now the main thread's share only (about 1.7 ms instead of about 6). If
