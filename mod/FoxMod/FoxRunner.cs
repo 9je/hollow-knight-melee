@@ -224,6 +224,10 @@ namespace FoxMelee {
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
+            if (frames > 0 && outOfRoom.Frame(hk.X, hk.Y, gm.sceneWidth, gm.sceneHeight)) {
+                Log($"out of the room at ({hk.X:F1}, {hk.Y:F1}): pit");
+                hero.TakeDamage(null, GlobalEnums.CollisionSide.top, 1, 5);   // Hollow Knight's pit (hazard type 5)
+            }
             // Melee's own frame (Fox, items, effects as Melee draws them); fox.model and the stand-in shapes otherwise
             if (gx != null && Input.GetKeyDown(KeyCode.F9)) Log("frame dumped: " + gx.Dump(Path.Combine(FoxMod.ModDir, "dump", DateTime.Now.ToString("HHmmss"))));
             bool fresh = frames > 0 || room != gxRoom || !(gx?.Shown ?? false);   // a new Melee frame (or room) to decode
@@ -245,6 +249,7 @@ namespace FoxMelee {
         // Hollow Knight's death: Melee's KO (the blast and Fox's cry) where Fox stands, played out for KoFrames while Hollow
         // Knight runs its death; the next placement (the respawn) shows him again.
         const int KoFrames = 60;
+        readonly OutOfRoom outOfRoom = new OutOfRoom();
         int koLeft = -1;                          // Melee frames of the KO left to show; -1: none started this death
         bool Ko(HeroController hero, GameManager gm, HeroFlags f) {
             if (!f.Dead) { koLeft = -1; return false; }

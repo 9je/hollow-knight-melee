@@ -41,4 +41,20 @@ namespace FoxMelee {
             return c;
         }
     }
+
+    /// Fox knocked out of the room (past its sides or bottom, beyond where its exits are): Hollow Knight's pit hazard, as
+    /// falling into a pit (it costs a mask and puts him back at the last safe spot). Above the room he comes back down.
+    public sealed class OutOfRoom {
+        public const double Margin = 4;   // Hollow Knight units past the scene's edge
+        public const int Frames = 10;
+        int outside;
+
+        public void Reset() => outside = 0;
+
+        /// One Melee frame, with the Knight's position and the scene's size (GameManager.sceneWidth, sceneHeight).
+        public bool Frame(double x, double y, double width, double height) {
+            if (x > -Margin && x < width + Margin && y > -Margin) { outside = 0; return false; }
+            return ++outside >= Frames;
+        }
+    }
 }
