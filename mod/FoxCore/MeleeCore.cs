@@ -232,9 +232,17 @@ namespace FoxMelee {
         public int ReadDobjs(int port, byte[] hidden, byte[] joint) { Sync(); return dobjs(port, 0, hidden, joint, Math.Min(hidden.Length, joint.Length)); }
         /// Port 0's active hitboxes; returns the count (-1 on error).
         public int ReadHitboxes(McHitbox[] o) { Sync(); return hitboxes(0, 0, o, o.Length); }
+        /// Port 0's leader (follower 0) or its follower (1: Nana)'s active hitboxes and items, from o[at]; the count.
+        public int ReadHitboxes(McHitbox[] o, int at, int follower) {
+            Sync();
+            var tmp = new McHitbox[o.Length - at];
+            int n = hitboxes(0, follower, tmp, tmp.Length);
+            if (n > 0) Array.Copy(tmp, 0, o, at, n);
+            return n;
+        }
         public int ReadHurtboxes(McHurtbox[] o) { Sync(); return hurtboxes(0, 0, o, o.Length); }
         /// Fox's hit in `group` landed outside Melee: Melee records it and gives Fox its attacker hitlag next frame.
-        public bool ReportHit(uint group, float damage) { Sync(); return Ok(report(0, 0, group, damage)); }
+        public bool ReportHit(uint group, float damage, int follower = 0) { Sync(); return Ok(report(0, follower, group, damage)); }
         /// Melee's ItemKind for Fox's laser.
         public const uint FoxLaser = 54;
         public bool ReadShield(out McShield s) { Sync(); return Ok(shield(0, 0, out s)); }

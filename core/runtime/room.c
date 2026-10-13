@@ -295,6 +295,7 @@ static void ko_boundary_jobs(Cpu *c) {
   }
 }
 
+#define FOLLOWER_FAR 200.0f              /* Melee units */
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
   standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
@@ -321,10 +322,20 @@ void room_boundary_jobs(Cpu *c) {
         st8(c, fp + 0x221Eu, (uint8_t)(ld8(c, fp + 0x221Eu) & ~0x80u));   /* invisible */
         st8(c, fp + 0x221Fu, (uint8_t)(ld8(c, fp + 0x221Fu) & ~0x40u));
       }
-      if (m->place_pending[p] && !follower) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] - 1);
+      if (m->place_pending[p]) place_gobj(c, gobj, m->place_x[p], m->place_y[p], 1, m->place_pending[p] - 1);   /* a follower (Nana) comes along */
       else if (loaded) place_gobj(c, gobj, ldf(c, fp + 0xB0), ldf(c, fp + 0xB4), 0, 0);
     }
   for (int p = 0; p < 4; p++) m->place_pending[p] = 0;
+  /* A follower (Nana) left far from its leader (down a pit: a room's blast zones are too far to KO her) comes back beside it,
+   * falling, as she would after a placement */
+  for (int p = 0; p < 4 && m->room_guest; p++) {   /* rooms only: in a Melee stage she is KO'd as Melee does */
+    uint32_t lead = ld32(c, PLAYER_BLOCK(p) + 0xB0u), fol = ld32(c, PLAYER_BLOCK(p) + 0xB4u);
+    if (!lead || !fol) continue;
+    uint32_t lp = ld32(c, lead + 0x2C), fp = ld32(c, fol + 0x2C);
+    if (ld8(c, fp + 0x221Fu) & 0x10u) continue;   /* asleep */
+    float dx = ldf(c, fp + 0xB0) - ldf(c, lp + 0xB0), dy = ldf(c, fp + 0xB4) - ldf(c, lp + 0xB4);
+    if (dx * dx + dy * dy > FOLLOWER_FAR * FOLLOWER_FAR) place_gobj(c, fol, ldf(c, lp + 0xB0), ldf(c, lp + 0xB4), 1, 1);
+  }
   /* In a room Melee's camera is never shown, and it can lag behind a fighter (it glides after a placement): an
    * off-screen fighter is not drawn (ftLib_UpdateScreenVisibility). Fighter x2229_b3, Master Hand's "never
    * off-screen, never magnified" flag, has no other effect; Fighter init clears it, so it is set every frame. */

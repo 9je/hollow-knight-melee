@@ -28,7 +28,7 @@ namespace FoxMelee {
             C("Game & Watch", 3, 30, 29), C("Luigi", 7, 11, 17), C("Donkey Kong", 1, 10, 8), C("Mewtwo", 10, 28, 20),
             C("Roy", 23, 6, 31),
             new Character { Name = "Zelda", MeleeId = 18, Charm = 38, Banks = new[] { 27 }, LockDownB = true },
-            C("Ness", 11, 17, 21), C("Pichu", 24, 3, 23), C("Bowser", 5, 5, 15), C("Kirby", 4, 22, 14, 33),
+            C("Ness", 11, 17, 21), C("Pichu", 24, 3, 23), C("Bowser", 5, 5, 15), C("Kirby", 4, 22, 14, 33, 11),   // 11: Fox's, for the blaster he copies from the stand-in
         };
 
         public static readonly Character Fox = All[0];

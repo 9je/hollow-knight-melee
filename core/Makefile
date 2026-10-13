@@ -112,6 +112,12 @@ replay-check-tool: core
 	$(CC) $(GEN_CFLAGS) $(INC) tools/replay_check.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/replay_check
 .PHONY: replay-check-tool
 
+# ---- every character's moveset (roster) ----
+characters-test: core
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_characters.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_characters
+	seq 0 25 | xargs -P $$(nproc) -I{} $(B)/test_characters $(CORE_GEN)/mem1.bin "$(ISO)" {}
+.PHONY: characters-test
+
 # ---- rooms (plan 2) ----
 room-test: | $(B)
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_room.c runtime/room_check.c runtime/room_build.c -lm -o $(B)/test_room

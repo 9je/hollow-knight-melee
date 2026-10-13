@@ -15,7 +15,8 @@ namespace FoxMelee {
             typeof(HealthManager).GetField("evasionByHitRemaining", BindingFlags.Instance | BindingFlags.NonPublic);
 
         readonly int mask;                     // what the nail can touch (DamageEnemies' exclusions removed too)
-        readonly McHitbox[] boxes = new McHitbox[4];
+        readonly McHitbox[] boxes = new McHitbox[16];          // the leader's 4 hitboxes and 4 items, then Nana's
+        readonly Dictionary<uint, int> followerOf = new Dictionary<uint, int>();   // a hitbox group's fighter (1: Nana)
         readonly List<McHitbox> hurting = new List<McHitbox>(4);
         readonly HitTracker tracker = new HitTracker();
         readonly Collider2D[] found = new Collider2D[64];
@@ -28,7 +29,8 @@ namespace FoxMelee {
         readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
         /// Melee's knockback for Fox's hits (null: Hollow Knight's recoil); launches wait for the hitlag to end.
         public EnemyLauncher Launcher;
-        public Character Character = Roster.Fox;   // who plays: its non-attack actions (HitRules)
+        public Character Character = Roster.Fox;
+        const int IceClimbers = 14;   // who plays: its non-attack actions (HitRules)
         public KnockbackTuning Knockback;
         readonly Dictionary<GameObject, (double speed, double angle, int hitstun, bool tumble)> launches = new Dictionary<GameObject, (double, double, int, bool)>();
         readonly Dictionary<HealthManager, int> maxHp = new Dictionary<HealthManager, int>();
@@ -63,9 +65,15 @@ namespace FoxMelee {
         /// Checks one Melee frame's hitboxes at the core's hit pause (mc_step_to_hits), where a reported hit lands in
         /// this frame as a Melee victim's would; false if the core failed.
         public bool Frame(MeleeCore core, RoomTransform room) {
-            int n = core.ReadHitboxes(boxes);
+            int n = core.ReadHitboxes(boxes, 0, 0);
             Struck.Clear();
             if (n < 0) return false;
+            followerOf.Clear();
+            if (Character.MeleeId == IceClimbers) {   // Nana's attacks hit too (none while she is gone)
+                int m = core.ReadHitboxes(boxes, n, 1);
+                for (int i = n; i < n + Math.Max(0, m); i++) followerOf[boxes[i].Group] = 1;
+                if (m > 0) n += m;
+            }
             hurting.Clear();
             if (!core.ReadFighter(0, out var foxNow)) return false;
             for (int i = 0; i < n; i++) if (HitRules.HurtsEnemiesDuring(boxes[i], foxNow.Action, Character)) hurting.Add(boxes[i]);   // the pummel lands through the stand-in (GrabBridge)
@@ -82,7 +90,7 @@ namespace FoxMelee {
             this.core = core;
             real.Clear();
             foreach (var h in hits) Land(h, nail);
-            foreach (var (group, damage) in HitTracker.Reports(real)) core.ReportHit(group, damage);   // 1 = it just ended: harmless
+            foreach (var (group, damage) in HitTracker.Reports(real)) core.ReportHit(group, damage, followerOf.TryGetValue(group, out int fo) ? fo : 0);   // 1 = it just ended: harmless
             return true;
         }
 

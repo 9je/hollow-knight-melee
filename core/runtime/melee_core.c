@@ -149,6 +149,7 @@ uint64_t mc_frame(void) { return g_m ? g_m->frames : 0; }
 uint32_t mc_mem_crc32(void) { return g_m ? crc32_buf(g_m->cpu.mem, MEM1_SIZE) : 0; }
 static int in_mem1(uint32_t ea, uint32_t n) { return ea >= 0x80000000u && ea - 0x80000000u <= MEM1_SIZE - n; }
 uint32_t mc_peek32(uint32_t ea) { return g_m && in_mem1(ea, 4) ? ld32(&g_m->cpu, ea) : 0; }
+int mc_poke32(uint32_t ea, uint32_t v) { if (!g_m || g_m->dead || !in_mem1(ea, 4)) return -1; st32(&g_m->cpu, ea, v); return 0; }
 
 void mc_set_input(int port, const McInput *in) {
   if (!g_m || port < 0 || port > 3) return;

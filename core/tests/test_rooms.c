@@ -946,6 +946,34 @@ static void test_character_start(void) {
   }
 }
 
+/* Ice Climbers (external 14): a placement of port 0 brings Nana (its follower) along; a Nana left far behind (a pit, the
+ * room's huge blast zones) comes back next to Popo. */
+static void test_nana_follows(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 14);
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  McFighter nana;
+  CHECK(mc_read_fighter(0, 1, &nana) == 0);
+  enter_room(0, -40, 0);                                 /* a room (its loading places Popo, and Nana with him) */
+  steps(30, &idle);
+  CHECK(mc_read_fighter(0, 1, &nana) == 0);
+  CHECK(fabsf(nana.x - fox().x) < 20 && fabsf(nana.y - fox().y) < 20);
+  /* Nana thrown far off (as down a pit): back beside Popo */
+  CHECK(mc_place_fighter(0, 40, 0) == 0);
+  steps(2, &idle);
+  uint32_t nfp = mc_peek32(mc_peek32(0x80453080u + 0xB4u) + 0x2C);
+  float far = -900.0f; uint32_t u; memcpy(&u, &far, 4);
+  mc_poke32(nfp + 0xB4, u);
+  steps(30, &idle);
+  CHECK(mc_read_fighter(0, 1, &nana) == 0);
+  CHECK(fabsf(nana.x - fox().x) < 30 && fabsf(nana.y - fox().y) < 30);
+  mc_shutdown();
+}
+
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
 static void test_standin_wake_keeps_percent(void) {
   McInput idle = {0};
@@ -1093,6 +1121,7 @@ int main(int argc, char **argv) {
   test_edge_assist_steps();
   test_ko();
   test_character_start();
+  test_nana_follows();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

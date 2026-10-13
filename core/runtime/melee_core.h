@@ -24,6 +24,7 @@ int mc_finish_frame(void);         /* finishes a frame paused by mc_step_to_rend
 uint64_t mc_frame(void);           /* frame boundaries reached since mc_init */
 uint32_t mc_mem_crc32(void);       /* CRC-32 of MEM1 (determinism checks) */
 uint32_t mc_peek32(uint32_t ea);   /* big-endian MEM1 read; 0 outside MEM1 or with no machine */
+int mc_poke32(uint32_t ea, uint32_t v);   /* big-endian MEM1 write between frames (tests); -1 outside MEM1 or with no machine */
 
 typedef struct { uint16_t buttons; int8_t stick_x, stick_y, cstick_x, cstick_y; uint8_t trigger_l, trigger_r; } McInput;  /* raw PADStatus values */
 typedef struct {

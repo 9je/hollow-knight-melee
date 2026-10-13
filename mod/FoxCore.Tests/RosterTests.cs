@@ -28,7 +28,7 @@ namespace FoxMelee.Tests {
             Assert.Equal(new[] { "Sheik", "Zelda" }, Roster.All.Where(c => c.LockDownB).Select(c => c.Name).OrderBy(n => n));
 
         [Fact]
-        public void KirbyHasHisCopyBank() => Assert.Equal(new[] { 14, 33 }, Roster.All.Single(c => c.Name == "Kirby").Banks);
+        public void KirbyHasHisCopyBank() => Assert.Equal(new[] { 14, 33, 11 }, Roster.All.Single(c => c.Name == "Kirby").Banks);
 
         [Theory]
         [InlineData("Marth", "Marth", true)]
