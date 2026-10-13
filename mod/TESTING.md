@@ -89,10 +89,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
     `BounceSpeed` (Melee units per frame, 3.5), `GraceFrames` (8). Try it on King's Pass's first spikes.
 
-17. Move gating (spec §6), **off by default** (`MoveGating: false`) so your current save keeps every move. On, Fox's
-    moves wait for the Knight's unlocks: Shine ← Vengeful Spirit, Illusion ← Mothwing Cloak, wall jump ← Mantis Claw,
-    Fire Fox ← Crystal Heart, blaster ← Desolate Dive, double jump ← Monarch Wings. A locked special does nothing when
-    pressed; a locked double jump is as if already used. The log says `locked moves: N` when the set changes.
+17. Move gating: replaced in roster stage 1 (item 19). Movesets are complete, wall jump needs Mantis Claw.
 
 15. Frame rate: Melee's drawing (about three quarters of each Melee frame) now runs on the core's own thread while
     Unity goes on (`DrawOffThread`, on). No added input lag: Fox's picture was already drawn a frame behind. The
@@ -115,6 +112,14 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
       Each launch is logged (`launch <enemy>: kb .. angle .. hitstun ..`), so send the lines for any enemy that
       still doesn't react.
+
+19. Characters (roster stage 1). In `FoxMod.GlobalSettings.json` set `"Character": "Marth"` (any name from the roster:
+    Fox, Marth, Jigglypuff, Falco, Sheik, Captain Falcon, Peach, Ice Climbers, Pikachu, Yoshi, Samus, Dr. Mario,
+    Ganondorf, Mario, Young Link, Link, Game & Watch, Luigi, Donkey Kong, Mewtwo, Roy, Zelda, Ness, Pichu, Bowser,
+    Kirby), then launch. `ModLog.txt` says `character: Marth`. Marth moves, attacks enemies, grabs and throws (the
+    stand-in is still a Fox), and sounds like Marth. Wall jump needs Mantis Claw now, for every character. Zelda and
+    Sheik can't transform. Characters other than Fox and Marth are untested until stage 4: their oddities
+    (Nana, Peach's turnips, Kirby) aren't handled yet.
 
 ## What to send back
 
