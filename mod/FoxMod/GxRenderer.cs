@@ -65,8 +65,8 @@ namespace FoxMelee {
                 DecodeMs += watch.Elapsed.TotalMilliseconds;   // the main thread's wait, not the decode itself
                 decoding = null;
                 var t = frame; frame = back; back = t;
-                failed = !ok || frame.VertexCount == 0;
-                if (failed) Hide(); else Build(core, room, like, z);
+                failed = !ok;   // an empty frame is Melee drawing nothing (Falco's side-B ending, a respawn): nothing shown, no placeholder
+                if (failed || frame.VertexCount == 0) Hide(); else Build(core, room, like, z);
             }
             if (fresh) {
                 core.FinishFrameAsync();   // a frame paused at Melee's drawing (StepToRender) draws on the core's thread,

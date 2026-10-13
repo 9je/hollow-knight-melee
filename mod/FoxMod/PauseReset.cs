@@ -51,7 +51,10 @@ namespace FoxMelee {
                 var nr = new Navigation { mode = Navigation.Mode.Explicit, selectOnUp = quit, selectOnDown = cont != null ? cont : quit };
                 button.navigation = nr;
                 if (cont != null && cont.navigation.selectOnUp == quit) { var nc = cont.navigation; nc.selectOnUp = button; cont.navigation = nc; }
-                FoxMod.Instance.Log("pause menu: Reset character added");
+                // the menu's bottom ornament (its fleur) sat where the new button goes: one step down with it
+                var fleur = ui.pauseMenuScreen.bottomFleur != null ? ui.pauseMenuScreen.bottomFleur.GetComponent<RectTransform>() : null;
+                if (fleur != null) fleur.anchoredPosition += rq.anchoredPosition - ro.anchoredPosition;
+                FoxMod.Instance.Log("pause menu: Reset character added" + (fleur == null ? " (no bottom fleur found)" : ""));
             } catch (Exception e) {
                 FoxMod.Instance.LogWarn("pause menu: Reset character not added (" + e.Message + ")");
                 if (button != null) { UnityEngine.Object.Destroy(button.gameObject); button = null; }
