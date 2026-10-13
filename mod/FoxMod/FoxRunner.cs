@@ -126,7 +126,7 @@ namespace FoxMelee {
                 holdingBody = false;
                 needPlace = true;
                 accumulator = 0;
-                if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) menu = null;
+                if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) { grid = null; GcInput.HoldFromHollow = false; }
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
@@ -135,6 +135,7 @@ namespace FoxMelee {
                 return;
             }
             if (!WatchTerrain(gm.sceneName)) return;
+            grid = null; GcInput.HoldFromHollow = false;   // the character moves: no character select holds the controller
             if (needPlace && waking) {            // Fox already lies where the Knight woke: he gets up from there
                 waking = false; needPlace = false; getUp = true;
                 session.TakeRespawns();
@@ -414,35 +415,50 @@ namespace FoxMelee {
             return true;
         }
 
-        // ---- choosing a character at a bench (D-pad up opens; left/right choose; up again picks it; down closes) ----
-        CharacterMenu menu;
-        bool menuUp, menuLeft, menuRight, menuDown;
+        // ---- choosing a character at a bench: D-pad up (keyboard T) opens Melee's character select (CharacterSelect); stick or
+        // D-pad moves, A (keyboard J or Enter) plays the character, B (keyboard K or Escape) closes. While it is open the
+        // controller is the screen's: Hollow Knight sees it idle, until every button is let go after it closes. ----
+        CharacterGrid grid;
+        CharacterSelect select;
+        System.Collections.Generic.HashSet<Character> ownedNow;
+        bool selUp, selA, selB;
+        int repeatDx, repeatDy; float repeatAt;
 
         void BenchMenu(HeroController hero) {
             var gc = FoxMod.Instance.GameCube?.Current();
             var b = gc?.Buttons ?? 0;
+            int sx = gc?.StickX ?? 0, sy = gc?.StickY ?? 0;
             bool up = (b & GcButtons.DUp) != 0 || Input.GetKey(KeyCode.T);
-            bool down = (b & GcButtons.DDown) != 0 || Input.GetKey(KeyCode.F);
-            bool left = (b & GcButtons.DLeft) != 0 || (gc?.StickX ?? 0) < -70 || Input.GetKey(KeyCode.A);
-            bool right = (b & GcButtons.DRight) != 0 || (gc?.StickX ?? 0) > 70 || Input.GetKey(KeyCode.D);
+            bool a = (b & GcButtons.A) != 0 || Input.GetKey(KeyCode.J) || Input.GetKey(KeyCode.Return);
+            bool bk = (b & GcButtons.B) != 0 || Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.Escape);
             bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
-            bool pu = Pressed(up, ref menuUp), pd = Pressed(down, ref menuDown), pl = Pressed(left, ref menuLeft), pr = Pressed(right, ref menuRight);
-            if (menu == null) {
-                if (pu) {
-                    var data = PlayerData.instance;
-                    menu = new CharacterMenu(Roster.Owned(n => data.GetBool("gotCharm_" + n), FoxMod.Instance.Save.MarthBought,
-                                                          FoxMod.Instance.Settings.UnlockAllCharacters), character);
-                }
+            bool pUp = Pressed(up, ref selUp), pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
+            if (grid == null) {
+                if (GcInput.HoldFromHollow && b == 0 && Math.Abs(sx) < 30 && Math.Abs(sy) < 30) GcInput.HoldFromHollow = false;
+                if (!pUp) return;
+                var data = PlayerData.instance;
+                ownedNow = new System.Collections.Generic.HashSet<Character>(Roster.Owned(n => data.GetBool("gotCharm_" + n),
+                    FoxMod.Instance.Save.MarthBought, FoxMod.Instance.Settings.UnlockAllCharacters));
+                grid = new CharacterGrid(character);
+                select ??= new CharacterSelect(Log);
+                GcInput.HoldFromHollow = true;
+                repeatDx = repeatDy = 0;
                 return;
             }
-            if (pl) menu.Move(-1);
-            if (pr) menu.Move(1);
-            if (pd) { menu = null; return; }
-            if (pu) {
-                var pick = menu.Current;
-                menu = null;
+            int dx = ((b & GcButtons.DRight) != 0 || sx > 64 || Input.GetKey(KeyCode.RightArrow) ? 1 : 0) - ((b & GcButtons.DLeft) != 0 || sx < -64 || Input.GetKey(KeyCode.LeftArrow) ? 1 : 0);
+            int dy = ((b & GcButtons.DDown) != 0 || sy < -64 || Input.GetKey(KeyCode.DownArrow) ? 1 : 0) - (up || sy > 64 || Input.GetKey(KeyCode.UpArrow) ? 1 : 0);
+            if (dx != repeatDx || dy != repeatDy) { repeatDx = dx; repeatDy = dy; repeatAt = Time.unscaledTime + 0.35f; grid.Move(dx, dy); }
+            else if ((dx != 0 || dy != 0) && Time.unscaledTime >= repeatAt) { repeatAt = Time.unscaledTime + 0.12f; grid.Move(dx, dy); }
+            if (pB) { grid = null; return; }
+            if (pA && ownedNow.Contains(grid.Current)) {
+                var pick = grid.Current;
+                grid = null;
                 if (pick != character) SwitchCharacter(hero, pick);
             }
+        }
+
+        void OnGUI() {
+            if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c));
         }
 
         void SwitchCharacter(HeroController hero, Character c) {
@@ -465,27 +481,6 @@ namespace FoxMelee {
             if (!needPlace) session.Placed();
         }
 
-        void OnGUI() {
-            if (menu == null) return;
-            const float w = 760, h = 150;
-            var box = new Rect((Screen.width - w) / 2, Screen.height * 0.12f, w, h);
-            GUI.color = new Color(0, 0, 0, 0.8f);
-            GUI.DrawTexture(box, Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            var title = new GUIStyle(GUI.skin.label) { fontSize = 26, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            var item = new GUIStyle(GUI.skin.label) { fontSize = 34, alignment = TextAnchor.MiddleCenter };
-            var hint = new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
-            GUI.Label(new Rect(box.x, box.y + 8, w, 32), "Choose your character", title);
-            int n = menu.Owned.Count;
-            string prev = n > 1 ? menu.Owned[(menu.Index + n - 1) % n].Name : "", next = n > 1 ? menu.Owned[(menu.Index + 1) % n].Name : "";
-            GUI.color = new Color(1, 1, 1, 0.45f);
-            GUI.Label(new Rect(box.x, box.y + 50, w * 0.3f, 50), prev, item);
-            GUI.Label(new Rect(box.x + w * 0.7f, box.y + 50, w * 0.3f, 50), next, item);
-            GUI.color = new Color(1f, 0.85f, 0.3f);
-            GUI.Label(new Rect(box.x + w * 0.25f, box.y + 46, w * 0.5f, 56), menu.Current.Name, item);
-            GUI.color = Color.white;
-            GUI.Label(new Rect(box.x, box.y + h - 38, w, 30), $"{menu.Index + 1}/{n}   D-pad left/right: choose   up: play   down: close", hint);
-        }
 
         /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played
         /// as the Knight (FoxSession gives him back) until the next room converts.

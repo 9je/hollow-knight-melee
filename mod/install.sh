@@ -23,7 +23,7 @@ cp -f "$repo/core/build/libmelee_core.so" "$repo/core/build/gen-core/mem1.bin" "
 iso="$(python3 -c "import tomllib;print(tomllib.load(open('$repo/dev.toml','rb'))['iso'])" 2>/dev/null || true)"
 # Fox's model from your ISO (never fatal: without it the mod draws a placeholder)
 venv="${TOOLS_VENV:-$repo/tools/.venv}"
-if [ ! -x "$venv/bin/ssbmhk-extract-fox" ] || [ ! -x "$venv/bin/ssbmhk-extract-sfx" ]; then
+if [ ! -x "$venv/bin/ssbmhk-extract-fox" ] || [ ! -x "$venv/bin/ssbmhk-extract-sfx" ] || [ ! -x "$venv/bin/ssbmhk-extract-stocks" ]; then
   { [ -x "$venv/bin/python" ] || python3 -m venv "$venv"; } && "$venv/bin/pip" install -q -e "$repo/tools" \
     || echo "could not set up the tools environment ($venv)"
 fi
@@ -37,6 +37,10 @@ if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-sfx" ]; then
   "$venv/bin/ssbmhk-extract-sfx" "$iso" --out "$dest" || echo "Melee sounds not extracted: the character is silent"
 else
   echo "Melee sounds not extracted (no ISO in dev.toml or no tools environment): the character is silent"
+fi
+# Melee's stock icons from your ISO (the character choice and Iselda's Marth; never fatal)
+if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-stocks" ]; then
+  "$venv/bin/ssbmhk-extract-stocks" "$iso" --out "$dest" || echo "stocks.bin not extracted: characters are shown by name only"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting

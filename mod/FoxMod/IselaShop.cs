@@ -29,6 +29,18 @@ namespace FoxMelee {
             On.ShopMenuStock.Start += (orig, self) => { AddMarth(self); orig(self); };
         }
 
+        // Marth's stock icon (stocks.bin, from the player's ISO) in place of the Quill's picture, at the Quill's size
+        static void SetIcon(GameObject item) {
+            try {
+                var sr = item.transform.Find("Item Sprite")?.GetComponent<SpriteRenderer>();
+                if (sr == null || sr.sprite == null) return;
+                var s = StockIcons.Parse(System.IO.File.ReadAllBytes(System.IO.Path.Combine(FoxMod.ModDir, "stocks.bin")));
+                var tex = CharacterSelect.Texture(s.For(Roster.Find("Marth", out _)), s.Width, s.Height);
+                float units = Mathf.Max(sr.sprite.bounds.size.x, sr.sprite.bounds.size.y);   // the Quill picture's size
+                sr.sprite = Sprite.Create(tex, new Rect(0, 0, s.Width, s.Height), new Vector2(0.5f, 0.5f), s.Width / Mathf.Max(0.1f, units));
+            } catch (System.Exception e) { FoxMod.Instance.Log("Iselda's Marth keeps the Quill's picture (" + e.Message + ")"); }
+        }
+
         // Iselda's stock is the one selling her Quill: Marth goes first, ahead of the maps
         static void AddMarth(ShopMenuStock stock) {
             if (stock.stock == null) return;
@@ -48,6 +60,7 @@ namespace FoxMelee {
             item.specialType = 0;
             item.relic = false;
             item.charmsRequired = 0;
+            SetIcon(marth);
             stock.stock = new[] { marth }.Concat(stock.stock).ToArray();
             if (stock.stockAlt != null && stock.stockAlt.Length > 0) stock.stockAlt = new[] { marth }.Concat(stock.stockAlt).ToArray();
             FoxMod.Instance.Log("Iselda's shop: Marth added");
