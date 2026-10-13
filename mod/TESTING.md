@@ -121,6 +121,36 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     Sheik can't transform. Characters other than Fox and Marth are untested until stage 4: their oddities
     (Nana, Peach's turnips, Kirby) aren't handled yet.
 
+20. Overnight 2026-10-12/13. Run `bash mod/install.sh` first: it now extracts every character's sounds, so expect
+    30 `melee-*.sfx` files.
+    - **Characters at a bench:** sit, then press D-pad up (keyboard T). Choose with left/right, play with up, close with
+      down. Your settings have `UnlockAllCharacters: true`, so all 26 are listed. Picking one restarts Melee with that
+      character where the Knight sits (`ModLog.txt`: `switching to ...`, `character: ...`). Stand up and play. Check
+      that:
+      - their sounds play;
+      - hits, grabs and throws work;
+      - wall jump needs Mantis Claw;
+      - Zelda and Sheik can't transform;
+      - Ice Climbers: Nana's hits land on enemies, and she follows Popo through doors and back out of pits;
+      - Kirby can inhale an enemy (he swallows the invisible Fox stand-in) and copy Fox's blaster.
+
+      Note anything odd, character by character.
+    - **Pause, then Reset character:** this button sits below Quit, and you're back at your last bench with nothing
+      lost. If it's missing or in an odd spot, `ModLog.txt` says `pause menu: ...`.
+    - **Quick map:** hold D-pad right. The character stops, and Hollow Knight's map should open.
+    - **Death:** Melee's KO blast plays, with now and then the star-KO scream (`KO (star)`), and no Knight mask or shade
+      animation. Hollow Knight's death sound is muted. Each hidden or muted thing is logged as `death: hid ...` /
+      `death: muted ...`; send those lines if something still shows.
+    - **Pogo:** each character bounces about 80% of their own jump height (`BounceHop` 0.9), so Marth no longer
+      flies off.
+    - **Mod list:** the mod is now called "Hollow Knight: Melee" (version 0.2.0).
+    - **Windows (a friend's PC, or yours):**
+      1. Download `HollowKnightMeleeInstaller.exe` from the newest pre-release on GitHub.
+      2. Run it. Expect a SmartScreen warning: choose "More info", then "Run anyway".
+      3. It should find Hollow Knight and the ISO (or ask you to drag the ISO in), then build for 5-10 minutes.
+      4. Launch from Steam.
+      5. If anything fails, send `%LOCALAPPDATA%\HollowKnightMelee\installer.log`.
+
 ## What to send back
 
 - `ModLog.txt` (whole file).
