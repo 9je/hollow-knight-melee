@@ -170,7 +170,8 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       - Sprintmaster makes the run and dash a touch faster;
       - Steady Body makes you take less knockback;
       - Fragile/Unbreakable Strength's hits do 1.5x damage;
-      - Deep Focus heals two masks over a longer Focus.
+      - Deep Focus heals two masks over a longer Focus;
+      - as Ice Climbers, Sprintmaster and Steady Body apply to Nana too.
     - **Gates:**
       - entering a room by a door, any door the Knight couldn't reach without an ability you lack gets an
         invisible wall (`gate: <room>[<door>] closed ...`);

@@ -990,6 +990,24 @@ static float run_distance(float scale) {
   mc_shutdown();
   return d;
 }
+/* a port's attributes are its fighters': set on Popo, Nana gets them too (the boost charms) */
+static void test_attributes_follower(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 14);
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(10, &idle);
+  CHECK(mc_set_attribute(0, 0x88, 123.0f) == 0);
+  uint32_t nfp = mc_peek32(mc_peek32(0x80453080u + 0xB4u) + 0x2C), u = mc_peek32(nfp + 0x110 + 0x88);
+  float w; memcpy(&w, &u, 4);
+  CHECK(w == 123.0f);
+  float popo;
+  CHECK(mc_get_attribute(0, 0x88, &popo) == 0 && popo == 123.0f);
+  mc_shutdown();
+}
+
 static void test_attributes(void) {
   float normal = run_distance(1.0f), fast = run_distance(1.1f);
   CHECK(fast > normal * 1.05f);
@@ -1144,6 +1162,7 @@ int main(int argc, char **argv) {
   test_character_start();
   test_nana_follows();
   test_attributes();
+  test_attributes_follower();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

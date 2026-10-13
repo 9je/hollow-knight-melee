@@ -604,8 +604,11 @@ int mc_get_attribute(int port, uint32_t offset, float *out) {
 int mc_set_attribute(int port, uint32_t offset, float value) {
   if (!isfinite(value)) return -1;
   uint32_t ea; int rc = attr_at(port, offset, &ea);
-  if (rc == 0) stf32(&g_m->cpu, ea, value);
-  return rc;
+  if (rc != 0) return rc;
+  stf32(&g_m->cpu, ea, value);
+  uint32_t nana = fighter_at(&g_m->cpu, port, 1);   /* the port's follower (Nana) is the same character: hers too */
+  if (nana) stf32(&g_m->cpu, nana + ATTRS + offset, value);
+  return 0;
 }
 
 int mc_set_percent(int port, float percent) {

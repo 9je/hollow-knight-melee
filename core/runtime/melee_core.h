@@ -118,7 +118,7 @@ int mc_apply_hit(int port, const McHit *hit);
 int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */
 /* A fighter's attribute (Fighter co_attrs: fp+0x110 + offset, offset 0..0x180 in 4s; e.g. 0x1C dash_initial_velocity,
  * 0x28 dash_max_velocity, 0x88 weight), for the boost charms. It holds until the fighter is spawned again (a new
- * match). 0 done, 1 no fighter, -1 error (a bad offset). */
+ * match). Set applies to the port's follower too (Nana). 0 done, 1 no fighter, -1 error (a bad offset). */
 int mc_get_attribute(int port, uint32_t offset, float *out);
 int mc_set_attribute(int port, uint32_t offset, float value);
 /* Fox's shield bubble, read-only: Melee draws it as an effect on the fighter's shield joint, which it scales by the
