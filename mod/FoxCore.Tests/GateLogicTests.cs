@@ -8,7 +8,7 @@ namespace FoxMelee.Tests {
         [Fact]
         public void DirtmouthFromKingsPassWithoutClaw() {
             var blocked = Logic.Blocked("Town", "right1", new KnightAbilities());
-            Assert.Contains("left1", blocked);                      // Howling Cliffs: Mantis Claw
+            Assert.Contains("left1", blocked);                      // the high ledge back up to King's Pass: Mantis Claw
             Assert.DoesNotContain("bot1", blocked);                 // the well down to the Crossroads
             Assert.DoesNotContain("door_mapper", blocked);          // Iselda's shop
             Assert.DoesNotContain("right1", blocked);               // where you came in

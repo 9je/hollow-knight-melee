@@ -214,6 +214,7 @@ namespace FoxMelee {
                 if (grab != null && !grab.After(core, room)) { Fail("stand-in: " + core.Error); return; }
                 if (!core.ReadFighter(0, out fox)) { Fail("cannot read Fox: " + core.Error); return; }
                 if (pogo != null && !pogo.Frame(core, room, fox)) { Fail("pogo: " + core.Error); return; }
+                DiveFloors(hero);
             }
             if (accumulator > Frame) accumulator = 0;   // a hitch: drop time rather than run fast
             profMeleeMs += profWatch.Elapsed.TotalMilliseconds; profMeleeFrames += frames;
@@ -426,12 +427,13 @@ namespace FoxMelee {
                 return "mc_get_attribute: " + core.Error;
             fighterBase = new FighterBase(dash, run, weight);
             boostsSet = -1;
+            if (!core.GetAttribute(0, AttrFastFall, out fastFallSpeed)) return "mc_get_attribute: " + core.Error;
             return null;
         }
         const int CountdownFrames = 130;   // Melee's "Ready... GO" is 123 frames; the character acts after it
 
         // ---- the boost charms (BoostCharms): set when what's equipped changes ----
-        const uint AttrDash = 0x1C, AttrRun = 0x28, AttrWeight = 0x88;
+        const uint AttrDash = 0x1C, AttrRun = 0x28, AttrWeight = 0x88, AttrFastFall = 0x74;
         FighterBase fighterBase;
         int boostsSet = -1, focusSet = -1;
         bool Boosts() {
@@ -570,6 +572,34 @@ namespace FoxMelee {
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");
             return true;
+        }
+
+        // ---- Desolate Dive's floors: Hollow Knight breaks them only for the Knight's dive (their quake_floor state machine waits
+        // for QUAKE FALL START). With Desolate Dive owned, a character landing from a fast fall onto one breaks it the same way:
+        // the events the dive sends, then the terrain watcher drops the floor from Melee's collision. ----
+        float fastFallSpeed;
+        bool slamming;
+        uint lastAirborne;
+        void DiveFloors(HeroController hero) {
+            bool landed = lastAirborne != 0 && fox.Airborne == 0;
+            lastAirborne = fox.Airborne;
+            if (fox.Airborne != 0) {
+                if (fastFallSpeed > 0 && fox.SelfVelY <= -0.95f * fastFallSpeed) slamming = true;
+                return;
+            }
+            if (!landed || !slamming) { slamming = false; return; }
+            slamming = false;
+            if (PlayerData.instance.quakeLevel <= 0) return;
+            var feet = (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero));
+            var probe = new Bounds(feet + new Vector2(0, -0.3f), new Vector3(1.2f, 0.8f, 1f));
+            foreach (var fsm in FindObjectsOfType<PlayMakerFSM>()) {
+                if (fsm.FsmName != "quake_floor") continue;
+                var col = fsm.GetComponent<Collider2D>();
+                if (col == null || !col.enabled || !col.bounds.Intersects(probe)) continue;
+                Log($"dive floor {fsm.gameObject.name} broken by a fast fall (Desolate Dive owned)");
+                fsm.SendEvent("QUAKE FALL START");
+                fsm.SendEvent("DESTROY");
+            }
         }
 
         // ---- Hollow Knight's ability gates (GateLogic, spec §4): a door the Knight couldn't reach from the one you came in by,
