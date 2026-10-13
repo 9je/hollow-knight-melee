@@ -662,9 +662,16 @@ namespace FoxMelee {
 
         static List<Collider2D> FindTerrain() {
             var l = new List<Collider2D>();
-            foreach (var c in FindObjectsOfType<Collider2D>()) if (LiveTerrain(c)) l.Add(c);
+            bool shadeCloak = PlayerData.instance != null && PlayerData.instance.hasShadowDash;
+            foreach (var c in FindObjectsOfType<Collider2D>()) if (LiveTerrain(c) || (!shadeCloak && ShadeGate(c))) l.Add(c);
             return l;
         }
+
+        // a Shade Cloak gate's barrier: its "solid" box is on the Knight's own layer (13), not terrain, so without this a Melee
+        // character would walk through; without Shade Cloak it is a wall, with it the character passes (as the Knight's dash)
+        static bool ShadeGate(Collider2D c) =>
+            c != null && c.enabled && c.gameObject.activeInHierarchy && c.gameObject.name == "solid"
+            && c.transform.parent != null && c.transform.parent.name.StartsWith("shadow_gate");
 
         static List<int> Ids(List<Collider2D> cs) {
             var ids = new List<int>(cs.Count);
