@@ -1,3 +1,4 @@
+using System;
 namespace FoxMelee {
     public enum HeroOwner { Hollow, Fox }
 
@@ -41,7 +42,7 @@ namespace FoxMelee {
         /// How long Hollow Knight gets to react to an interact press before Fox carries on.
         public const int InteractWaitFrames = 10;
 
-        public bool Interacting => interact >= 0;
+        public bool Interacting => interact >= 0 || hollowHold > 0;   // the character stays drawn where it stood
 
         /// The player pressed interact: the Knight goes back to Hollow Knight, which presses "up" for him.
         public void BeginInteract(int waitFrames = InteractWaitFrames) { interact = 0; interactStarted = false; interactWait = waitFrames; }
@@ -66,8 +67,13 @@ namespace FoxMelee {
             return true;
         }
 
+        int hollowHold;
+        /// Hollow Knight keeps the Knight for `frames` more calls of Owner (the Dream Nail: renewed while it is held).
+        public void HoldHollow(int frames) => hollowHold = Math.Max(hollowHold, frames);
+
         public HeroOwner Owner(HeroFlags f) {
             if (f.HazardDeath || f.HazardRespawning || f.Dead || f.Respawning) respawn = true;
+            if (hollowHold > 0) { hollowHold--; return HeroOwner.Hollow; }
             if (interact >= 0) {
                 if (f.ControlRelinquished || !f.AcceptingInput) interactStarted = true;
                 bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= interactWait;

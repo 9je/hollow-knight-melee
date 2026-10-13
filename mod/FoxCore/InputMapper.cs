@@ -46,7 +46,7 @@ namespace FoxMelee {
     /// focuses. D-pad up stays Melee's taunt.
     public struct HkControls {
         public bool Interact, Focus, Inventory;   // Inventory: GameCube D-pad right (it has no Select button)
-        const ushort Hollow = GcButtons.DLeft | GcButtons.DRight | GcButtons.DDown;
+        const ushort Hollow = GcButtons.DLeft | GcButtons.DRight | GcButtons.DDown | GcButtons.DUp;   // D-pad up: DPadUp (taunt or Dream Nail)
 
         public static HkControls FromGameCube(McInput gc) => new HkControls {
             Interact = (gc.Buttons & GcButtons.DLeft) != 0, Focus = (gc.Buttons & GcButtons.DDown) != 0,
@@ -105,6 +105,24 @@ namespace FoxMelee {
             bool tap = held >= 0 && held < HoldSeconds;
             held = -1f;
             return new State { Inventory = tap };
+        }
+    }
+
+    /// D-pad up: tapped, Melee's taunt (sent as it is let go); held, Hollow Knight's Dream Nail (the Knight handed over first,
+    /// its Dream Nail button a little later and for as long as it's held).
+    public sealed class DPadUp {
+        public const float HoldSeconds = 0.3f, ButtonDelay = 0.1f;
+        public struct State { public bool Taunt, DreamNail, DreamNailButton; }
+        float held = -1f;
+
+        public State Update(bool down, float dt) {
+            if (down) {
+                held = held < 0 ? dt : held + dt;
+                return new State { DreamNail = held >= HoldSeconds, DreamNailButton = held >= HoldSeconds + ButtonDelay };
+            }
+            bool tap = held >= 0 && held < HoldSeconds;
+            held = -1f;
+            return new State { Taunt = tap };
         }
     }
 }

@@ -118,6 +118,7 @@ namespace FoxMelee {
             HideKnightDeaths(hero, !session.KnightVisible(f));
             Prompts.Active = !session.KnightVisible(f);
             if (session.Owner(f) == HeroOwner.Hollow) {
+                DreamNailHeld();
                 if (Ko(hero, gm, f)) return;
                 enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
@@ -164,6 +165,11 @@ namespace FoxMelee {
                 var hkc = gc is McInput g ? HkControls.FromGameCube(g) : HkControls.FromPad(pad);
                 if (GcInput.InventoryOpen) hkc = default;   // the D-pad navigates the inventory: no interact or Focus
                 var input = gc is McInput g2 ? HkControls.ForMelee(g2) : InputMapper.Map(pad);
+                if (gc is McInput g3) {   // D-pad up: a tap is Melee's taunt, a hold Hollow Knight's Dream Nail
+                    var up = dpadUp.Update((g3.Buttons & GcButtons.DUp) != 0, Frame);
+                    if (up.Taunt) input.Buttons |= GcButtons.DUp;
+                    if (up.DreamNail && fox.Airborne == 0) { DreamNail(hero); return; }
+                }
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
                 // the quick map (GameCube: D-pad right held; keyboard: Tab): Hollow Knight opens it only for a Knight it
@@ -306,6 +312,33 @@ namespace FoxMelee {
             hero.AcceptInput();
             hero.cState.onGround = true;
             Log($"quick map (can open: {hero.CanQuickMap()})");
+        }
+
+        // D-pad up held: Hollow Knight's Dream Nail (the Dreamers, the Seer, dream bosses: a Melee character can't swing it). The
+        // Knight is handed over, as for an interact, and kept while D-pad up is held and a little after (the slash finishing);
+        // its Dream Nail button (Action4) is pressed from DPadUp.ButtonDelay on.
+        readonly DPadUp dpadUp = new DPadUp();
+        bool dreaming;
+        void DreamNail(HeroController hero) {
+            dreaming = true;
+            session.HoldHollow(DreamNailAfter);
+            hero.RegainControl();
+            hero.AcceptInput();
+            hero.cState.onGround = true;
+            var rb = hero.GetComponent<Rigidbody2D>();
+            if (rb != null) rb.velocity = Vector2.zero;
+            Log($"dream nail (can: {hero.CanDreamNail()})");
+        }
+        const int DreamNailAfter = 40;   // frames Hollow Knight keeps the Knight after D-pad up is let go
+
+        // each Update while Hollow Knight has the Knight for the Dream Nail: held, keep it and press the button
+        void DreamNailHeld() {
+            if (!dreaming) return;
+            var gc = FoxMod.Instance.GameCube?.Current();
+            var s = dpadUp.Update(((gc?.Buttons ?? 0) & GcButtons.DUp) != 0, Time.unscaledDeltaTime);
+            GcInput.DreamNailButton = s.DreamNailButton;
+            if (s.DreamNail) session.HoldHollow(DreamNailAfter);
+            else { dreaming = false; GcInput.DreamNailButton = false; }
         }
 
         // What Hollow Knight's ListenForUp does when "up" is pressed: send its wasPressed event, for every state machine

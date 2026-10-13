@@ -3,11 +3,11 @@ using Xunit;
 namespace FoxMelee.Tests {
     public class HkControlsTests {
         [Fact]
-        public void DPadUpTauntsInMeleeTheRestIsHollowKnights() {
+        public void TheDPadIsHollowKnightsAndTheTaunt() {
             var gc = new McInput { Buttons = (ushort)(GcButtons.DUp | GcButtons.DLeft | GcButtons.DDown | GcButtons.A) };
             var hk = HkControls.FromGameCube(gc);
             Assert.True(hk.Interact); Assert.True(hk.Focus);
-            Assert.Equal(GcButtons.DUp | GcButtons.A, HkControls.ForMelee(gc).Buttons);   // D-pad up: taunt
+            Assert.Equal(GcButtons.A, HkControls.ForMelee(gc).Buttons);   // D-pad up: DPadUp decides (a tap taunts, a hold Dream Nails)
             var right = HkControls.FromGameCube(new McInput { Buttons = GcButtons.DRight });
             Assert.False(right.Interact); Assert.True(right.Inventory);   // no Select on a GameCube pad: D-pad right opens it
             Assert.False(HkControls.FromGameCube(new McInput { Buttons = GcButtons.DUp }).Interact);
@@ -132,6 +132,26 @@ namespace FoxMelee.Tests {
             Assert.True(s.QuickMap && s.MapButton);
             s = d.Update(false, F, false);
             Assert.False(s.MapButton || s.QuickMap);
+        }
+
+        [Fact]
+        public void DPadUpTappedTauntsHeldDreamNails() {
+            var d = new DPadUp();
+            var s = d.Update(true, F);
+            Assert.False(s.Taunt || s.DreamNail);                 // undecided while short
+            s = d.Update(false, F);
+            Assert.True(s.Taunt);                                  // a tap: Melee's taunt, once
+            Assert.False(d.Update(false, F).Taunt);
+            int handOver = -1, button = -1;
+            for (int i = 0; i < 60; i++) {
+                s = d.Update(true, F);
+                Assert.False(s.Taunt);
+                if (s.DreamNail && handOver < 0) handOver = i;
+                if (s.DreamNailButton && button < 0) button = i;
+            }
+            Assert.True(handOver >= 0 && button > handOver + 2);    // the Knight first, then Hollow Knight's Dream Nail button
+            s = d.Update(false, F);
+            Assert.False(s.Taunt || s.DreamNail || s.DreamNailButton);   // let go after a hold: no taunt
         }
     }
 }

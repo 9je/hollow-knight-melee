@@ -31,7 +31,8 @@ namespace FoxMelee {
         public static bool HideDPadSides;
         public static bool InventoryOpen;       // FoxRunner: Hollow Knight's inventory is open (D-pad right moves right)
         public static bool QuickMapHeld;        // D-pad right held: the quick map (Fox stands still)
-        public static bool HoldFromHollow;      // the bench's character select is the controller's: Hollow Knight sees it idle
+        public static bool HoldFromHollow;
+        public static bool DreamNailButton;     // D-pad up held: Hollow Knight's Dream Nail button (Action4) is pressed      // the bench's character select is the controller's: Hollow Knight sees it idle
 
         /// Fox's input for the next Melee frame, or null when no GameCube controller is plugged in.
         public McInput? Melee() { Poll(); return pads.Melee(port); }
@@ -71,7 +72,7 @@ namespace FoxMelee {
                 UpdateWithState(InputControlType.Action1, B(GcButtons.A), tick, dt);     // A: confirm / jump
                 UpdateWithState(InputControlType.Action2, B(GcButtons.B), tick, dt);     // B: back
                 UpdateWithState(InputControlType.Action3, B(GcButtons.X), tick, dt);
-                UpdateWithState(InputControlType.Action4, B(GcButtons.Y), tick, dt);
+                UpdateWithState(InputControlType.Action4, B(GcButtons.Y) || DreamNailButton, tick, dt);
                 // only a full press: a trigger at rest reads a little above 0, and Hollow Knight turns the inventory's
                 // pages (paneLeft / paneRight) on any trigger value
                 UpdateWithState(InputControlType.LeftTrigger, B(GcButtons.L), tick, dt);
