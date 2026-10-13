@@ -43,5 +43,14 @@ namespace HkMelee.Installer.Tests {
             File.WriteAllText(Path.Combine(dir, "notes.txt"), "x");
             Assert.Empty(IsoFinder.Candidates(new[] { dir }));
         }
+
+        [Fact]
+        public void OnlyVanillaMelee102IsAccepted() {
+            var f = Path.GetTempFileName();
+            File.WriteAllBytes(f, new byte[1000]);
+            Assert.False(IsoFinder.IsMelee102(f));          // wrong size
+            Assert.False(IsoFinder.IsMelee102(f + ".missing"));
+            Assert.Equal("d4e70c064cc714ba8400a849cf299dbd1aa326fc", IsoFinder.RedumpSha1);
+        }
     }
 }

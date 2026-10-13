@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -122,12 +121,12 @@ namespace HkMelee.Installer {
             var saved = State("iso");
             if (saved != null && File.Exists(saved)) { Step("Melee ISO: " + saved); return saved; }
             Step("looking for your Melee ISO...");
-            var c = IsoFinder.Candidates(IsoFinder.UsualPlaces()).FirstOrDefault();
+            var c = IsoFinder.Candidates(IsoFinder.UsualPlaces()).FirstOrDefault(IsoFinder.IsMelee102);
             if (c != null) { Step("Melee ISO: " + c); SetState("iso", c); return c; }
             for (;;) {
                 var p = Unquote(Ask("Drag your Super Smash Bros. Melee NTSC 1.02 ISO into this window and press Enter: "));
-                if (File.Exists(p)) { SetState("iso", p); return p; }
-                Console.WriteLine("No file there.");
+                if (IsoFinder.IsMelee102(p)) { SetState("iso", p); return p; }
+                Console.WriteLine(File.Exists(p) ? "That isn't an unmodified NTSC 1.02 Melee ISO (modded ones such as 20XX or TM-CE won't work)." : "No file there.");
             }
         }
 
@@ -155,7 +154,9 @@ namespace HkMelee.Installer {
             var managed = Steam.Managed(hk);
             // backups, each made once and kept
             if (!Directory.Exists(managed + ".vanilla")) { Step("backing up the game's Managed folder (once)"); CopyDir(managed, managed + ".vanilla"); }
-            var backup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "hollow-knight-save-backup");
+            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (string.IsNullOrEmpty(docs)) docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
+            var backup = Path.Combine(docs, "hollow-knight-save-backup");
             if (Directory.Exists(SavesDir) && !Directory.Exists(backup)) { Step("backing up your saves to " + backup + " (once)"); CopyDir(SavesDir, backup); }
             // the mod (its code, the core's sources and the build tools) from this installer's release
             var payload = Payload();
@@ -252,11 +253,9 @@ namespace HkMelee.Installer {
 
         static void Unzip(string zip, string dir) { Directory.CreateDirectory(dir); ZipFile.ExtractToDirectory(zip, dir, true); }
 
-        static void UntarGz(string tgz, string dir) {
+        static void UntarGz(string tgz, string dir) {   // Linux's tar (.NET's TarFile fails on python-build-standalone's long paths)
             Directory.CreateDirectory(dir);
-            using var f = File.OpenRead(tgz);
-            using var gz = new GZipStream(f, CompressionMode.Decompress);
-            TarFile.ExtractToDirectory(gz, dir, true);
+            Run("tar", new[] { "-xzf", tgz, "-C", dir }, null);
         }
 
         static void UntarXz(string txz, string dir) {   // .NET has no xz: Linux's tar does

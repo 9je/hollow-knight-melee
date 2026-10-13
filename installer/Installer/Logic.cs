@@ -85,6 +85,16 @@ namespace HkMelee.Installer {
     /// Melee NTSC 1.02 ISOs in the usual places (Redump's size; the SHA-1 is checked by the build).
     static class IsoFinder {
         public const long RedumpSize = 1459978240;
+        public const string RedumpSha1 = "d4e70c064cc714ba8400a849cf299dbd1aa326fc";   // NTSC 1.02, unmodified (Redump)
+
+        /// The unmodified NTSC 1.02 Melee: its size and SHA-1 (modded ISOs such as 20XX or TM-CE have the same size).
+        public static bool IsMelee102(string path) {
+            try {
+                if (!File.Exists(path) || new FileInfo(path).Length != RedumpSize) return false;
+                using var f = File.OpenRead(path);
+                return Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(f)).ToLowerInvariant() == RedumpSha1;
+            } catch (Exception) { return false; }
+        }
 
         public static IEnumerable<string> Candidates(IEnumerable<string> dirs) {
             foreach (var d in dirs) {
