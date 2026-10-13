@@ -360,6 +360,7 @@ namespace FoxMelee {
         bool Boot() {
             var s = FoxMod.Instance.Settings;
             Prompts.Hook();
+            PauseReset.Hook();
             if (!hooked) {
                 hooked = true;
                 On.HeroController.Respawn += (orig, self) => Track(orig(self));
