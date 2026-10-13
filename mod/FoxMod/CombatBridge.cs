@@ -28,6 +28,7 @@ namespace FoxMelee {
         readonly List<(GameObject go, int dir, int frames)> landed = new List<(GameObject, int, int)>();   // frames -1: Fox's hitlag
         /// Melee's knockback for Fox's hits (null: Hollow Knight's recoil); launches wait for the hitlag to end.
         public EnemyLauncher Launcher;
+        public Character Character = Roster.Fox;   // who plays: its non-attack actions (HitRules)
         public KnockbackTuning Knockback;
         readonly Dictionary<GameObject, (double speed, double angle, int hitstun, bool tumble)> launches = new Dictionary<GameObject, (double, double, int, bool)>();
         readonly Dictionary<HealthManager, int> maxHp = new Dictionary<HealthManager, int>();
@@ -67,7 +68,7 @@ namespace FoxMelee {
             if (n < 0) return false;
             hurting.Clear();
             if (!core.ReadFighter(0, out var foxNow)) return false;
-            for (int i = 0; i < n; i++) if (HitRules.HurtsEnemiesDuring(boxes[i], foxNow.Action)) hurting.Add(boxes[i]);   // the pummel lands through the stand-in (GrabBridge)
+            for (int i = 0; i < n; i++) if (HitRules.HurtsEnemiesDuring(boxes[i], foxNow.Action, Character)) hurting.Add(boxes[i]);   // the pummel lands through the stand-in (GrabBridge)
             this.room = room;
             if (hurting.Count > 0) {
                 if (!core.ReadFighter(0, out var fox)) return false;

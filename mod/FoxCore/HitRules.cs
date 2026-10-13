@@ -22,6 +22,10 @@ namespace FoxMelee {
         public static bool HurtsEnemiesDuring(McHitbox b, uint foxAction) =>
             HurtsEnemies(b) && (IsItem(b) || FoxActionHurtsEnemies(foxAction));
 
+        /// The same for a roster character: its own non-attack actions (Character.NonAttackActions) don't hurt enemies either.
+        public static bool HurtsEnemiesDuring(McHitbox b, uint action, Character c) =>
+            HurtsEnemiesDuring(b, action) && (IsItem(b) || Array.IndexOf(c.NonAttackActions, action) < 0);
+
         public static bool IsItem(McHitbox b) => b.Group >= 0x80000000u;
 
         /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.

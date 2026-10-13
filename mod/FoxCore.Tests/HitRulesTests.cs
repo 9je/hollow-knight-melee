@@ -104,5 +104,15 @@ namespace FoxMelee.Tests {
             Assert.False(HitRules.HurtsEnemiesDuring(punch, 0xD9));
             Assert.True(HitRules.HurtsEnemiesDuring(punch, 44));
         }
+
+        [Fact]
+        public void ACharactersNonAttackActionsDontHurtEnemies() {
+            var c = new Character { Name = "Test", NonAttackActions = new uint[] { 370 } };
+            var punch = new McHitbox { Damage = 5, Element = 0, Flags = 4 };
+            Assert.False(HitRules.HurtsEnemiesDuring(punch, 370, c));
+            Assert.True(HitRules.HurtsEnemiesDuring(punch, 371, c));
+            Assert.False(HitRules.HurtsEnemiesDuring(punch, 0xD9, Roster.Fox));   // the pummel, for everyone
+            Assert.All(Roster.All, r => Assert.NotNull(r.NonAttackActions));
+        }
     }
 }

@@ -378,7 +378,7 @@ namespace FoxMelee {
                 try { model = FoxRenderer.Create(FoxModel.Load(path)); Log("drawing Fox's model"); }
                 catch (Exception e) { Log($"fox.model not used ({e.Message}); drawing the placeholder"); }
             }
-            if (s.FoxHits) combat = new CombatBridge();
+            if (s.FoxHits) combat = new CombatBridge { Character = character };
             if (combat != null && (s.Knockback?.Enabled ?? false)) { launcher = new EnemyLauncher(); combat.Launcher = launcher; combat.Knockback = s.Knockback; }
             if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
             if (grabs) grab = new GrabBridge(s.Grabs, enemies) { Launcher = launcher };

@@ -10,6 +10,7 @@ namespace FoxMelee {
         public bool LockDownB;       // Zelda and Sheik: no transform
         public int Charm;            // the Hollow Knight charm that unlocks it (0: none)
         public bool IselaShop;       // sold in Iselda's map shop (Marth)
+        public uint[] NonAttackActions = new uint[0];   // its actions whose hitboxes don't hurt enemies (beyond the pummel)
     }
 
     public static class Roster {
