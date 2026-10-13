@@ -1,4 +1,4 @@
-# Hollow Knight Melee
+# Hollow Knight: Melee
 
 Play Hollow Knight as Super Smash Bros. Melee characters, with movement and combat that match Melee NTSC 1.02
 frame for frame.
