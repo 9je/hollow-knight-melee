@@ -24,4 +24,9 @@ namespace FoxMelee {
         public PogoTuning Pogo = new PogoTuning();   // spec §5.4: down-air bounces off spikes (not Melee: the one exception)
         public GrabTuning Grabs = new GrabTuning();   // spec §5 Grab: Fox's grab and Melee's push against small enemies (plan 7)
     }
+
+    /// Kept in each save file (the Modding API's per-save data).
+    public sealed class SaveData {
+        public bool MarthBought;                    // Iselda's Marth (IselaShop)
+    }
 }

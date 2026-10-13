@@ -430,7 +430,7 @@ namespace FoxMelee {
             if (menu == null) {
                 if (pu) {
                     var data = PlayerData.instance;
-                    menu = new CharacterMenu(Roster.Owned(n => data.GetBool("gotCharm_" + n), data.GetBool("hasQuill"),
+                    menu = new CharacterMenu(Roster.Owned(n => data.GetBool("gotCharm_" + n), FoxMod.Instance.Save.MarthBought,
                                                           FoxMod.Instance.Settings.UnlockAllCharacters), character);
                 }
                 return;

@@ -4,7 +4,7 @@ using Xunit;
 namespace FoxMelee.Tests {
     public class CharacterMenuTests {
         [Fact]
-        public void FoxAlwaysOwnedMarthByQuillOthersByTheirCharm() {
+        public void FoxAlwaysOwnedMarthBoughtOthersByTheirCharm() {
             Assert.Equal(new[] { "Fox" }, Roster.Owned(_ => false, false, false).Select(c => c.Name));
             Assert.Equal(new[] { "Fox", "Marth" }, Roster.Owned(_ => false, true, false).Select(c => c.Name));
             var owned = Roster.Owned(charm => charm == 32 || charm == 13, false, false).Select(c => c.Name).ToArray();
