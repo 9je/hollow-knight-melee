@@ -151,6 +151,40 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       4. Launch from Steam.
       5. If anything fails, send `%LOCALAPPDATA%\HollowKnightMelee\installer.log`.
 
+21. Roster stages 2-5 (2026-10-13). Run `bash mod/install.sh` (it now also extracts `stocks.bin`, Melee's stock
+    icons).
+    - **Character select:** sit at a bench and press D-pad up. Melee's character select appears:
+      - Melee's layout, with Sheik beside Zelda;
+      - stock icons; characters you don't own are dark silhouettes that say where to find them;
+      - a P1 token and Player 1's panel.
+
+      Stick or D-pad moves, A plays, B closes. Check the Knight doesn't stand up or cast while you choose. Picking a
+      character shows it with "Ready..." for about a second (the core restarting in the background, without freezing
+      the game), then it stands up. To see only what your save owns, set `UnlockAllCharacters` to false.
+    - **Iselda:** her shop's first item is Marth, 50 Geo, with Marth's icon. Buying him logs `Marth bought from
+      Iselda` and makes him selectable. The Quill no longer gives Marth.
+    - **Charms:**
+      - a character's charm says "Roy (Fury of the Fallen)" etc. and won't equip: it costs no notches and has no
+        Hollow Knight effect;
+      - your save's equipped Fury of the Fallen comes off when it loads (`character charms taken off`);
+      - Sprintmaster makes the run and dash a touch faster;
+      - Steady Body makes you take less knockback;
+      - Fragile/Unbreakable Strength's hits do 1.5x damage;
+      - Deep Focus heals two masks over a longer Focus.
+    - **Gates:**
+      - entering a room by a door, any door the Knight couldn't reach without an ability you lack gets an
+        invisible wall (`gate: <room>[<door>] closed ...`);
+      - the door you came in by is always open;
+      - getting the ability reopens the room's doors (`abilities changed`);
+      - `AbilityGates: false` turns this off;
+      - send the `gate:` lines for any door that feels wrongly closed.
+    - **Dive floors:** with Desolate Dive owned, land from a fast fall onto a dive floor. It breaks (`dive floor ...
+      broken`).
+    - **Shade Cloak gates:** without Shade Cloak, the black barriers are walls. With it, you pass.
+    - **Dream Nail:** hold D-pad up (a tap is still the taunt). The Knight's Dream Nail swings: try it on a
+      Dreamer, the Seer, or a dream-nailable enemy (`dream nail (can: True)`).
+    - **Quick map:** hold D-pad right. It should open now. If it doesn't, send the `quick map` line.
+
 ## What to send back
 
 - `ModLog.txt` (whole file).
