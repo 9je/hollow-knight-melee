@@ -58,6 +58,9 @@ namespace FoxMelee {
 
         /// Each Unity frame: shows a decode that finished, and starts one when Melee has a new frame (`fresh`). False
         /// when the core could not decode a frame (the caller falls back to fox.model).
+        int emptyFrames;
+        const int KeepThroughEmpty = 2;
+
         public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z, bool fresh) {
             if (decoding != null && (decoding.IsCompleted || fresh)) {
                 watch.Restart();
@@ -65,8 +68,12 @@ namespace FoxMelee {
                 DecodeMs += watch.Elapsed.TotalMilliseconds;   // the main thread's wait, not the decode itself
                 decoding = null;
                 var t = frame; frame = back; back = t;
-                failed = !ok;   // an empty frame is Melee drawing nothing (Falco's side-B ending, a respawn): nothing shown, no placeholder
-                if (failed || frame.VertexCount == 0) Hide(); else Build(core, room, like, z);
+                failed = !ok;
+                // an empty frame: one or two (Falco reappearing after his side-B) keep the last frame shown, so nothing
+                // blinks; longer (Melee really drawing nothing) shows nothing. Never the placeholder: Melee's drawing works
+                if (failed) Hide();
+                else if (frame.VertexCount == 0) { if (++emptyFrames > KeepThroughEmpty) Hide(); }
+                else { emptyFrames = 0; Build(core, room, like, z); }
             }
             if (fresh) {
                 core.FinishFrameAsync();   // a frame paused at Melee's drawing (StepToRender) draws on the core's thread,

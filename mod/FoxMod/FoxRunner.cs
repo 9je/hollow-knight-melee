@@ -270,6 +270,7 @@ namespace FoxMelee {
                 if (placeholder) placeholder.SetActive(false);
                 return;
             }
+            if (character != Roster.Fox) { model?.Hide(); DrawPlaceholder(hk); return; }   // fox.model is Fox's alone
             if (model != null && !model.Draw(core, bones, room)) {
                 FoxMod.Instance.LogError("Fox's skeleton does not match fox.model; drawing the placeholder");
                 model.Hide();
