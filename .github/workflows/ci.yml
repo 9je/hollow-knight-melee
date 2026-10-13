@@ -42,7 +42,7 @@ jobs:
             $ZIG cc -target x86_64-windows-gnu -O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing \
               -Wall -Igekko -Iruntime -c $f -o "$RUNNER_TEMP/check.o"
           done
-      - name: Hollow Knight references (cached: the archive's host may go away)
+      - name: "Hollow Knight references, cached (the archive's host may go away)"
         uses: actions/cache@v4
         with:
           path: |
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Hollow Knight references (cached: the archive's host may go away)
+      - name: "Hollow Knight references, cached (the archive's host may go away)"
         uses: actions/cache@v4
         with:
           path: |
