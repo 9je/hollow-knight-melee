@@ -1,0 +1,102 @@
+# Tests on every push and pull request; on master, a release (v0.2.<run>) with both installers and the mod (a pre-release
+# until the installer is confirmed on Windows: drop --prerelease below to make releases the latest).
+# Nothing of Melee or Hollow Knight is committed or released: the game's reference assemblies and the Modding API are
+# downloaded (pinned) to build, and the installer builds everything Melee-derived from the player's own ISO.
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: write
+env:
+  ZIG_URL: https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz
+  ZIG_SHA256: 24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Python tools
+        run: |
+          python -m venv tools/.venv
+          tools/.venv/bin/pip install -q -e "tools[dev]"
+          tools/.venv/bin/pytest tools/tests -q
+      - name: Core unit tests (no game data)
+        run: make -C core gekko-test soft-fma-test room-test runtime-test
+      - name: Core runtime cross-compiles for Windows
+        run: |
+          curl -sSfL "$ZIG_URL" -o zig.tar.xz && echo "$ZIG_SHA256  zig.tar.xz" | sha256sum -c && tar xf zig.tar.xz
+          ZIG=$PWD/zig-x86_64-linux-0.14.1/zig
+          cd core
+          for f in runtime/coro.c runtime/worker.c runtime/dispatch.c runtime/gates.c runtime/gx.c runtime/gx_draw.c \
+                   runtime/gx_tex.c runtime/hw.c runtime/room.c runtime/room_build.c runtime/room_check.c runtime/standin.c \
+                   gekko/gekko_fp.c gekko/soft_fma.c; do
+            $ZIG cc -target x86_64-windows-gnu -O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing \
+              -Wall -Igekko -Iruntime -c $f -o "$RUNNER_TEMP/check.o"
+          done
+      - name: Hollow Knight references
+        run: bash mod/fetch_refs.sh
+      - name: Mod builds; C# tests (those needing the ISO skip)
+        run: |
+          dotnet build mod/FoxMod -c Release -nologo -p:HKManaged=$PWD/mod/lib/vanilla
+          dotnet test mod/FoxCore.Tests -nologo
+          dotnet test installer/Installer.Tests -nologo
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: 0.2.${{ github.run_number }}
+      LIBUSB_URL: https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.7z
+      LIBUSB_SHA256: 7fb1dfec805b97983763d7d0ae244320da12add1003d4249c96cc4d586398c79
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Mod
+        run: |
+          bash mod/fetch_refs.sh
+          dotnet build mod/FoxMod -c Release -nologo -p:HKManaged=$PWD/mod/lib/vanilla
+      - name: libusb for the GameCube adapter on Windows
+        run: |
+          sudo apt-get install -y -q p7zip-full
+          curl -sSfL "$LIBUSB_URL" -o libusb.7z && echo "$LIBUSB_SHA256  libusb.7z" | sha256sum -c
+          7z x -olibusb libusb.7z > /dev/null
+      - name: The mod's download (mod/, and the core's and tools' sources the installer builds from)
+        run: |
+          mkdir -p dist/payload/mod
+          out=mod/FoxMod/bin/Release/net472
+          cp $out/FoxMod.dll $out/FoxCore.dll $out/Clipper2Lib.dll dist/payload/mod/
+          cp libusb/VS2022/MS64/dll/libusb-1.0.dll dist/payload/mod/
+          git ls-files core tools/src tools/pyproject.toml LICENSE README.md | grep -v '^core/difftest/' | grep -v '^core/tests/' \
+            | xargs -I{} cp --parents {} dist/payload/
+          cp libusb/COPYING dist/payload/mod/libusb-COPYING.txt 2>/dev/null || true
+          (cd dist/payload && zip -q -r ../hollow-knight-melee-mod.zip .)
+      - name: Installers
+        run: |
+          for rid in win-x64 linux-x64; do
+            dotnet publish installer/Installer -c Release -r $rid -p:Version=$VERSION -nologo -o dist/$rid
+          done
+          cp dist/win-x64/HollowKnightMeleeInstaller.exe dist/
+          cp dist/linux-x64/HollowKnightMeleeInstaller dist/HollowKnightMeleeInstaller-linux
+      - name: Release
+        run: |
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          { echo "## Changes"; git log --format='- %s' ${prev:+$prev..}HEAD | cut -c1-200 | head -60;
+            echo; echo "## Install"; echo "Windows: download **HollowKnightMeleeInstaller.exe** and run it. You need Hollow Knight (Steam) and your own Super Smash Bros. Melee NTSC 1.02 ISO.";
+            echo "Linux: download **HollowKnightMeleeInstaller-linux**, \`chmod +x\` it and run it."; } > notes.md
+          gh release create "v$VERSION" --prerelease --title "Hollow Knight: Melee $VERSION" --notes-file notes.md \
+            dist/HollowKnightMeleeInstaller.exe dist/HollowKnightMeleeInstaller-linux dist/hollow-knight-melee-mod.zip

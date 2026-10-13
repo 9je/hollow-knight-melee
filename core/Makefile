@@ -89,7 +89,7 @@ soft-fma-test: | $(B)
 	$(B)/test_soft_fma
 .PHONY: soft-fma-test
 runtime-test: | $(B)
-	$(CC) $(GEN_CFLAGS) $(INC) tests/test_runtime.c runtime/hw.c runtime/coro.c gekko/gekko_fp.c -lm -o $(B)/test_runtime
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_runtime.c runtime/hw.c runtime/coro.c runtime/gx.c runtime/gx_tex.c runtime/gx_draw.c gekko/gekko_fp.c -lm -o $(B)/test_runtime
 	$(B)/test_runtime
 .PHONY: runtime-test
 CORE_GOBJ := $(B)/guest-core
