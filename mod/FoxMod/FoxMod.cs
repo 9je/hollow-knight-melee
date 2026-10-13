@@ -27,6 +27,7 @@ namespace FoxMelee {
             if (Settings.GameCubeAdapter) GameCube = new GcInput(Settings.GameCubePort);
             go.AddComponent<FoxRunner>();
             IselaShop.Hook();
+            CharacterCharms.Hook();
         }
     }
 }

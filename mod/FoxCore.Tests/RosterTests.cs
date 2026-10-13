@@ -41,5 +41,13 @@ namespace FoxMelee.Tests {
             Assert.Equal(expected, Roster.Find(name, out bool k).Name);
             Assert.Equal(known, k);
         }
+
+        [Theory]
+        [InlineData(6, "Roy")]
+        [InlineData(32, "Jigglypuff")]
+        [InlineData(2, null)]     // Wayward Compass: a charm
+        [InlineData(36, null)]    // Kingsoul: a charm
+        [InlineData(0, null)]
+        public void CharacterForCharm(int charm, string name) => Assert.Equal(name, Roster.ForCharm(charm)?.Name);
     }
 }

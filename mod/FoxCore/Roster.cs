@@ -42,6 +42,13 @@ namespace FoxMelee {
             return owned;
         }
 
+        /// The character a Hollow Knight charm is (spec §1), or null for a charm that stays a charm.
+        public static Character ForCharm(int charm) {
+            if (charm == 0) return null;
+            foreach (var c in All) if (c.Charm == charm) return c;
+            return null;
+        }
+
         /// The character named `name` (case and surrounding spaces ignored); Fox when there is none.
         public static Character Find(string name, out bool known) {
             var n = name?.Trim() ?? "";
