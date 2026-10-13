@@ -130,10 +130,11 @@ namespace FoxMelee {
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
-                } else if (PlayerData.instance.GetBool("atBench")) { BenchMenu(hero); if (state == State.Running) Rest(hero); }
+                } else if (PlayerData.instance.GetBool("atBench")) { if (FinishSwitch(hero)) { BenchMenu(hero); if (state == State.Running) Rest(hero); } }
                 combat?.ReleaseAll(); grab?.Release();
                 return;
             }
+            if (switching != null && !FinishSwitch(hero)) return;   // a character change still loading
             if (!WatchTerrain(gm.sceneName)) return;
             grid = null; GcInput.HoldFromHollow = false;   // the character moves: no character select holds the controller
             if (needPlace && waking) {            // Fox already lies where the Knight woke: he gets up from there
@@ -401,25 +402,32 @@ namespace FoxMelee {
 
         /// A new Melee match with `c` (Melee's own countdown run through), as at boot and on a character change.
         bool StartCore(string mem1, Character c) {
+            var why = StartCoreWork(mem1, c);
+            if (why != null) { Fail(why); return false; }
+            return true;
+        }
+
+        /// StartCore's work, touching only the core (safe off Unity's thread): null, or why it failed.
+        string StartCoreWork(string mem1, Character c) {
             var s = FoxMod.Instance.Settings;
             bool grabs = s.Grabs?.Enabled ?? false;
-            if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
+            if (!core.Init(mem1, s.IsoPath)) return "mc_init: " + core.Error;
             Log("character: " + c.Name);
-            if (!core.StartMatch(c.MeleeId, grabs)) { Fail("mc_start_match: " + core.Error); return false; }
+            if (!core.StartMatch(c.MeleeId, grabs)) return "mc_start_match: " + core.Error;
             core.SetInput(0, new McInput());
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
             for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
-            for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
-            if (!core.SetEdgeAssist(s.EdgeAssist)) { Fail("mc_set_edge_assist: " + core.Error); return false; }
-            if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
+            for (int i = 0; i < CountdownFrames; i++) if (!core.Step()) return "countdown: " + core.Error;
+            if (!core.SetEdgeAssist(s.EdgeAssist)) return "mc_set_edge_assist: " + core.Error;
+            if (grabs && !core.SetStandIn(GrabBridge.Port)) return "mc_standin_set: " + core.Error;
             // the attributes the boost charms change, as this character's match starts
-            if (!core.GetAttribute(0, AttrDash, out float dash) || !core.GetAttribute(0, AttrRun, out float run) || !core.GetAttribute(0, AttrWeight, out float weight)) {
-                Fail("mc_get_attribute: " + core.Error); return false;
-            }
+            if (!core.GetAttribute(0, AttrDash, out float dash) || !core.GetAttribute(0, AttrRun, out float run) || !core.GetAttribute(0, AttrWeight, out float weight))
+                return "mc_get_attribute: " + core.Error;
             fighterBase = new FighterBase(dash, run, weight);
             boostsSet = -1;
-            return true;
+            return null;
         }
+        const int CountdownFrames = 130;   // Melee's "Ready... GO" is 123 frames; the character acts after it
 
         // ---- the boost charms (BoostCharms): set when what's equipped changes ----
         const uint AttrDash = 0x1C, AttrRun = 0x28, AttrWeight = 0x88;
@@ -488,29 +496,48 @@ namespace FoxMelee {
         }
 
         void OnGUI() {
-            if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c));
+            if (switching != null && select != null) select.DrawLoading(switchingTo);
+            else if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c));
         }
 
+        // A character change restarts the core off Unity's thread (about a second); meanwhile nothing else uses the core and
+        // the select screen says it is loading. FinishSwitch then sets the new character up where the Knight sits.
+        System.Threading.Tasks.Task<string> switching;
+        Character switchingTo;
+
         void SwitchCharacter(HeroController hero, Character c) {
+            if (switching != null) return;
             Log($"switching to {c.Name}");
             combat?.ReleaseAll(); grab?.Release(); launcher?.StopAll();
             sfx?.Destroy(); sfx = null;
-            if (!StartCore(Path.Combine(FoxMod.ModDir, "mem1.bin"), c)) return;
+            switchingTo = c;
+            var mem1 = Path.Combine(FoxMod.ModDir, "mem1.bin");
+            switching = System.Threading.Tasks.Task.Run(() => StartCoreWork(mem1, c));
+        }
+
+        /// While a switch runs: false (the core is busy). Once it has finished, the new character is set up.
+        bool FinishSwitch(HeroController hero) {
+            if (switching == null) return true;
+            if (!switching.IsCompleted) return false;
+            var why = switching.IsFaulted ? switching.Exception?.GetBaseException().Message : switching.Result;
+            switching = null;
+            var c = switchingTo;
+            if (why != null) { Fail(why); return false; }
             character = c;
             FoxMod.Instance.Settings.Character = c.Name;   // remembered once it plays
             try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
             if (combat != null) combat.Character = c;
             gatesSet = uint.MaxValue;
-            if (gx != null) { if (!core.GxCapture(true)) { Fail("mc_gx_capture: " + core.Error); return; } gx.Reset(); }
+            if (gx != null) { if (!core.GxCapture(true)) { Fail("mc_gx_capture: " + core.Error); return false; } gx.Reset(); }
             try { sfx = SfxPlayer.Create(core, c, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
             // the new match is on Melee's stage: this room's collision again, and the character where the Knight sits
             session.ForgetRoom();
             var gm = GameManager.instance;
-            if (!EnterRoom(gm.sceneName) || !WatchTerrain(gm.sceneName)) return;
+            if (!EnterRoom(gm.sceneName) || !WatchTerrain(gm.sceneName)) return false;
             needPlace = !PlaceAtKnight(hero);
             if (!needPlace) session.Placed();
+            return true;
         }
-
 
         /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played
         /// as the Knight (FoxSession gives him back) until the next room converts.

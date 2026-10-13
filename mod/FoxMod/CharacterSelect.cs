@@ -83,6 +83,17 @@ namespace FoxMelee {
             Shadowed(new Rect(0, sh - 70 * u, sw, 50 * u), "A: play     B: back     Stick / D-pad: choose", Style(24 * u, FontStyle.Normal, TextAnchor.MiddleCenter), new Color(0.85f, 0.85f, 0.9f));
         }
 
+        /// A character change loading (the core restarting): the choice, and that it's on its way.
+        public void DrawLoading(Character c) {
+            if (white == null) { white = new Texture2D(1, 1); white.SetPixel(0, 0, Color.white); white.Apply(); }
+            float sw = Screen.width, sh = Screen.height, u = sh / 1080f;
+            Rect(0, 0, sw, sh, new Color(0.02f, 0.02f, 0.06f, 0.88f));
+            var icon = Icon(c);
+            if (icon != null) GUI.DrawTexture(new Rect((sw - 200 * u) / 2, sh * 0.32f, 200 * u, 200 * u), icon, ScaleMode.ScaleToFit);
+            Shadowed(new Rect(0, sh * 0.32f + 220 * u, sw, 80 * u), c.Name.ToUpperInvariant(), Style(56 * u, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter), new Color(1f, 0.92f, 0.55f));
+            Shadowed(new Rect(0, sh * 0.32f + 300 * u, sw, 50 * u), "Ready...", Style(30 * u, FontStyle.Italic, TextAnchor.MiddleCenter), Color.white);
+        }
+
         static string Short(Character c) => c.Name.Replace("Captain ", "C. ").Replace("Donkey Kong", "DK").Replace("Game & Watch", "G&W").Replace("Ice Climbers", "ICs");
 
         void Rect(float x, float y, float w, float h, Color c) { GUI.color = c; GUI.DrawTexture(new Rect(x, y, w, h), white); GUI.color = Color.white; }
