@@ -19,7 +19,7 @@ end (jump back `value` commands); 4/5 priority set/add; 6/7 volume set/add (0..2
 centre); 10/11 unused; 12/13 pitch set/add (cents); 14 end (the sample plays on); 15 end and key off; 16-21 aux sends;
 0xFD ignored. `wait` is the delay after the command in ticks (1 tick = 5 ms); a command's value is heard once the
 voice next waits or ends. *_add values are signed. loop_start: first frame of the looped part, -1 for one-shots.
-Scripts are those of banks 0 (main) and 11 (Fox); samples are every sample they reference.
+Scripts are written per bank: melee.sfx is bank 0 (main), melee-<bank>.sfx each character's bank; samples are every sample they reference.
 """
 import argparse
 import struct
@@ -28,7 +28,19 @@ from pathlib import Path
 
 from . import gciso
 
-BANKS = {0: "main.ssm", 11: "fox.ssm"}
+# lbaudio_ax.c: Melee's sound banks, in bank-index order (sound id = bank * 10000 + member)
+SSM_FILES = [
+    "main.ssm", "pokemon.ssm", "nr_title.ssm", "nr_select.ssm", "nr_1p.ssm", "nr_vs.ssm", "captain.ssm", "clink.ssm",
+    "dk.ssm", "drmario.ssm", "falco.ssm", "fox.ssm", "gkoopa.ssm", "ice.ssm", "kirby.ssm", "koopa.ssm",
+    "link.ssm", "luigi.ssm", "mario.ssm", "mars.ssm", "mewtwo.ssm", "ness.ssm", "peach.ssm", "pichu.ssm",
+    "pikachu.ssm", "purin.ssm", "samus.ssm", "zs.ssm", "yoshi.ssm", "gw.ssm", "ganon.ssm", "emblem.ssm",
+    "mhands.ssm", "kirbytm.ssm",
+]
+# the playable characters' banks (12 is Giga Bowser, 32 the hands); 33 is Kirby's copy hats
+CHARACTER_BANKS = [6, 7, 8, 9, 10, 11] + list(range(13, 32)) + [33]
+# zs.ssm's and yoshi.ssm's headers give base ids (1087, 1149) that smash2.sem's scripts don't use: their ids follow the bank
+# before, as every other bank's do (samus.ssm 1049 + 25 sounds = 1074; zs.ssm 1074 + 62 = 1136)
+BASE_FIX = {27: 1074, 28: 1136}
 MAGIC, VERSION = b"MSFX", 1
 _SIGNED8 = {5, 7, 9, 11, 17, 19}
 
@@ -194,11 +206,15 @@ def read_bundle(path: Path) -> tuple[dict, dict]:
     return scripts, samples
 
 
-def extract(iso: Path) -> tuple[dict, dict]:
+def extract(iso: Path, banks) -> tuple[dict, dict]:
+    """The scripts of `banks` and every sample they reference (from the bank's own ssm, else main.ssm)."""
     sem = Sem(gciso.read_file(iso, "smash2.sem"))
-    ssms = {bank: Ssm(gciso.read_file(iso, name)) for bank, name in BANKS.items()}
+    main_ssm = Ssm(gciso.read_file(iso, SSM_FILES[0]))
     scripts, samples = {}, {}
-    for bank in sorted(BANKS):
+    for bank in sorted(banks):
+        own = main_ssm if bank == 0 else Ssm(gciso.read_file(iso, SSM_FILES[bank]))
+        if bank in BASE_FIX:
+            own.base = BASE_FIX[bank]
         for member in range(sem.bank_size(bank)):
             sid = bank * 10000 + member
             cmds = sem.commands(sid)
@@ -206,22 +222,25 @@ def extract(iso: Path) -> tuple[dict, dict]:
             for op, value, _ in cmds:
                 if op != 1 or value in samples:
                     continue
-                ssm = next((s for s in (ssms[bank], ssms[0]) if s.has(value)), None)
+                ssm = next((s for s in (own, main_ssm) if s.has(value)), None)
                 if ssm is not None:
                     samples[value] = decode_sample(ssm, value)
     return scripts, samples
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Extract Melee's main and Fox sound effects from your ISO into "
-                                             "melee.sfx (not for distribution).")
+    ap = argparse.ArgumentParser(description="Extract Melee's sound effects from your ISO: melee.sfx (main) and "
+                                             "melee-<bank>.sfx per character (not for distribution).")
     ap.add_argument("iso", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
-    scripts, samples = extract(a.iso)
     a.out.mkdir(parents=True, exist_ok=True)
-    path = a.out / "melee.sfx"
-    write_bundle(path, scripts, samples)
-    secs = sum(len(s.channels[0]) / s.rate for s in samples.values())
-    print(f"melee.sfx: {len(scripts)} sounds, {len(samples)} samples ({secs:.1f} s), {path.stat().st_size} bytes")
+    total = 0
+    for bank, name in [(0, "melee.sfx")] + [(b, f"melee-{b}.sfx") for b in CHARACTER_BANKS]:
+        scripts, samples = extract(a.iso, [bank])
+        path = a.out / name
+        write_bundle(path, scripts, samples)
+        total += path.stat().st_size
+        print(f"{name}: {len(scripts)} sounds, {len(samples)} samples, {path.stat().st_size} bytes")
+    print(f"Melee sounds: {total} bytes")
     return 0

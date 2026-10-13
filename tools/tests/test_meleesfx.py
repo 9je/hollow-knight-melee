@@ -53,18 +53,28 @@ def test_bundle_round_trips(tmp_path):
     assert m2[546].rate == 16000 and m2[546].channels == [[1, 2, 3], [-1, -2, -3]] and m2[546].loop_start == -1
 
 
-def test_extract_from_iso_fox_laser(iso, tmp_path):
+def test_ssm_order_matches_melees_table():
+    # lbaudio_ax.c's ssm names: the bank index is the position
+    assert meleesfx.SSM_FILES[0] == "main.ssm" and meleesfx.SSM_FILES[11] == "fox.ssm"
+    assert meleesfx.SSM_FILES[19] == "mars.ssm" and meleesfx.SSM_FILES[27] == "zs.ssm" and meleesfx.SSM_FILES[33] == "kirbytm.ssm"
+    assert meleesfx.CHARACTER_BANKS == [6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 33]
+
+
+def test_extract_from_iso_main_and_character_banks(iso, tmp_path):
     assert meleesfx.main([str(iso), "--out", str(tmp_path)]) == 0
     scripts, samples = meleesfx.read_bundle(tmp_path / "melee.sfx")
-    assert all(i // 10000 in (0, 11) for i in scripts)
-    assert 110103 in scripts and 110106 in scripts and 0 in scripts
-    cmds = scripts[110103]
+    assert all(i // 10000 == 0 for i in scripts) and 0 in scripts
+    assert any(s.loop_start >= 0 for s in samples.values())             # main.ssm's looping samples keep it
+    fox, fox_samples = meleesfx.read_bundle(tmp_path / "melee-11.sfx")
+    assert all(i // 10000 == 11 for i in fox)
+    cmds = fox[110103]                                                  # the laser
     assert (1, 546, 0) in cmds and (6, 204, 0) in cmds and cmds[-1][0] == 14
-    laser = samples[546]
+    laser = fox_samples[546]
     assert len(laser.channels) == 2 and laser.rate == 16000 and laser.loop_start == -1
     assert 0.18 < len(laser.channels[0]) / laser.rate < 0.22
     assert max(abs(x) for x in laser.channels[0]) > 1000                 # not silence
-    assert samples[517].rate > 0                                        # blaster draw (110100)
-    used = {v for cs in scripts.values() for op, v, _ in cs if op == 1}
-    assert used <= set(samples)                                         # every referenced sample is there
-    assert any(s.loop_start >= 0 for s in samples.values())             # main.ssm's looping samples keep it
+    for bank in meleesfx.CHARACTER_BANKS:
+        s, m = meleesfx.read_bundle(tmp_path / f"melee-{bank}.sfx")
+        assert s and all(i // 10000 == bank for i in s)
+        used = {v for cs in s.values() for op, v, _ in cs if op == 1}
+        assert used <= set(m)                                           # every referenced sample is there
