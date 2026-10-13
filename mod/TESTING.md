@@ -100,6 +100,22 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     anything looks wrong (Fox's picture tearing, flickering or lagging more than before), set `DrawOffThread: false`
     and tell me.
 
+18. Fixes from the 2026-10-12 test:
+    - **Quick map:** hold D-pad right (keyboard: Tab) while standing. `ModLog.txt` logs `quick map (can open: ...)`.
+    - **Stairs:** a full-tilt walk goes down steps shorter than Fox. Edge assist still stops him at real drops.
+    - **Death:** Melee's KO blast and Fox's KO cry play where he stands as the death starts. The Knight's head and
+      death animation stay hidden. Logged as `KO`.
+    - **Out of the room:** knocked past a room's sides or bottom, Fox takes Hollow Knight's pit hazard (one mask,
+      back at the last safe spot) instead of falling for a long time. Logged as `out of the room ... pit`.
+    - **Knockback:**
+      - an up-throw no longer leaves an enemy hanging in the air (enemies without gravity fall during hitstun);
+      - a down-throw or a hard hit knocks the enemy down when it lands, and it waits 45 frames before acting;
+      - walking and crawling enemies no longer cancel ground launches, so the shine pushes them and waveshines
+        should work.
+
+      Each launch is logged (`launch <enemy>: kb .. angle .. hitstun ..`), so send the lines for any enemy that
+      still doesn't react.
+
 ## What to send back
 
 - `ModLog.txt` (whole file).
