@@ -115,5 +115,23 @@ namespace FoxMelee.Tests {
             Assert.True(s.Right && !s.QuickMap);
             Assert.False(d.Update(false, F, true).Inventory);
         }
+
+        [Fact]
+        public void TheMapButtonComesAfterTheHandOver() {
+            // Hollow Knight opens the quick map on the button's press, and only for a Knight it controls: the hand-over
+            // (QuickMap) comes first, the button (MapButton) a little later, so its press reaches Hollow Knight
+            var d = new DPadRight();
+            DPadRight.State s = default;
+            int handOver = -1, button = -1;
+            for (int i = 0; i < 60; i++) {
+                s = d.Update(true, F, false);
+                if (s.QuickMap && handOver < 0) handOver = i;
+                if (s.MapButton && button < 0) button = i;
+            }
+            Assert.True(handOver >= 0 && button > handOver + 2);
+            Assert.True(s.QuickMap && s.MapButton);
+            s = d.Update(false, F, false);
+            Assert.False(s.MapButton || s.QuickMap);
+        }
     }
 }

@@ -80,7 +80,7 @@ namespace FoxMelee {
                 // no Select or LB on a GameCube pad: D-pad right tapped opens the inventory, held shows the quick map
                 UpdateWithState(InputControlType.View, right.Inventory, tick, dt);
                 UpdateWithState(InputControlType.Back, right.Inventory, tick, dt);
-                UpdateWithState(InputControlType.LeftBumper, right.QuickMap, tick, dt);
+                UpdateWithState(InputControlType.LeftBumper, right.MapButton, tick, dt);
             }
         }
     }

@@ -90,14 +90,17 @@ namespace FoxMelee {
     /// a hold shows the quick map while held (LB); in the inventory it moves right.
     public sealed class DPadRight {
         public const float HoldSeconds = 0.3f;
-        public struct State { public bool Inventory, QuickMap, Right; }
+        public const float MapButtonDelay = 0.1f;   // the Knight is handed over (QuickMap) before the map button is pressed
+        /// QuickMap: held, the mod hands the Knight to Hollow Knight; MapButton: its quick map button, pressed a little later
+        /// (Hollow Knight opens the map on the press, and only for a Knight it controls).
+        public struct State { public bool Inventory, QuickMap, MapButton, Right; }
         float held = -1f;                       // seconds held; -1: up
 
         public State Update(bool down, float dt, bool inInventory) {
             if (inInventory) { held = -1f; return new State { Right = down }; }
             if (down) {
                 held = held < 0 ? dt : held + dt;
-                return new State { QuickMap = held >= HoldSeconds };
+                return new State { QuickMap = held >= HoldSeconds, MapButton = held >= HoldSeconds + MapButtonDelay };
             }
             bool tap = held >= 0 && held < HoldSeconds;
             held = -1f;

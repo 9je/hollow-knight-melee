@@ -44,7 +44,8 @@ namespace FoxMelee {
         public bool Interacting => interact >= 0;
 
         /// The player pressed interact: the Knight goes back to Hollow Knight, which presses "up" for him.
-        public void BeginInteract() { interact = 0; interactStarted = false; }
+        public void BeginInteract(int waitFrames = InteractWaitFrames) { interact = 0; interactStarted = false; interactWait = waitFrames; }
+        int interactWait = InteractWaitFrames;
 
         /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death, loading a save:
         /// until the game plays, the Knight is parked far outside the room).
@@ -67,7 +68,7 @@ namespace FoxMelee {
             if (f.HazardDeath || f.HazardRespawning || f.Dead || f.Respawning) respawn = true;
             if (interact >= 0) {
                 if (f.ControlRelinquished || !f.AcceptingInput) interactStarted = true;
-                bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= InteractWaitFrames;
+                bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= interactWait;
                 if (!done) { interact++; return HeroOwner.Hollow; }
                 interact = -1;
             }

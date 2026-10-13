@@ -296,7 +296,7 @@ namespace FoxMelee {
         }
 
         void QuickMap(HeroController hero) {
-            session.BeginInteract();
+            session.BeginInteract(30);   // the map button comes 0.1 s after (DPadRight.MapButtonDelay)
             hero.RegainControl();
             hero.AcceptInput();
             hero.cState.onGround = true;
