@@ -186,6 +186,16 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Dive floors:** with Desolate Dive owned, land from a fast fall onto a dive floor. It breaks (`dive floor ...
       broken`).
     - **Shade Cloak gates:** without Shade Cloak, the black barriers are walls. With it, you pass.
+    - **What the offline sweep found** (every character in at every door of 470 rooms, against Fox; RoomLab sweep):
+      - dropping in from a top door beside a corner, a character may catch the ledge and hang (Melee's own ledge
+        grab): press down or away to let go;
+      - tall characters can't get past a few low doorways where Fox fits (Samus and Zelda at Waterways_08's left door,
+        Ganondorf and Zelda at Room_Queen's, Bowser at Crossroads_27 left2 and Mines_07 right1): they stand in the doorway
+        and can walk back out; another character goes through;
+      - known: Donkey Kong respawned straight from a ledge hang into a corridor his own height (seen once, Deepnest_17)
+        falls through its floor; Hollow Knight's pit respawn then puts him back (one mask);
+      - every character's best height is at least twice the Knight's jump and its widest gap over twice the Knight's,
+        so no character is shut out of a place the Knight reaches without abilities.
     - **Keyboard in the character select:** with the select open, the arrow keys move only the cursor (the Knight
       stays on the bench) and Escape closes it without opening Hollow Knight's pause menu. After closing, keys work as
       usual.
