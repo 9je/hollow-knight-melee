@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -f lib/api/Assembly-CSharp.dll ] || bash fetch_api.sh
+[ -f lib/vanilla/UnityEngine.CoreModule.dll ] && exit 0   # already here (CI's cache)
 url="https://files.catbox.moe/i4sdl6.zip"
 sum="15dbd6a5668c722c9b1e585b944756063a7f4b41f9c0e161a3c7649f1d3ab08e"
 mkdir -p lib

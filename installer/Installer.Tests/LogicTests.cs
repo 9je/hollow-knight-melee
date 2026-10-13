@@ -92,5 +92,15 @@ namespace HkMelee.Installer.Tests {
             Assert.Equal("v0.2.8", (string)Releases.Newest(json)?["tag_name"]);
             Assert.Null(Releases.Newest("[]"));
         }
+
+        [Fact]
+        public void OldModDownloadsAreRemovedButNotTheCurrentOne() {
+            var cache = Dir(("payload-0.2.5/mod/FoxMod.dll", "old"), ("payload-0.2.9/mod/FoxMod.dll", "new"), ("tools/zig/zig", "z"), ("installer.json", "{}"));
+            Files.CleanOldPayloads(cache, "payload-0.2.9");
+            Assert.False(Directory.Exists(Path.Combine(cache, "payload-0.2.5")));
+            Assert.True(File.Exists(Path.Combine(cache, "payload-0.2.9/mod/FoxMod.dll")));
+            Assert.True(File.Exists(Path.Combine(cache, "tools/zig/zig")));
+            Assert.True(File.Exists(Path.Combine(cache, "installer.json")));
+        }
     }
 }

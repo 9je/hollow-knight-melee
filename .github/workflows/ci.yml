@@ -8,7 +8,7 @@ on:
     branches: [master]
   pull_request:
 permissions:
-  contents: write
+  contents: read
 env:
   ZIG_URL: https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz
   ZIG_SHA256: 24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c
@@ -42,6 +42,13 @@ jobs:
             $ZIG cc -target x86_64-windows-gnu -O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing \
               -Wall -Igekko -Iruntime -c $f -o "$RUNNER_TEMP/check.o"
           done
+      - name: Hollow Knight references (cached: the archive's host may go away)
+        uses: actions/cache@v4
+        with:
+          path: |
+            mod/lib/api
+            mod/lib/vanilla
+          key: hk-refs-5d2327d7-15dbd6a5
       - name: Hollow Knight references
         run: bash mod/fetch_refs.sh
       - name: Mod builds; C# tests (those needing the ISO skip)
@@ -85,6 +92,8 @@ jobs:
     needs: [test, windows]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
       VERSION: 0.2.${{ github.run_number }}
       LIBUSB_URL: https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.7z
@@ -97,6 +106,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Hollow Knight references (cached: the archive's host may go away)
+        uses: actions/cache@v4
+        with:
+          path: |
+            mod/lib/api
+            mod/lib/vanilla
+          key: hk-refs-5d2327d7-15dbd6a5
       - name: Mod
         run: |
           bash mod/fetch_refs.sh
@@ -125,6 +141,7 @@ jobs:
           cp dist/linux-x64/HollowKnightMeleeInstaller dist/HollowKnightMeleeInstaller-linux
       - name: Release
         run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then echo "v$VERSION exists (a re-run): nothing to do"; exit 0; fi
           prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
           { echo "## Changes"; git log --format='- %s' ${prev:+$prev..}HEAD | cut -c1-200 | head -60;
             echo; echo "## Install"; echo "Windows: download **HollowKnightMeleeInstaller.exe** and run it. You need Hollow Knight (Steam) and your own Super Smash Bros. Melee NTSC 1.02 ISO.";

@@ -135,6 +135,12 @@ namespace HkMelee.Installer {
             return true;
         }
 
+        /// Earlier versions' mod downloads (payload-<version>) other than keep.
+        public static void CleanOldPayloads(string cache, string keep) {
+            foreach (var d in Directory.GetDirectories(cache, "payload-*"))
+                if (Path.GetFileName(d) != keep) try { Directory.Delete(d, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+
         /// target becomes a copy of source; if anything fails, target is as it was.
         public static void Restore(string source, string target) {
             if (!Directory.Exists(source)) throw new DirectoryNotFoundException(source);

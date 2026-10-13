@@ -186,6 +186,7 @@ namespace HkMelee.Installer {
             Directory.CreateDirectory(SavesDir);
             var settings = Path.Combine(SavesDir, "FoxMod.GlobalSettings.json");
             File.WriteAllText(settings, SettingsFile.WithIso(File.Exists(settings) ? File.ReadAllText(settings) : null, iso));
+            if (Environment.GetEnvironmentVariable("HKM_PAYLOAD") == null) Files.CleanOldPayloads(cache, "payload-" + version);
             Console.WriteLine();
             Console.WriteLine("Done! Start Hollow Knight from Steam. Hollow Knight: Melee is in the mod list.");
             if (Win) Console.WriteLine("A GameCube controller adapter needs its WinUSB driver once (Zadig, as for Dolphin).");
@@ -197,6 +198,9 @@ namespace HkMelee.Installer {
             if (!Directory.Exists(managed + ".vanilla")) { Console.WriteLine("Nothing to uninstall (no Managed.vanilla backup)."); return; }
             Step("restoring the game's own files");
             Files.Restore(managed + ".vanilla", managed);
+            // the downloaded tools, mod and build (about 300 MB); the installer's own state stays so a reinstall finds things again
+            foreach (var d in new[] { "tools", "build", "build-out", "downloads" }.Select(n => Path.Combine(cache, n)).Concat(Directory.GetDirectories(cache, "payload-*")))
+                if (Directory.Exists(d)) try { Directory.Delete(d, true); } catch (Exception) { }
             Console.WriteLine("Uninstalled. Your saves weren't touched. (Other mods you added since need reinstalling.)");
         }
 
