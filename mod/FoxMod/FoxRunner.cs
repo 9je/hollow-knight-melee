@@ -89,7 +89,21 @@ namespace FoxMelee {
                    && GameManager.instance.gameState != GlobalEnums.GameState.PAUSED,
         };
 
+        // Keyboard: while the character select (or a change loading) is up, Hollow Knight's own input is off: its pause
+        // (Escape) through acceptingInput, and the bench's own listeners (its state machine gets the Knight up on jump, attack
+        // or any arrow, read straight from the action set) through the action set itself, whose actions then read as
+        // released (InControl: EnabledInHierarchy). Asked every frame, so whatever closes the select gives it back.
+        bool mutedHollow;
+        void MuteHollowKeys(bool want) {
+            var ih = GameManager.instance?.inputHandler;
+            if (ih == null || ih.inputActions == null) { mutedHollow = false; return; }
+            if (want && !mutedHollow && ih.acceptingInput) { ih.StopAcceptingInput(); ih.inputActions.Enabled = false; mutedHollow = true; }
+            else if (!want && mutedHollow) { mutedHollow = false; ih.inputActions.Enabled = true; ih.StartAcceptingInput(); }
+        }
+        void OnDestroy() => MuteHollowKeys(false);
+
         void Update() {
+            MuteHollowKeys(state != State.Failed && (grid != null || switching != null));
             if (state == State.Failed) { GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false; return; }
             var hero = HeroController.instance;
             var gm = GameManager.instance;

@@ -185,6 +185,9 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Dive floors:** with Desolate Dive owned, land from a fast fall onto a dive floor. It breaks (`dive floor ...
       broken`).
     - **Shade Cloak gates:** without Shade Cloak, the black barriers are walls. With it, you pass.
+    - **Keyboard in the character select:** with the select open, the arrow keys move only the cursor (the Knight
+      stays on the bench) and Escape closes it without opening Hollow Knight's pause menu. After closing, keys work as
+      usual.
     - **Acid with Isma's Tear:** with Isma's Tear, acid pools are ground at their surface: the character runs across
       the top where the Knight would swim (Melee characters can't swim). Without it, acid is still the hazard. Try
       Isma's Tear's own room and the Fungal Wastes pools.
