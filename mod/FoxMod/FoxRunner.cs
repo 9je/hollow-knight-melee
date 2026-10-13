@@ -138,8 +138,9 @@ namespace FoxMelee {
             SetKnightVisible(hero, session.KnightVisible(f));
             HideKnightDeaths(hero, !session.KnightVisible(f));
             Prompts.Active = !session.KnightVisible(f);
-            if (session.Owner(f) == HeroOwner.Hollow) {
+            if (session.Owner(f, Time.unscaledDeltaTime) == HeroOwner.Hollow) {
                 DreamNailHeld();
+                QuickMapHeld();
                 if (Ko(hero, gm, f)) return;
                 enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
@@ -328,11 +329,23 @@ namespace FoxMelee {
         }
 
         void QuickMap(HeroController hero) {
-            session.BeginInteract(30);   // the map button comes 0.1 s after (DPadRight.MapButtonDelay)
+            mapping = true;
+            session.BeginInteract();
+            session.HoldHollow(MapHold);   // renewed while held (QuickMapHeld); the map button comes 0.1 s after (DPadRight.MapButtonDelay)
             hero.RegainControl();
             hero.AcceptInput();
             hero.cState.onGround = true;
             Log($"quick map (can open: {hero.CanQuickMap()})");
+        }
+
+        // each Update while Hollow Knight has the Knight for the quick map: held, keep it (Hollow Knight opens the map only if
+        // its button is still down a moment after the press, and closes it when it's let go or the Knight isn't its)
+        bool mapping;
+        const float MapHold = 0.15f;   // seconds the Knight stays Hollow Knight's after the last held frame
+        void QuickMapHeld() {
+            if (!mapping) return;
+            if (GcInput.QuickMapHeld || Input.GetKey(KeyCode.Tab)) session.HoldHollow(MapHold);
+            else mapping = false;
         }
 
         // D-pad up held: Hollow Knight's Dream Nail (the Dreamers, the Seer, dream bosses: a Melee character can't swing it). The
@@ -350,7 +363,7 @@ namespace FoxMelee {
             if (rb != null) rb.velocity = Vector2.zero;
             Log($"dream nail (can: {hero.CanDreamNail()})");
         }
-        const int DreamNailAfter = 40;   // frames Hollow Knight keeps the Knight after D-pad up is let go
+        const float DreamNailAfter = 0.6f;   // seconds Hollow Knight keeps the Knight after D-pad up is let go
 
         // each Update while Hollow Knight has the Knight for the Dream Nail: held, keep it and press the button
         void DreamNailHeld() {

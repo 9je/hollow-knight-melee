@@ -36,17 +36,18 @@ namespace FoxMelee {
     public sealed class FoxSession {
         string roomScene;
         bool roomReady, took, respawn;
-        int interact = -1;                      // frames since BeginInteract; -1 = not interacting
+        float interact = -1;                    // seconds since BeginInteract; -1 = not interacting
         bool interactStarted;                   // Hollow Knight took control (a tablet, an NPC, a bench)
 
-        /// How long Hollow Knight gets to react to an interact press before Fox carries on.
-        public const int InteractWaitFrames = 10;
+        /// How long Hollow Knight gets to react to an interact press before Fox carries on (seconds: the game's frame rate
+        /// may be anything; counted in frames, 250 fps left it 40 ms, too short for a bench or the quick map).
+        public const float InteractWait = 0.2f;
 
         public bool Interacting => interact >= 0 || hollowHold > 0;   // the character stays drawn where it stood
 
         /// The player pressed interact: the Knight goes back to Hollow Knight, which presses "up" for him.
-        public void BeginInteract(int waitFrames = InteractWaitFrames) { interact = 0; interactStarted = false; interactWait = waitFrames; }
-        int interactWait = InteractWaitFrames;
+        public void BeginInteract(float wait = InteractWait) { interact = 0; interactStarted = false; interactWait = wait; }
+        float interactWait = InteractWait;
 
         /// Hollow Knight is moving the Knight itself (room transition, spikes, hazard respawn, death, loading a save:
         /// until the game plays, the Knight is parked far outside the room).
@@ -67,17 +68,20 @@ namespace FoxMelee {
             return true;
         }
 
-        int hollowHold;
-        /// Hollow Knight keeps the Knight for `frames` more calls of Owner (the Dream Nail: renewed while it is held).
-        public void HoldHollow(int frames) => hollowHold = Math.Max(hollowHold, frames);
+        float hollowHold;
+        /// Hollow Knight keeps the Knight for `seconds` more (the Dream Nail and the quick map: renewed while held).
+        public void HoldHollow(float seconds) => hollowHold = Math.Max(hollowHold, seconds);
 
-        public HeroOwner Owner(HeroFlags f) {
+        /// Who has the Knight this Unity frame (`dt` seconds long).
+        public HeroOwner Owner(HeroFlags f, float dt = 1f / 60f) {
             if (f.HazardDeath || f.HazardRespawning || f.Dead || f.Respawning) respawn = true;
-            if (hollowHold > 0) { hollowHold--; return HeroOwner.Hollow; }
+            // Hollow Knight taking control during an interaction or a hold (a bench, a tablet, the map opening) is watched
+            // throughout, so it keeps the Knight until it hands control back
+            if (interact >= 0 && (f.ControlRelinquished || !f.AcceptingInput)) interactStarted = true;
+            if (hollowHold > 0) { hollowHold -= dt; return HeroOwner.Hollow; }
             if (interact >= 0) {
-                if (f.ControlRelinquished || !f.AcceptingInput) interactStarted = true;
                 bool done = interactStarted ? !f.ControlRelinquished && f.AcceptingInput : interact >= interactWait;
-                if (!done) { interact++; return HeroOwner.Hollow; }
+                if (!done) { interact += dt; return HeroOwner.Hollow; }
                 interact = -1;
             }
             return roomReady && !HollowBusy(f) ? HeroOwner.Fox : HeroOwner.Hollow;

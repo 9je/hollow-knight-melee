@@ -76,14 +76,32 @@ namespace FoxMelee.Tests {
             Assert.False(s.TakeRespawns());
         }
 
-        [Fact]
-        public void NothingToInteractWithGivesFoxBackQuickly() {
+        // the waits are time, not frames: at 250 fps Hollow Knight gets as long to react as at 60
+        [Theory]
+        [InlineData(60)]
+        [InlineData(250)]
+        public void NothingToInteractWithGivesFoxBackAfterTheSameTime(int fps) {
             var s = new FoxSession();
             s.RoomConverted("A", true);
             s.BeginInteract();
-            int frames = 0;
-            while (s.Owner(Playing) == HeroOwner.Hollow) { frames++; Assert.True(frames < 30); }
-            Assert.Equal(FoxSession.InteractWaitFrames, frames);
+            float t = 0;
+            while (s.Owner(Playing, 1f / fps) == HeroOwner.Hollow) { t += 1f / fps; Assert.True(t < 2); }
+            Assert.InRange(t, FoxSession.InteractWait - 0.02f, FoxSession.InteractWait + 0.02f);
+        }
+
+        // the quick map: held, the Knight stays Hollow Knight's; once the map opens (Hollow Knight takes control) it stays
+        // so until the map closes, however long it was held
+        [Fact]
+        public void AHeldQuickMapKeepsTheKnightUntilTheMapCloses() {
+            var s = new FoxSession();
+            s.RoomConverted("A", true);
+            const float dt = 1f / 250;
+            s.BeginInteract();
+            for (int i = 0; i < 250; i++) { s.HoldHollow(0.1f); Assert.Equal(HeroOwner.Hollow, s.Owner(Playing, dt)); }   // held a second
+            var open = Playing; open.ControlRelinquished = true;
+            for (int i = 0; i < 25; i++) { s.HoldHollow(0.1f); s.Owner(open, dt); }   // the map opens while held
+            for (int i = 0; i < 500; i++) Assert.Equal(HeroOwner.Hollow, s.Owner(open, dt));   // let go: open until it closes
+            Assert.Equal(HeroOwner.Fox, s.Owner(Playing, dt));
         }
     }
 }

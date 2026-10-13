@@ -206,7 +206,9 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       before).
     - **Dream Nail:** hold D-pad up (a tap is still the taunt). The Knight's Dream Nail swings: try it on a
       Dreamer, the Seer, or a dream-nailable enemy (`dream nail (can: True)`).
-    - **Quick map:** hold D-pad right. It should open now. If it doesn't, send the `quick map` line.
+    - **Quick map:** hold D-pad right (or Tab): the map opens after a moment and stays while held. It failed before at
+      high frame rates (the Knight was taken back after 30 frames, 0.12 s at 250 fps). Benches and NPCs also get a
+      fixed 0.2 s to react now, whatever the frame rate.
 
 ## What to send back
 
