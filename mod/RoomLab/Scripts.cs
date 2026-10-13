@@ -13,6 +13,8 @@ namespace FoxMelee.Lab {
                     case "idle": case "fall": break;
                     case "run-right": a[i].StickX = 80; break;
                     case "run-left": a[i].StickX = -80; break;
+                    case "drop-walk-right": if (i >= 90) a[i].StickX = 80; break;   // the sweep's: settle, then walk
+                    case "drop-walk-left": if (i >= 90) a[i].StickX = -80; break;
                     case "drop-run-right": if (i >= 90) a[i].StickX = 80; break;   // fall in from a top gate, then run
                     case "drop-hop-right":                                          // fall in, then run right with a full jump + double jump every 50 frames
                         if (i >= 90) { a[i].StickX = 80; int h = (i - 90) % 50; if (h < 8 || (h >= 22 && h < 24)) a[i].Buttons = X; }
