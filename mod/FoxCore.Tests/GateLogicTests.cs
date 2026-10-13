@@ -58,5 +58,37 @@ namespace FoxMelee.Tests {
         [InlineData("A | FALSE", false, true, true, false)]
         public void Expressions(string expr, bool a, bool b, bool c, bool expected) =>
             Assert.Equal(expected, GateLogic.Evaluate(expr, t => t == "A" ? a : t == "B" ? b : t == "C" ? c : (bool?)null));
+
+        static readonly KnightAbilities Everything = new KnightAbilities { Claw = true, Wings = true, Dash = true, SuperDash = true, Acid = true,
+            ShadeCloak = true, Fireball = true, Quake = true, Scream = true, DreamNail = true, Lantern = true };
+
+        [Fact]
+        public void BackUpThroughCrystalPeaksDiveHoleTheWayOutIsOpen() {
+            // Mines_01: dove in from the Crossroads (the floor is broken in the save), back up through bot1: left1 is the way out
+            Assert.DoesNotContain("left1", Logic.Blocked("Mines_01", "bot1", Everything));
+            // without Claw and Wings the climb up stays walled, as for the Knight: back down bot1 is the way out
+        }
+
+        [Fact]
+        public void ARoomWithNoOpenExitOpensEverything() {
+            // synthetic: entered through a two-way top door the Knight could only use with wings, every exit needing the claw
+            var g = GateLogic.Parse(
+                "[{\"sceneName\":\"R\",\"gateName\":\"top1\",\"logic\":\"R[top1] | R + WINGS\",\"oneWayType\":\"TwoWay\",\"Name\":\"R[top1]\"}," +
+                " {\"sceneName\":\"R\",\"gateName\":\"left1\",\"logic\":\"R[left1] | R + LEFTCLAW\",\"oneWayType\":\"TwoWay\",\"Name\":\"R[left1]\"}]",
+                "[{\"name\":\"R\",\"logic\":\"R[top1] | R[left1]\"}]", "{}");
+            Assert.Empty(g.Blocked("R", "top1", new KnightAbilities()));
+        }
+
+        [Fact]
+        public void AnExitTheKnightCantUseDoesntCountAsAWayOut() {
+            // entered from the top; left1 needs the claw; right1 is reachable by nothing (a gate opened from the other side):
+            // with no exit the Knight can use, nothing closes
+            var g = GateLogic.Parse(
+                "[{\"sceneName\":\"R\",\"gateName\":\"top1\",\"logic\":\"R[top1]\",\"oneWayType\":\"OneWayIn\",\"Name\":\"R[top1]\"}," +
+                " {\"sceneName\":\"R\",\"gateName\":\"left1\",\"logic\":\"R[left1] | R + LEFTCLAW\",\"oneWayType\":\"TwoWay\",\"Name\":\"R[left1]\"}," +
+                " {\"sceneName\":\"R\",\"gateName\":\"right1\",\"logic\":\"R[right1]\",\"oneWayType\":\"TwoWay\",\"Name\":\"R[right1]\"}]",
+                "[{\"name\":\"R\",\"logic\":\"R[top1] | R[left1] | R[right1]\"}]", "{}");
+            Assert.Empty(g.Blocked("R", "top1", new KnightAbilities()));
+        }
     }
 }

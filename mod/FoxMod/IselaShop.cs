@@ -10,7 +10,7 @@ namespace FoxMelee {
         public const string Flag = "hkMeleeMarth";
         const string NameKey = "HKM_MARTH_NAME", DescKey = "HKM_MARTH_DESC", PriceKey = "HKM_MARTH_PRICE";
         public const int Price = 50;
-        static GameObject holder;
+        static GameObject holder, marthItem;   // one Marth item, made once and reused by every visit
 
         public static void Hook() {
             ModHooks.GetPlayerBoolHook += (name, orig) => name == Flag ? FoxMod.Instance.Save.MarthBought : orig;
@@ -43,12 +43,13 @@ namespace FoxMelee {
 
         // Iselda's stock is the one selling her Quill: Marth goes first, ahead of the maps
         static void AddMarth(ShopMenuStock stock) {
-            if (stock.stock == null) return;
+            if (stock.stock == null || stock.masterList != null) return;   // a sub-list shares its master's (Marth is added there)
             var quill = stock.stock.FirstOrDefault(g => g != null && g.GetComponent<ShopItemStats>()?.playerDataBoolName == "hasQuill");
             if (quill == null || stock.stock.Any(g => g != null && g.GetComponent<ShopItemStats>()?.playerDataBoolName == Flag)) return;
             // made under an inactive holder, so the copy's Awake (which reads its price) waits for the shop's own copies
             if (holder == null) { holder = new GameObject("Hollow Knight: Melee shop items"); holder.SetActive(false); Object.DontDestroyOnLoad(holder); }
-            var marth = Object.Instantiate(quill, holder.transform);
+            if (marthItem != null) { Prepend(stock, marthItem); return; }
+            var marth = marthItem = Object.Instantiate(quill, holder.transform);
             marth.name = "Marth";
             var item = marth.GetComponent<ShopItemStats>();
             item.playerDataBoolName = Flag;
@@ -61,9 +62,13 @@ namespace FoxMelee {
             item.relic = false;
             item.charmsRequired = 0;
             SetIcon(marth);
+            Prepend(stock, marth);
+            FoxMod.Instance.Log("Iselda's shop: Marth added");
+        }
+
+        static void Prepend(ShopMenuStock stock, GameObject marth) {
             stock.stock = new[] { marth }.Concat(stock.stock).ToArray();
             if (stock.stockAlt != null && stock.stockAlt.Length > 0) stock.stockAlt = new[] { marth }.Concat(stock.stockAlt).ToArray();
-            FoxMod.Instance.Log("Iselda's shop: Marth added");
         }
     }
 }

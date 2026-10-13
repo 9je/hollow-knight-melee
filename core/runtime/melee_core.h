@@ -115,12 +115,12 @@ typedef struct {
 #define MC_HIT_INTANGIBLE 2
 #define MC_HIT_LATER 3       /* this pause already took 4 hits: apply it at the next one */
 int mc_apply_hit(int port, const McHit *hit);
-int mc_set_percent(int port, float percent);
+int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */
 /* A fighter's attribute (Fighter co_attrs: fp+0x110 + offset, offset 0..0x180 in 4s; e.g. 0x1C dash_initial_velocity,
  * 0x28 dash_max_velocity, 0x88 weight), for the boost charms. It holds until the fighter is spawned again (a new
  * match). 0 done, 1 no fighter, -1 error (a bad offset). */
 int mc_get_attribute(int port, uint32_t offset, float *out);
-int mc_set_attribute(int port, uint32_t offset, float value);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */
+int mc_set_attribute(int port, uint32_t offset, float value);
 /* Fox's shield bubble, read-only: Melee draws it as an effect on the fighter's shield joint, which it scales by the
  * shield's size (ftCo_80091D58). hard: Melee's lightshield_amount, 0 lightest .. 1 a full press (opaque). */
 typedef struct { uint32_t active; float x, y, radius, hard; } McShield;

@@ -52,15 +52,35 @@ namespace FoxMelee {
         public string LogicOf(string scene, string gate) => doors.TryGetValue(scene, out var l) ? l.FirstOrDefault(d => d.Gate == gate)?.Logic : null;
         public IEnumerable<string> Doors(string scene) => doors.TryGetValue(scene, out var l) ? l.Select(d => d.Gate) : Enumerable.Empty<string>();
 
-        /// The gates of `scene` to close, for a player who came in by `entryGate` with `a`.
+        static readonly KnightAbilities Everything = new KnightAbilities { Claw = true, Wings = true, Dash = true, SuperDash = true,
+            Acid = true, ShadeCloak = true, Fireball = true, Quake = true, Scream = true, DreamNail = true, Lantern = true };
+
+        /// The gates of `scene` to close, for a player who came in by `entryGate` with `a`: only those an ability `a` lacks would
+        /// open (a door the logic can't reach even with every ability is left to the game: its state lives in the save, which
+        /// the logic doesn't see, as a lever pulled or a floor broken from the other side). If that would leave no exit open,
+        /// nothing closes (never trapped).
         public List<string> Blocked(string scene, string entryGate, KnightAbilities a) {
             var none = new List<string>();
-            if (!doors.TryGetValue(scene, out var list)) return none;
-            var entry = list.FirstOrDefault(d => d.Gate == entryGate);
-            if (entry == null) return none;
-            // the room's doors and the regions (waypoints) reachable from the entrance, to a fixed point
-            var reached = new HashSet<string> { $"{scene}[{entryGate}]" };
-            var regions = new HashSet<string>();
+            if (!doors.TryGetValue(scene, out var list) || !list.Any(d => d.Gate == entryGate)) return none;
+            var withAll = new HashSet<string>(Unreachable(scene, entryGate, Everything, out _, out _));
+            var blocked = Unreachable(scene, entryGate, a, out var reached, out var regions).Where(g => !withAll.Contains(g)).ToList();
+            // a way out the Knight can actually take from here, with what you have: another exit it reaches, or back through the
+            // door it came in by, judged by that door's own requirement from inside (falling in through a top door may need
+            // wings to go back up)
+            var entry = list.First(d => d.Gate == entryGate);
+            var local = LocalRegions(scene);
+            var self = $"{scene}[{entryGate}]";
+            bool back = entry.OneWay != "OneWayIn"
+                        && Evaluate(entry.Logic, t => t == self ? false : Term(t, scene, a, reached, regions, local));
+            bool wayOut = back || list.Any(d => d.OneWay != "OneWayIn" && d.Gate != entryGate && reached.Contains($"{scene}[{d.Gate}]"));
+            return wayOut ? blocked : none;
+        }
+
+        // the room's exits (not the entrance) the Knight can't reach from it with `a`, through the logic alone
+        List<string> Unreachable(string scene, string entryGate, KnightAbilities a, out HashSet<string> reachedOut, out HashSet<string> regionsOut) {
+            var list = doors[scene];
+            var reached = reachedOut = new HashSet<string> { $"{scene}[{entryGate}]" };
+            var regions = regionsOut = new HashSet<string>();
             var local = LocalRegions(scene);
             bool grew = true;
             for (int pass = 0; grew && pass < 64; pass++) {
@@ -73,14 +93,10 @@ namespace FoxMelee {
                     if (Evaluate(d.Logic, t => Term(t, scene, a, reached, regions, local)) && reached.Add(name)) grew = true;
                 }
             }
-            // only ability gates: a door whose requirement doesn't involve one (a lever, a wall broken from the other side, a drop)
-            // is the game's own business, never walled
-            var blocked = list.Where(d => d.OneWay != "OneWayIn" && d.Gate != entryGate && !reached.Contains($"{scene}[{d.Gate}]")
-                                          && NeedsAbility(d.Logic, local, 0)).Select(d => d.Gate).ToList();
-            // never trapped: entered by a drop you can't climb back up, with every exit closed
-            bool exits = list.Any(d => d.OneWay != "OneWayIn" && d.Gate != entryGate && !blocked.Contains(d.Gate));
-            if (entry.OneWay == "OneWayIn" && !exits) return none;
-            return blocked;
+            // only ability gates: a door whose requirement doesn't involve one is the game's own business, never walled
+            var r = reached;
+            return list.Where(d => d.OneWay != "OneWayIn" && d.Gate != entryGate && !r.Contains($"{scene}[{d.Gate}]")
+                                   && NeedsAbility(d.Logic, local, 0)).Select(d => d.Gate).ToList();
         }
 
         // a term's value in this room: its doors and regions as reached so far, the Knight's abilities, the skip settings;
@@ -143,10 +159,15 @@ namespace FoxMelee {
             while (grew) {
                 grew = false;
                 foreach (var w in waypoints)
-                    if (!l.Contains(w.Key) && (w.Value.Contains(scene + "[") || l.Any(x => Mentions(w.Value, x))) && l.Add(w.Key)) grew = true;
+                    if (!l.Contains(w.Key) && !WorldState(w.Key) && (w.Value.Contains(scene + "[") || l.Any(x => Mentions(w.Value, x))) && l.Add(w.Key)) grew = true;
             }
             return localCache[scene] = l;
         }
+
+        // a state the save keeps (a floor broken, a lever pulled, a boss beaten, an NPC rescued): the logic only knows how to make
+        // it happen during this visit, the save may already have it, so it counts as passable
+        static readonly string[] StatePrefixes = { "Broke_", "Opened_", "Lever-", "Defeated_", "Rescued_", "Completed_", "Killed_", "Met_", "Upgraded_", "Hit_", "Pass_", "Activated_", "Lit_", "Unlocked_" };
+        static bool WorldState(string name) => StatePrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal));
 
         static bool Mentions(string expr, string name) {
             for (int i = expr.IndexOf(name, StringComparison.Ordinal); i >= 0; i = expr.IndexOf(name, i + 1, StringComparison.Ordinal)) {

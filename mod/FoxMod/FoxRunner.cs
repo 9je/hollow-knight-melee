@@ -69,6 +69,7 @@ namespace FoxMelee {
         static void Log(string m) => FoxMod.Instance.Log(m);
         void Fail(string why) {
             FoxMod.Instance.LogError(why);
+            GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false;   // the controller is Hollow Knight's again
             state = State.Failed;
             if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
             holdingBody = false;
@@ -89,7 +90,7 @@ namespace FoxMelee {
         };
 
         void Update() {
-            if (state == State.Failed) return;
+            if (state == State.Failed) { GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false; return; }
             var hero = HeroController.instance;
             var gm = GameManager.instance;
             var invState = gm != null && gm.inventoryFSM != null ? gm.inventoryFSM.ActiveStateName : null;
@@ -107,6 +108,7 @@ namespace FoxMelee {
                 return;
             }
             if (state == State.Waiting && !Boot()) return;
+            if (switching != null && !switching.IsCompleted) return;   // a character change is restarting the core: nothing else uses it
             var f = Flags(hero);
             LogBusy(f);
             // Loading a save or coming back from death, the Knight wakes on the ground: Fox lies there instead and gets
@@ -439,6 +441,7 @@ namespace FoxMelee {
         bool StartCore(string mem1, Character c) {
             var why = StartCoreWork(mem1, c);
             if (why != null) { Fail(why); return false; }
+            Log("character: " + c.Name);
             return true;
         }
 
@@ -447,7 +450,6 @@ namespace FoxMelee {
             var s = FoxMod.Instance.Settings;
             bool grabs = s.Grabs?.Enabled ?? false;
             if (!core.Init(mem1, s.IsoPath)) return "mc_init: " + core.Error;
-            Log("character: " + c.Name);
             if (!core.StartMatch(c.MeleeId, grabs)) return "mc_start_match: " + core.Error;
             core.SetInput(0, new McInput());
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
@@ -559,6 +561,7 @@ namespace FoxMelee {
             switching = null;
             var c = switchingTo;
             if (why != null) { Fail(why); return false; }
+            Log("character: " + c.Name);
             character = c;
             FoxMod.Instance.Settings.Character = c.Name;   // remembered once it plays
             try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
@@ -586,6 +589,8 @@ namespace FoxMelee {
             if (outlines.Count == 0) { RoomFailed(scene, "no terrain colliders"); return true; }
             ComputeGates(scene);
             outlines.AddRange(gateWalls);
+            quakeFloors.Clear();
+            foreach (var fsm in FindObjectsOfType<PlayMakerFSM>()) if (fsm.FsmName == "quake_floor") quakeFloors.Add(fsm);
             var (min, max) = RoomGeometry.Bounds(outlines);
             var s = FoxMod.Instance.Settings;
             var t = RoomTransform.ForRoom(outlines, s.WorldScale);   // the rule RoomLab uses too
@@ -612,6 +617,7 @@ namespace FoxMelee {
         // the events the dive sends, then the terrain watcher drops the floor from Melee's collision. ----
         float fastFallSpeed;
         bool slamming;
+        readonly List<PlayMakerFSM> quakeFloors = new List<PlayMakerFSM>();   // this room's, found as it is converted
         uint lastAirborne;
         void DiveFloors(HeroController hero) {
             bool landed = lastAirborne != 0 && fox.Airborne == 0;
@@ -625,8 +631,8 @@ namespace FoxMelee {
             if (PlayerData.instance.quakeLevel <= 0) return;
             var feet = (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero));
             var probe = new Bounds(feet + new Vector2(0, -0.3f), new Vector3(1.2f, 0.8f, 1f));
-            foreach (var fsm in FindObjectsOfType<PlayMakerFSM>()) {
-                if (fsm.FsmName != "quake_floor") continue;
+            foreach (var fsm in quakeFloors) {
+                if (fsm == null || fsm.FsmName != "quake_floor") continue;
                 var col = fsm.GetComponent<Collider2D>();
                 if (col == null || !col.enabled || !col.bounds.Intersects(probe)) continue;
                 Log($"dive floor {fsm.gameObject.name} broken by a fast fall (Desolate Dive owned)");

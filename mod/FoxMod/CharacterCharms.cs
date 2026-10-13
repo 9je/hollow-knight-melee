@@ -34,7 +34,11 @@ namespace FoxMelee {
                 if (f != null && (bool)f.GetValue(pd)) { f.SetValue(pd, false); changed = true; }
                 if (pd.equippedCharms != null && pd.equippedCharms.Remove(c.Charm)) changed = true;
             }
-            if (changed) { pd.CalculateNotchesUsed(); FoxMod.Instance.Log("character charms taken off (they're characters now)"); }
+            if (changed) {
+                pd.CalculateNotchesUsed();
+                pd.overcharmed = pd.charmSlotsFilled > pd.charmSlots;   // a character charm may have been what overcharmed it
+                FoxMod.Instance.Log("character charms taken off (they're characters now)");
+            }
         }
     }
 }
