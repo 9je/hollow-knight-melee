@@ -258,9 +258,9 @@ namespace FoxMelee {
             if (!f.Dead) { koLeft = -1; deathScreen.End(); return false; }
             deathScreen.Frame(Log);
             if (koLeft < 0) {
-                deathScreen.Begin(hero.transform.position);
                 bool star = koRandom.Next(StarKoOneIn) == 0;   // now and then the star KO's scream, as Melee's KOs vary
                 if (state != State.Running || room == null || !core.Ko(0, star)) { koLeft = 0; return false; }
+                deathScreen.Begin(hero.transform.position);   // only for a character's KO: the Knight's own death stays his
                 if (star) Log("KO (star)");
                 koLeft = KoFrames;
                 accumulator = 0;
@@ -447,13 +447,12 @@ namespace FoxMelee {
 
         void SwitchCharacter(HeroController hero, Character c) {
             Log($"switching to {c.Name}");
-            var s = FoxMod.Instance.Settings;
-            s.Character = c.Name;
-            try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
             combat?.ReleaseAll(); grab?.Release(); launcher?.StopAll();
             sfx?.Destroy(); sfx = null;
             if (!StartCore(Path.Combine(FoxMod.ModDir, "mem1.bin"), c)) return;
             character = c;
+            FoxMod.Instance.Settings.Character = c.Name;   // remembered once it plays
+            try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
             if (combat != null) combat.Character = c;
             gatesSet = uint.MaxValue;
             if (gx != null) { if (!core.GxCapture(true)) { Fail("mc_gx_capture: " + core.Error); return; } gx.Reset(); }

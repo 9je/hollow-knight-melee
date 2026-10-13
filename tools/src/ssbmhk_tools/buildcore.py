@@ -70,6 +70,13 @@ def sources(core: Path, gen: Path, target: str) -> list[tuple[Path, list[str]]]:
     return out
 
 
+def headers_key(core: Path, gen: Path) -> str:
+    """Every header an object may include (the runtime's, the FP emulation's, the generated ones): a change to any of
+    them rebuilds every object, as a struct layout change must."""
+    hs = sorted(core.glob("runtime/*.h")) + sorted(core.glob("gekko/*.h")) + sorted(gen.glob("*.h"))
+    return tree_hash(hs)
+
+
 def tree_hash(paths) -> str:
     h = hashlib.sha256()
     for p in sorted(paths):
@@ -101,7 +108,7 @@ def generate(iso: Path, core: Path, cache: Path) -> Path:
     gecko.write_text(codes.read_text() + (core / "runtime/online_rng.gecko").read_text())
     cfg = cache / "build.toml"
     q = lambda p: '"' + str(p).replace("\\", "/") + '"'
-    cfg.write_text(f"iso = {q(iso)}\ndecomp_dir = {q(decomp)}\n"   # the rest of DevConfig is unused here
+    cfg.write_text(encoding="utf-8", data=f"iso = {q(iso)}\ndecomp_dir = {q(decomp)}\n"   # the rest of DevConfig is unused here
                    f"playback_appimage = {q(cache)}\nnetplay_appimage = {q(cache)}\nreplay_dir = {q(cache)}\nwork_dir = {q(cache)}\n")
     if gen.exists():
         shutil.rmtree(gen)
@@ -119,7 +126,7 @@ def compile_core(core: Path, gen: Path, cache: Path, cc: list[str], target: str,
     objdir.mkdir(parents=True, exist_ok=True)
     srcs = sources(core, gen, target)
     pic = [] if target == "windows" else ["-fPIC"]
-    flags_key = " ".join(cc + CFLAGS + pic)
+    flags_key = " ".join(cc + CFLAGS + pic) + headers_key(core, gen)
     todo = []
     for src, incs in srcs:
         obj = objdir / (src.parent.name + "_" + src.stem + ".o")

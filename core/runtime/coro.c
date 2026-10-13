@@ -18,7 +18,8 @@ Coro *coro_new(void (*fn)(void *), void *arg, size_t stack) {
   if (!co) return NULL;
   co->fn = fn;
   co->arg = arg;
-  if (!(co->fiber = CreateFiber(stack, entry, co))) { free(co); return NULL; }
+  /* the stack reserved, not committed up front; its floating-point state switched with it */
+  if (!(co->fiber = CreateFiberEx(0, stack, FIBER_FLAG_FLOAT_SWITCH, entry, co))) { free(co); return NULL; }
   return co;
 }
 int coro_resume(Coro *co) {

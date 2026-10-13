@@ -28,6 +28,15 @@ namespace FoxMelee {
 
         public static bool IsItem(McHitbox b) => b.Group >= 0x80000000u;
 
+        // The follower's (Nana's) groups are tagged so they never share a victim record or a hit report with the leader's
+        // (a move's hit group is a small number, usually 0, for both climbers). Real groups never have this bit: small
+        // numbers, or an item's GObj (0x80000000-0x817FFFFF), which keeps being an item with it.
+        const uint FollowerTag = 0x40000000u;
+        public static uint FollowerGroup(uint group) => group | FollowerTag;
+        /// A tagged group back to Melee's own and its fighter (0 leader, 1 follower).
+        public static (uint group, int follower) SplitGroup(uint group) =>
+            (group & FollowerTag) != 0 ? (group & ~FollowerTag, 1) : (group, 0);
+
         /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.
         public static int HkDamage(float meleeDamage, int nailDamage) =>
             meleeDamage <= 0 ? 0 : Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0, MidpointRounding.AwayFromZero));

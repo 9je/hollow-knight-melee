@@ -233,11 +233,12 @@ namespace FoxMelee {
         /// Port 0's active hitboxes; returns the count (-1 on error).
         public int ReadHitboxes(McHitbox[] o) { Sync(); return hitboxes(0, 0, o, o.Length); }
         /// Port 0's leader (follower 0) or its follower (1: Nana)'s active hitboxes and items, from o[at]; the count.
+        McHitbox[] hitboxTmp = new McHitbox[0];
         public int ReadHitboxes(McHitbox[] o, int at, int follower) {
             Sync();
-            var tmp = new McHitbox[o.Length - at];
-            int n = hitboxes(0, follower, tmp, tmp.Length);
-            if (n > 0) Array.Copy(tmp, 0, o, at, n);
+            if (hitboxTmp.Length != o.Length - at) hitboxTmp = new McHitbox[o.Length - at];
+            int n = hitboxes(0, follower, hitboxTmp, hitboxTmp.Length);
+            if (n > 0) Array.Copy(hitboxTmp, 0, o, at, n);
             return n;
         }
         public int ReadHurtboxes(McHurtbox[] o) { Sync(); return hurtboxes(0, 0, o, o.Length); }

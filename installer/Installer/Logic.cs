@@ -115,4 +115,44 @@ namespace HkMelee.Installer {
             return new[] { "Downloads", "Documents", "Desktop", "Games", "ISOs", "Roms", "roms" }.Select(d => Path.Combine(home, d));
         }
     }
+
+    /// Folder copies that never leave a half-done result behind.
+    static class Files {
+        public static void CopyDir(string from, string to) {
+            Directory.CreateDirectory(to);
+            foreach (var d in Directory.GetDirectories(from, "*", SearchOption.AllDirectories)) Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, d)));
+            foreach (var f in Directory.GetFiles(from, "*", SearchOption.AllDirectories)) File.Copy(f, Path.Combine(to, Path.GetRelativePath(from, f)), true);
+        }
+
+        /// src copied to dst once: into dst.tmp, then renamed (an interrupted copy is redone, never taken as done). False if
+        /// dst already exists (the first backup is kept).
+        public static bool BackupOnce(string src, string dst) {
+            if (Directory.Exists(dst)) return false;
+            var tmp = dst + ".tmp";
+            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            CopyDir(src, tmp);
+            Directory.Move(tmp, dst);
+            return true;
+        }
+
+        /// target becomes a copy of source; if anything fails, target is as it was.
+        public static void Restore(string source, string target) {
+            if (!Directory.Exists(source)) throw new DirectoryNotFoundException(source);
+            var fresh = target + ".restoring";
+            var aside = target + ".uninstalling";
+            if (Directory.Exists(fresh)) Directory.Delete(fresh, true);
+            if (Directory.Exists(aside)) Directory.Delete(aside, true);
+            CopyDir(source, fresh);
+            Directory.Move(target, aside);
+            try { Directory.Move(fresh, target); }
+            catch { Directory.Move(aside, target); throw; }
+            Directory.Delete(aside, true);
+        }
+    }
+
+    static class Releases {
+        /// The newest published release (pre-releases included: the mod's releases are pre-releases for now), or null.
+        public static JsonNode Newest(string releasesJson) =>
+            (JsonNode.Parse(releasesJson) as JsonArray)?.FirstOrDefault(r => r != null && !((bool?)r["draft"] ?? false));
+    }
 }

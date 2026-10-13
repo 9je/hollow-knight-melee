@@ -45,7 +45,7 @@ namespace HkMelee.Installer {
                     : Ask("[I]nstall or update, [U]ninstall, or [Q]uit? (Enter = install) ").Trim().ToLowerInvariant();
                 if (choice == "q") return 0;
                 if (choice == "u") { Uninstall(hk); return Done(0); }
-                Install(hk, args.Contains("--install"));
+                Install(hk);
                 return Done(0);
             } catch (Exception e) {
                 Console.WriteLine();
@@ -77,7 +77,7 @@ namespace HkMelee.Installer {
 
         static bool SelfUpdate(string[] args) {
             JsonNode rel;
-            try { rel = JsonNode.Parse(Http.GetStringAsync($"https://api.github.com/repos/{Repo}/releases/latest").Result); }
+            try { rel = Releases.Newest(Http.GetStringAsync($"https://api.github.com/repos/{Repo}/releases?per_page=10").Result); }
             catch (Exception) { Console.WriteLine("(could not check for updates; going on)"); return false; }
             var tag = (string)rel?["tag_name"];
             if (tag == null || !Versions.IsNewer(tag, version)) return false;
@@ -90,9 +90,12 @@ namespace HkMelee.Installer {
             var digest = (string)asset["digest"];
             if (digest != null && digest.StartsWith("sha256:") && Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant() != digest[7..])
                 throw new Exception("the downloaded installer's checksum is wrong; try again later");
+            // the new one is written beside this one first; the swap (a running exe can be renamed) is undone if it fails
+            File.WriteAllBytes(me + ".new", bytes);
+            if (!Win) File.SetUnixFileMode(me + ".new", (UnixFileMode)0b111_101_101);
             File.Move(me, me + ".old", true);
-            File.WriteAllBytes(me, bytes);
-            if (!Win) File.SetUnixFileMode(me, (UnixFileMode)0b111_101_101);
+            try { File.Move(me + ".new", me); }
+            catch { File.Move(me + ".old", me); throw; }
             Process.Start(new ProcessStartInfo(me) { UseShellExecute = false, ArgumentList = { "--no-update" } }.WithArgs(args))?.WaitForExit();
             return true;
         }
@@ -147,17 +150,22 @@ namespace HkMelee.Installer {
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AppData", "LocalLow", "Team Cherry", "Hollow Knight")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "unity3d", "Team Cherry", "Hollow Knight"));
 
+        // the game's process: hollow_knight on Windows, hollow_knight.x86_64 on Linux (its name there is cut to 15 characters)
+        static bool GameRunning() =>
+            new[] { "hollow_knight", "hollow_knight.x86_64", "hollow_knight.x" }.Any(n => Process.GetProcessesByName(n).Length > 0);
+
         // ---- install ----
-        static void Install(string hk, bool unattended) {
-            if (Process.GetProcessesByName("hollow_knight").Length > 0) throw new Exception("Hollow Knight is running: close it first");
+        static void Install(string hk) {
+            if (GameRunning()) throw new Exception("Hollow Knight is running: close it first");
             var iso = FindIso();
             var managed = Steam.Managed(hk);
             // backups, each made once and kept
-            if (!Directory.Exists(managed + ".vanilla")) { Step("backing up the game's Managed folder (once)"); CopyDir(managed, managed + ".vanilla"); }
-            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (string.IsNullOrEmpty(docs)) docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
+            if (!Directory.Exists(managed + ".vanilla")) { Step("backing up the game's Managed folder (once)"); Files.BackupOnce(managed, managed + ".vanilla"); }
+            // ~/Documents on Linux, as mod/install.sh (the one save backup must be the same folder whichever made it)
+            var docs = Win ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                           : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
             var backup = Path.Combine(docs, "hollow-knight-save-backup");
-            if (Directory.Exists(SavesDir) && !Directory.Exists(backup)) { Step("backing up your saves to " + backup + " (once)"); CopyDir(SavesDir, backup); }
+            if (Directory.Exists(SavesDir) && !Directory.Exists(backup)) { Step("backing up your saves to " + backup + " (once)"); Files.BackupOnce(SavesDir, backup); }
             // the mod (its code, the core's sources and the build tools) from this installer's release
             var payload = Payload();
             // tools: Python and a C compiler, downloaded once
@@ -184,13 +192,12 @@ namespace HkMelee.Installer {
         }
 
         static void Uninstall(string hk) {
-            if (Process.GetProcessesByName("hollow_knight").Length > 0) throw new Exception("Hollow Knight is running: close it first");
+            if (GameRunning()) throw new Exception("Hollow Knight is running: close it first");
             var managed = Steam.Managed(hk);
             if (!Directory.Exists(managed + ".vanilla")) { Console.WriteLine("Nothing to uninstall (no Managed.vanilla backup)."); return; }
             Step("restoring the game's own files");
-            Directory.Delete(managed, true);
-            CopyDir(managed + ".vanilla", managed);
-            Console.WriteLine("Uninstalled. Your saves weren't touched.");
+            Files.Restore(managed + ".vanilla", managed);
+            Console.WriteLine("Uninstalled. Your saves weren't touched. (Other mods you added since need reinstalling.)");
         }
 
         // the release's mod.zip: mod/ (the DLLs), core/ and tools/ (sources the build needs), kept per version
@@ -261,12 +268,6 @@ namespace HkMelee.Installer {
         static void UntarXz(string txz, string dir) {   // .NET has no xz: Linux's tar does
             Directory.CreateDirectory(dir);
             Run("tar", new[] { "-xJf", txz, "-C", dir }, null);
-        }
-
-        static void CopyDir(string from, string to) {
-            Directory.CreateDirectory(to);
-            foreach (var d in Directory.GetDirectories(from, "*", SearchOption.AllDirectories)) Directory.CreateDirectory(d.Replace(from, to));
-            foreach (var f in Directory.GetFiles(from, "*", SearchOption.AllDirectories)) File.Copy(f, f.Replace(from, to), true);
         }
 
         static void Run(string exe, IEnumerable<string> args, string pythonPath) {

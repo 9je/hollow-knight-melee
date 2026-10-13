@@ -52,5 +52,45 @@ namespace HkMelee.Installer.Tests {
             Assert.False(IsoFinder.IsMelee102(f + ".missing"));
             Assert.Equal("d4e70c064cc714ba8400a849cf299dbd1aa326fc", IsoFinder.RedumpSha1);
         }
+
+        static string Dir(params (string name, string text)[] files) {
+            var d = Directory.CreateTempSubdirectory().FullName;
+            foreach (var (n, t) in files) { Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(d, n))); File.WriteAllText(Path.Combine(d, n), t); }
+            return d;
+        }
+
+        [Fact]
+        public void ABackupIsMadeOnceAndOnlyWhole() {
+            var src = Dir(("a.dll", "1"), ("sub/b.dll", "2"));
+            var dst = src + ".vanilla";
+            Directory.CreateDirectory(dst + ".tmp");                          // a copy interrupted last time
+            File.WriteAllText(Path.Combine(dst + ".tmp", "junk"), "x");
+            Assert.True(Files.BackupOnce(src, dst));
+            Assert.Equal("2", File.ReadAllText(Path.Combine(dst, "sub/b.dll")));
+            Assert.False(File.Exists(Path.Combine(dst, "junk")));
+            Assert.False(Directory.Exists(dst + ".tmp"));
+            File.WriteAllText(Path.Combine(src, "a.dll"), "modded");
+            Assert.False(Files.BackupOnce(src, dst));                        // never again: the first backup stays
+            Assert.Equal("1", File.ReadAllText(Path.Combine(dst, "a.dll")));
+        }
+
+        [Fact]
+        public void RestoringReplacesTheFolderOrLeavesItAsItWas() {
+            var vanilla = Dir(("Assembly-CSharp.dll", "vanilla"));
+            var managed = Dir(("Assembly-CSharp.dll", "api"), ("Mods/FoxMelee/FoxMod.dll", "mod"));
+            Files.Restore(vanilla, managed);
+            Assert.Equal("vanilla", File.ReadAllText(Path.Combine(managed, "Assembly-CSharp.dll")));
+            Assert.False(Directory.Exists(Path.Combine(managed, "Mods")));
+            Assert.False(Directory.Exists(managed + ".uninstalling"));
+            Assert.Throws<DirectoryNotFoundException>(() => Files.Restore(vanilla + "-missing", managed));
+            Assert.Equal("vanilla", File.ReadAllText(Path.Combine(managed, "Assembly-CSharp.dll")));   // untouched
+        }
+
+        [Fact]
+        public void TheNewestReleaseIncludesPreReleasesButNotDrafts() {
+            var json = "[{\"tag_name\":\"v0.2.9\",\"draft\":true},{\"tag_name\":\"v0.2.8\",\"prerelease\":true},{\"tag_name\":\"v0.2.7\"}]";
+            Assert.Equal("v0.2.8", (string)Releases.Newest(json)?["tag_name"]);
+            Assert.Null(Releases.Newest("[]"));
+        }
     }
 }

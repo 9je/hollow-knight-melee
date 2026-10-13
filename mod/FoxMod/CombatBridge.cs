@@ -16,7 +16,6 @@ namespace FoxMelee {
 
         readonly int mask;                     // what the nail can touch (DamageEnemies' exclusions removed too)
         readonly McHitbox[] boxes = new McHitbox[16];          // the leader's 4 hitboxes and 4 items, then Nana's
-        readonly Dictionary<uint, int> followerOf = new Dictionary<uint, int>();   // a hitbox group's fighter (1: Nana)
         readonly List<McHitbox> hurting = new List<McHitbox>(4);
         readonly HitTracker tracker = new HitTracker();
         readonly Collider2D[] found = new Collider2D[64];
@@ -68,10 +67,9 @@ namespace FoxMelee {
             int n = core.ReadHitboxes(boxes, 0, 0);
             Struck.Clear();
             if (n < 0) return false;
-            followerOf.Clear();
-            if (Character.MeleeId == IceClimbers) {   // Nana's attacks hit too (none while she is gone)
+            if (Character.MeleeId == IceClimbers) {   // Nana's attacks hit too (none while she is gone), tagged as hers
                 int m = core.ReadHitboxes(boxes, n, 1);
-                for (int i = n; i < n + Math.Max(0, m); i++) followerOf[boxes[i].Group] = 1;
+                for (int i = n; i < n + Math.Max(0, m); i++) boxes[i].Group = HitRules.FollowerGroup(boxes[i].Group);
                 if (m > 0) n += m;
             }
             hurting.Clear();
@@ -90,7 +88,7 @@ namespace FoxMelee {
             this.core = core;
             real.Clear();
             foreach (var h in hits) Land(h, nail);
-            foreach (var (group, damage) in HitTracker.Reports(real)) core.ReportHit(group, damage, followerOf.TryGetValue(group, out int fo) ? fo : 0);   // 1 = it just ended: harmless
+            foreach (var (tagged, damage) in HitTracker.Reports(real)) { var (group, fo) = HitRules.SplitGroup(tagged); core.ReportHit(group, damage, fo); }   // 1 = it just ended: harmless
             return true;
         }
 

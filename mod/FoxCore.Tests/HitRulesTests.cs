@@ -114,5 +114,17 @@ namespace FoxMelee.Tests {
             Assert.False(HitRules.HurtsEnemiesDuring(punch, 0xD9, Roster.Fox));   // the pummel, for everyone
             Assert.All(Roster.All, r => Assert.NotNull(r.NonAttackActions));
         }
+
+        [Theory]
+        [InlineData(0u)]
+        [InlineData(3u)]
+        [InlineData(0x80451234u)]   // an item's group (its GObj)
+        public void NanasGroupsAreHerOwn(uint group) {
+            uint nana = HitRules.FollowerGroup(group);
+            Assert.NotEqual(group, nana);                                      // Popo's group 0 and Nana's group 0 differ
+            Assert.Equal(HitRules.IsItem(new McHitbox { Group = group }), HitRules.IsItem(new McHitbox { Group = nana }));
+            Assert.Equal((group, 1), HitRules.SplitGroup(nana));
+            Assert.Equal((group, 0), HitRules.SplitGroup(group));
+        }
     }
 }

@@ -10,10 +10,13 @@ namespace FoxMelee {
         const float Seconds = 4f, Radius = 8f;   // Hollow Knight units
         readonly HashSet<int> before = new HashSet<int>();
         readonly HashSet<int> handled = new HashSet<int>();
+        readonly List<Renderer> hidden = new List<Renderer>();   // put back by End: pooled objects are reused later
+        readonly List<AudioSource> muted = new List<AudioSource>();
         float started = -1;
         Vector2 at;
 
         public void Begin(Vector2 where) {
+            End();
             before.Clear(); handled.Clear();
             foreach (var r in Object.FindObjectsOfType<Renderer>()) before.Add(r.GetInstanceID());
             foreach (var a in Object.FindObjectsOfType<AudioSource>()) before.Add(a.GetInstanceID());
@@ -21,7 +24,14 @@ namespace FoxMelee {
             at = where;
         }
 
-        public void End() => started = -1;
+        /// The death is over: what was hidden or muted is put back (Hollow Knight pools and reuses these objects).
+        public void End() {
+            if (started < 0) return;
+            started = -1;
+            foreach (var r in hidden) if (r != null) r.forceRenderingOff = false;
+            foreach (var a in muted) if (a != null) a.mute = false;
+            hidden.Clear(); muted.Clear();
+        }
 
         /// Each frame of a death.
         public void Frame(System.Action<string> log) {
@@ -32,13 +42,16 @@ namespace FoxMelee {
                 if (!r.enabled || ((Vector2)r.bounds.center - at).magnitude > Radius) continue;
                 handled.Add(id);
                 r.forceRenderingOff = true;
+                hidden.Add(r);
                 log("death: hid " + Path(r.transform));
             }
             foreach (var a in Object.FindObjectsOfType<AudioSource>()) {
                 int id = a.GetInstanceID();
                 if (before.Contains(id) || handled.Contains(id) || Ours(a.gameObject) || !a.isPlaying) continue;
+                if (((Vector2)a.transform.position - at).magnitude > Radius) continue;
                 handled.Add(id);
                 a.mute = true;
+                muted.Add(a);
                 log("death: muted " + Path(a.transform) + (a.clip != null ? " (" + a.clip.name + ")" : ""));
             }
         }
