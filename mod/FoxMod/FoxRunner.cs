@@ -179,7 +179,7 @@ namespace FoxMelee {
                     if (!lying || !neutral) getUp = false;   // a roll, a get-up attack: Melee's own options
                     else if (fox.Action == ActionDownWaitU || fox.Action == ActionDownWaitD) { input = new McInput { StickY = 127 }; getUp = false; }
                 }
-                if (!Gate()) return;
+                if (!Gate() || !Boosts()) return;
                 if (grab != null && !grab.Before(core, room, (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero)))) { Fail("stand-in: " + core.Error); return; }
                 if (combat != null) combat.Held = grab?.Held;
                 core.SetInput(0, input);
@@ -338,7 +338,7 @@ namespace FoxMelee {
                 else { pd.TakeMP(focusDrain); GameCameras.instance.soulOrbFSM.SendEvent("MP SET"); }
                 focusDrain = 0;
             }
-            if (step.Heal) { hero.AddHealth(1); focusSound.Heal(); }   // Focus heals (and percent follows the masks back down)
+            if (step.Heal) { hero.AddHealth(focusMasks); focusSound.Heal(); }   // Focus heals (Deep Focus: two masks); percent follows the masks
             focusSound.Charging(step.Focusing);
             focusEffects.Focusing(hero, step.Focusing);
             if (step.Heal) focusEffects.Healed(hero);
@@ -412,8 +412,38 @@ namespace FoxMelee {
             for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
             if (!core.SetEdgeAssist(s.EdgeAssist)) { Fail("mc_set_edge_assist: " + core.Error); return false; }
             if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
+            // the attributes the boost charms change, as this character's match starts
+            if (!core.GetAttribute(0, AttrDash, out float dash) || !core.GetAttribute(0, AttrRun, out float run) || !core.GetAttribute(0, AttrWeight, out float weight)) {
+                Fail("mc_get_attribute: " + core.Error); return false;
+            }
+            fighterBase = new FighterBase(dash, run, weight);
+            boostsSet = -1;
             return true;
         }
+
+        // ---- the boost charms (BoostCharms): set when what's equipped changes ----
+        const uint AttrDash = 0x1C, AttrRun = 0x28, AttrWeight = 0x88;
+        FighterBase fighterBase;
+        int boostsSet = -1, focusSet = -1;
+        bool Boosts() {
+            var pd = PlayerData.instance;
+            bool sprint = pd.equippedCharm_37, steady = pd.equippedCharm_14, deep = pd.equippedCharm_34;
+            int key = (sprint ? 1 : 0) | (steady ? 2 : 0);
+            if (key != boostsSet) {
+                var (dash, run, weight) = BoostCharms.Attributes(fighterBase, sprint, steady);
+                if (!core.SetAttribute(0, AttrDash, dash) || !core.SetAttribute(0, AttrRun, run) || !core.SetAttribute(0, AttrWeight, weight)) { Fail("mc_set_attribute: " + core.Error); return false; }
+                boostsSet = key;
+                Log($"boost charms: Sprintmaster {sprint}, Steady Body {steady}");
+            }
+            if ((deep ? 1 : 0) != focusSet) {
+                focusSet = deep ? 1 : 0;
+                var (frames, masks) = BoostCharms.Focus(Math.Max(1, (int)Math.Round(FoxMod.Instance.Settings.FocusSeconds * 60)), deep);
+                focus = new FocusRules(frames, 33);
+                focusMasks = masks;
+            }
+            return true;
+        }
+        int focusMasks = 1;
 
         // ---- choosing a character at a bench: D-pad up (keyboard T) opens Melee's character select (CharacterSelect); stick or
         // D-pad moves, A (keyboard J or Enter) plays the character, B (keyboard K or Escape) closes. While it is open the

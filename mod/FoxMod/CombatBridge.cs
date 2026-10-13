@@ -222,7 +222,7 @@ namespace FoxMelee {
             HitTaker.Hit(target.gameObject, new HitInstance {
                 Source = strike,
                 AttackType = AttackTypes.Nail,    // Soul and nail effects, as the nail gives
-                DamageDealt = HitRules.HkDamage(h.Box.Damage, nail),
+                DamageDealt = HitRules.HkDamage(h.Box.Damage, nail, BoostCharms.DamageScale(PlayerData.instance.equippedCharm_25)),
                 Direction = direction,
                 Multiplier = 1f,
                 MagnitudeMultiplier = 1f,

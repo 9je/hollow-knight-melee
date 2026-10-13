@@ -106,7 +106,7 @@ namespace FoxMelee {
             strike.transform.position = new Vector3(foxX, hm.transform.position.y, 0f);
             HitTaker.Hit(hm.gameObject, new HitInstance {
                 Source = strike, AttackType = AttackTypes.Nail,
-                DamageDealt = HitRules.HkDamage(percent, PlayerData.instance.GetInt("nailDamage")),
+                DamageDealt = HitRules.HkDamage(percent, PlayerData.instance.GetInt("nailDamage"), BoostCharms.DamageScale(PlayerData.instance.equippedCharm_25)),
                 Direction = direction, Multiplier = 1f, MagnitudeMultiplier = 1f,
             });
         }

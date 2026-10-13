@@ -38,8 +38,8 @@ namespace FoxMelee {
             (group & FollowerTag) != 0 ? (group & ~FollowerTag, 1) : (group, 0);
 
         /// melee_damage × (nail damage / 5), at least 1 for any damaging hit.
-        public static int HkDamage(float meleeDamage, int nailDamage) =>
-            meleeDamage <= 0 ? 0 : Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0, MidpointRounding.AwayFromZero));
+        public static int HkDamage(float meleeDamage, int nailDamage, double scale = 1.0) =>
+            meleeDamage <= 0 ? 0 : Math.Max(1, (int)Math.Round(meleeDamage * nailDamage / 5.0 * scale, MidpointRounding.AwayFromZero));
 
         /// The launch angle as Hollow Knight's attack direction (degrees, 0 = right, counter-clockwise). As in Melee
         /// (ftColl_8007A06C) the victim goes away from Fox: mirrored when it is left of him (or level with him).

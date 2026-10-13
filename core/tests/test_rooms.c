@@ -974,6 +974,27 @@ static void test_nana_follows(void) {
   mc_shutdown();
 }
 
+/* mc_get/set_attribute: a fighter's attribute (Fighter co_attrs, fp+0x110 + offset); Sprintmaster's faster run (dash_max_velocity
+ * x1.1) makes a run cover more ground; anything outside the attributes is refused */
+static float run_distance(float scale) {
+  McInput idle = {0}, run = {0};
+  run.stick_x = 127;
+  solo_fox(); steps(180, &idle);
+  float base;
+  CHECK(mc_get_attribute(0, 0x28, &base) == 0 && base > 1.0f);   /* dash_max_velocity */
+  CHECK(mc_set_attribute(0, 0x28, base * scale) == 0);
+  float x0 = fox().x;
+  steps(60, &run);
+  float d = fox().x - x0;
+  CHECK(mc_set_attribute(0, 0x400, 1.0f) == -1 && mc_get_attribute(0, 0x2, &base) == -1);   /* past the attributes; unaligned */
+  mc_shutdown();
+  return d;
+}
+static void test_attributes(void) {
+  float normal = run_distance(1.0f), fast = run_distance(1.1f);
+  CHECK(fast > normal * 1.05f);
+}
+
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
 static void test_standin_wake_keeps_percent(void) {
   McInput idle = {0};
@@ -1122,6 +1143,7 @@ int main(int argc, char **argv) {
   test_ko();
   test_character_start();
   test_nana_follows();
+  test_attributes();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

@@ -583,6 +583,31 @@ int mc_ko(int port, int star) {
   return 0;
 }
 
+#define ATTRS 0x110u
+#define ATTRS_SIZE 0x184u   /* ftCo_DatAttrs: fp+0x110 to fp+0x294 */
+static int attr_at(int port, uint32_t offset, uint32_t *ea) {
+  Machine *m = g_m;
+  if (!m || m->dead || port < 0 || port > 3 || (offset & 3u) || offset >= ATTRS_SIZE) {
+    if (m) snprintf(m->error, sizeof m->error, "attribute offset %#x: must be 0..%#x in 4s", offset, ATTRS_SIZE - 4);
+    return -1;
+  }
+  uint32_t fp = fighter_at(&m->cpu, port, 0);
+  if (!fp) return 1;
+  *ea = fp + ATTRS + offset;
+  return 0;
+}
+int mc_get_attribute(int port, uint32_t offset, float *out) {
+  uint32_t ea; int rc = attr_at(port, offset, &ea);
+  if (rc == 0) *out = f32at(&g_m->cpu, ea);
+  return rc;
+}
+int mc_set_attribute(int port, uint32_t offset, float value) {
+  if (!isfinite(value)) return -1;
+  uint32_t ea; int rc = attr_at(port, offset, &ea);
+  if (rc == 0) stf32(&g_m->cpu, ea, value);
+  return rc;
+}
+
 int mc_set_percent(int port, float percent) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3 || !isfinite(percent)) return -1;
