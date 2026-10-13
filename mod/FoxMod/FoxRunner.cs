@@ -135,6 +135,7 @@ namespace FoxMelee {
                 return;
             }
             if (switching != null && !FinishSwitch(hero)) return;   // a character change still loading
+            if (gatesKey >= 0 && AbilitiesKey(Abilities()) != gatesKey) { Log("abilities changed: the room's gates again"); session.ForgetRoom(); return; }
             if (!WatchTerrain(gm.sceneName)) return;
             grid = null; GcInput.HoldFromHollow = false;   // the character moves: no character select holds the controller
             if (needPlace && waking) {            // Fox already lies where the Knight woke: he gets up from there
@@ -548,6 +549,8 @@ namespace FoxMelee {
             terrainSet.Changed(Ids(terrain));
             var outlines = Outlines(terrain);
             if (outlines.Count == 0) { RoomFailed(scene, "no terrain colliders"); return true; }
+            ComputeGates(scene);
+            outlines.AddRange(gateWalls);
             var (min, max) = RoomGeometry.Bounds(outlines);
             var s = FoxMod.Instance.Settings;
             var t = RoomTransform.ForRoom(outlines, s.WorldScale);   // the rule RoomLab uses too
@@ -567,6 +570,61 @@ namespace FoxMelee {
             needPlace = true;
             Log($"{scene}: {shapes.Count} shapes from {outlines.Count} colliders");
             return true;
+        }
+
+        // ---- Hollow Knight's ability gates (GateLogic, spec §4): a door the Knight couldn't reach from the one you came in by,
+        // with the abilities you have, is closed: a wall across an exit, a house door's trigger off. Setting AbilityGates. ----
+        GateLogic gateLogic;
+        bool gateLogicTried;
+        readonly List<ColliderOutline> gateWalls = new List<ColliderOutline>();
+        readonly List<Collider2D> gateDoorsOff = new List<Collider2D>();
+        int gatesKey = -1;
+
+        static KnightAbilities Abilities() {
+            var pd = PlayerData.instance;
+            return new KnightAbilities {
+                Claw = pd.hasWalljump, Wings = pd.hasDoubleJump, Dash = pd.hasDash, SuperDash = pd.hasSuperDash, Acid = pd.hasAcidArmour,
+                ShadeCloak = pd.hasShadowDash, Fireball = pd.fireballLevel > 0, Quake = pd.quakeLevel > 0, Scream = pd.screamLevel > 0,
+                DreamNail = pd.hasDreamNail, Lantern = pd.hasLantern,
+            };
+        }
+
+        static int AbilitiesKey(KnightAbilities a) =>
+            (a.Claw ? 1 : 0) | (a.Wings ? 2 : 0) | (a.Dash ? 4 : 0) | (a.SuperDash ? 8 : 0) | (a.Acid ? 16 : 0) | (a.ShadeCloak ? 32 : 0)
+            | (a.Fireball ? 64 : 0) | (a.Quake ? 128 : 0) | (a.Scream ? 256 : 0) | (a.DreamNail ? 512 : 0) | (a.Lantern ? 1024 : 0);
+
+        void ComputeGates(string scene) {
+            gateWalls.Clear();
+            foreach (var c in gateDoorsOff) if (c != null) c.enabled = true;
+            gateDoorsOff.Clear();
+            gatesKey = -1;
+            if (!FoxMod.Instance.Settings.AbilityGates) return;
+            if (!gateLogicTried) {
+                gateLogicTried = true;
+                try { gateLogic = GateLogic.Load(); } catch (Exception e) { FoxMod.Instance.LogWarn("ability gates off: " + e.Message); }
+            }
+            if (gateLogic == null) return;
+            var a = Abilities();
+            gatesKey = AbilitiesKey(a);
+            var entry = GameManager.instance.entryGateName ?? "";
+            var blocked = gateLogic.Blocked(scene, entry, a);
+            if (blocked.Count == 0) return;
+            var closed = new List<string>();
+            foreach (var tp in FindObjectsOfType<TransitionPoint>()) {
+                var name = tp.gameObject.name;
+                if (!blocked.Contains(name)) continue;
+                var col = tp.GetComponent<Collider2D>();
+                if (col == null) continue;
+                if (name.StartsWith("door")) { col.enabled = false; gateDoorsOff.Add(col); }   // entered by pressing up: no wall
+                else {
+                    var b = col.bounds;
+                    gateWalls.Add(new ColliderOutline { Points = new[] {
+                        new V2(b.min.x, b.min.y), new V2(b.max.x, b.min.y), new V2(b.max.x, b.max.y), new V2(b.min.x, b.max.y) } });
+                }
+                closed.Add(name);
+                Log($"gate: {scene}[{name}] closed, came in by {(entry == "" ? "no door" : entry)}; needs: {gateLogic.LogicOf(scene, name)}");
+            }
+            if (closed.Count > 0) Log($"gates in {scene}: {string.Join(", ", closed)} closed (the way you came is always open)");
         }
 
         static bool LiveTerrain(Collider2D c) =>
@@ -613,6 +671,7 @@ namespace FoxMelee {
             } else movingLogged = false;
             var outlines = Outlines(terrain);
             if (outlines.Count == 0) return true;   // keep what Melee has
+            outlines.AddRange(gateWalls);
             var shapes = RoomGeometry.Build(outlines, room);
             if (!core.BuildCollision(shapes, out var col)) { FoxMod.Instance.LogWarn($"{scene}: changed terrain not converted ({core.Error}); keeping the old collision"); return true; }
             if (!core.LoadCollision(col)) { Fail($"{scene}: mc_load_collision: {core.Error}"); return false; }

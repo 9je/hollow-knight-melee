@@ -18,6 +18,7 @@ namespace FoxMelee {
         public EnemyHitTuning EnemyHits = new EnemyHitTuning();   // how a Hollow Knight hit becomes a Melee hit
         public bool DrawOffThread = true;           // Melee's drawing (3/4 of its frame) runs on the core's thread while Unity goes on
         public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
+        public bool AbilityGates = true;            // doors the Knight couldn't reach without an ability you lack are closed (GateLogic)
         public bool UnlockAllCharacters = false;    // every character at the bench, without their charms (testing)
         public string Character = "Fox";           // a Melee character's name (Roster): who plays until the bench select exists
         public KnockbackTuning Knockback = new KnockbackTuning();   // Fox's hits launch small enemies with Melee's knockback and hitstun

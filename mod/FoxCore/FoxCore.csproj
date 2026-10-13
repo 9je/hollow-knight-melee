@@ -10,4 +10,9 @@
   <ItemGroup>
     <PackageReference Include="Clipper2" Version="1.4.0" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/transitions.json" LogicalName="transitions.json" />
+    <EmbeddedResource Include="Data/waypoints.json" LogicalName="waypoints.json" />
+    <EmbeddedResource Include="Data/macros.json" LogicalName="macros.json" />
+  </ItemGroup>
 </Project>
