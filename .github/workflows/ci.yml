@@ -50,8 +50,39 @@ jobs:
           dotnet test mod/FoxCore.Tests -nologo
           dotnet test installer/Installer.Tests -nologo
 
+  windows:
+    # the core's runtime built with the same pinned zig the installer uses, on Windows itself; its floating-point and
+    # runtime tests run there (the generated Melee code needs the ISO: verified under wine on the developer's machine)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Zig (pinned)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://ziglang.org/download/0.14.1/zig-x86_64-windows-0.14.1.zip -OutFile zig.zip
+          $h = (Get-FileHash zig.zip -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne "554f5378228923ffd558eac35e21af020c73789d87afeabf4bfd16f2e6feed2c") { throw "zig checksum $h" }
+          Expand-Archive zig.zip -DestinationPath .
+      - name: Core tests on Windows (zig cc)
+        shell: bash
+        run: |
+          ZIG="$PWD/zig-x86_64-windows-0.14.1/zig.exe"
+          CF="-O2 -std=c11 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing -w"
+          cd core
+          "$ZIG" cc -target x86_64-windows-gnu $CF -Igekko -Iruntime tests/test_cpu.c runtime/test_hooks.c gekko/gekko_fp.c gekko/soft_fma.c -o test_cpu.exe
+          ./test_cpu.exe
+          "$ZIG" cc -target x86_64-windows-gnu $CF -Igekko -Iruntime tests/test_runtime.c runtime/hw.c runtime/coro.c runtime/gx.c runtime/gx_tex.c runtime/gx_draw.c gekko/gekko_fp.c gekko/soft_fma.c -o test_runtime.exe
+          ./test_runtime.exe
+          "$ZIG" cc -target x86_64-windows-gnu $CF -Igekko -Iruntime tests/test_room.c runtime/room_check.c runtime/room_build.c -o test_room.exe
+          ./test_room.exe
+      - name: Installer tests on Windows
+        run: dotnet test installer/Installer.Tests -nologo
+
   release:
-    needs: test
+    needs: [test, windows]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     env:
