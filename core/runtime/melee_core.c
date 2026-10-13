@@ -185,9 +185,10 @@ int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t f
   return 0;
 }
 
-/* Solo Fox on Final Destination: an untimed time match (one-player stock matches end at once).
- * Rules bytes as Slippi records them for a 4-stock FD match, with match_kind = time, timer off. */
-void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
+/* A solo match on Final Destination: an untimed time match (one-player stock matches end at once). Rules bytes as
+ * Slippi records them for a 4-stock FD match, with match_kind = time, timer off. Port 0 plays `character` (Melee's
+ * external id, 0..25: 2 Fox, 9 Marth, ...). */
+void mc_solo_start(uint8_t out[MC_START_SIZE], int character) {
   static const char rules[] =
       "1001 8e4c c300 0000 0000 00ff ff6e 0020 0000 01e0 0000 0000 0000 0000 0000 0000"
       "ffff fff8 0000 000f 0000 0000 3f80 0000 3f80 0000 3f80 0000 0000 0000 0000 0000";
@@ -207,14 +208,18 @@ void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) {
     const char *h = i == 0 ? fox : i < 4 ? none : none45;
     for (int j = 0; j < 0x24; j++) { unsigned v; sscanf(h + 2 * j, "%2x", &v); out[0x60 + 0x24 * i + j] = (uint8_t)v; }
   }
+  out[0x60] = (uint8_t)character;
 }
+void mc_solo_fox_start(uint8_t out[MC_START_SIZE]) { mc_solo_start(out, 2); }
 
-/* plan 7: Fox at port 0 and a second Fox at port 1 (the stand-in, mc_standin_set) */
-void mc_fox_standin_start(uint8_t out[MC_START_SIZE]) {
-  mc_solo_fox_start(out);
+/* plan 7: `character` at port 0 and the stand-in, always a Fox (its own costume), at port 1 (mc_standin_set) */
+void mc_standin_start(uint8_t out[MC_START_SIZE], int character) {
+  mc_solo_start(out, 2);
   memcpy(out + 0x60 + 0x24, out + 0x60, 0x24);
-  out[0x60 + 0x24 + 3] = 1;   /* its own costume slot */
+  out[0x60 + 0x24 + 3] = 1;
+  out[0x60] = (uint8_t)character;
 }
+void mc_fox_standin_start(uint8_t out[MC_START_SIZE]) { mc_standin_start(out, 2); }
 
 static float f32at(Cpu *c, uint32_t ea) { uint32_t v = ld32(c, ea); float f; memcpy(&f, &v, 4); return f; }
 static void stf32(Cpu *c, uint32_t ea, float f) { uint32_t v; memcpy(&v, &f, 4); st32(c, ea, v); }

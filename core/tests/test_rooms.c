@@ -892,6 +892,47 @@ static void test_ko(void) {
   mc_shutdown();
 }
 
+/* Every Melee character starts and runs its moves (specials included) in a room-free match; with the stand-in, port 0
+ * is the character and port 1 is Fox. Zelda's down-B with MC_GATE_SPECIAL_LW locked does not transform her. */
+static void test_character_start(void) {
+  McInput seq[] = { {0}, {.buttons = 0x0100}, {0}, {.buttons = 0x0200}, {0}, {.buttons = 0x0200, .stick_x = 127}, {0},
+                    {.buttons = 0x0800}, {.buttons = 0x0200, .stick_y = 127}, {0}, {.buttons = 0x0200, .stick_y = -127}, {0},
+                    {.stick_x = 127}, {.cstick_x = 127}, {0} };
+  for (int id = 0; id <= 25; id++) {
+    uint8_t start[MC_START_SIZE];
+    CHECK(mc_init(g_mem1, g_iso) == 0);
+    mc_standin_start(start, id);
+    CHECK(start[0x60] == id && start[0x60 + 0x24] == 2);
+    CHECK(mc_start_match(start, 1, 0) == 0);
+    for (int p = 2; p < 4; p++) mc_set_input(p, NULL);
+    McInput idle = {0};
+    mc_set_input(1, &idle);
+    steps(180, &idle);
+    for (unsigned s = 0; s < sizeof seq / sizeof seq[0]; s++) steps(40, &seq[s]);
+    uint32_t fp0 = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2C), fp1 = mc_peek32(mc_peek32(0x80453080u + 0xE90u + 0xB0u) + 0x2C);
+    CHECK(mc_peek32(fp1 + 4) == 1);   /* Fighter.kind: internal id 1 = Fox */
+    (void)fp0;
+    mc_shutdown();
+  }
+  /* Zelda (external 18): down-B is her transform (an action >= 341); locked, it never starts */
+  for (int locked = 0; locked < 2; locked++) {
+    uint8_t start[MC_START_SIZE];
+    CHECK(mc_init(g_mem1, g_iso) == 0);
+    mc_solo_start(start, 18);
+    CHECK(mc_start_match(start, 1, 0) == 0);
+    for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+    McInput idle = {0}, downb = {.buttons = 0x0200, .stick_y = -127};
+    steps(180, &idle);
+    CHECK(mc_set_gates(0, locked ? MC_GATE_SPECIAL_LW : 0) == 0);
+    steps(2, &idle);
+    int special = 0;
+    steps(1, &downb);
+    for (int i = 0; i < 60; i++) { steps(1, &idle); special |= fox().action >= 341; }
+    CHECK(special == !locked);
+    mc_shutdown();
+  }
+}
+
 /* the percent the host sets alongside a wake holds on the wake frame (Fighter_Spawn reloads it from the player block) */
 static void test_standin_wake_keeps_percent(void) {
   McInput idle = {0};
@@ -1037,6 +1078,7 @@ int main(int argc, char **argv) {
   test_edge_assist();
   test_edge_assist_steps();
   test_ko();
+  test_character_start();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

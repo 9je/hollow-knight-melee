@@ -45,6 +45,8 @@ void mc_set_input(int port, const McInput *in);     /* NULL = no controller */
 #define MC_ONLINE_RNG 1u   /* flags: replay a Slippi online match (its per-frame RNG sync, seeded by `seed`) */
 int mc_start_match(const uint8_t start[MC_START_SIZE], uint32_t seed, uint32_t flags);
 void mc_solo_fox_start(uint8_t out[MC_START_SIZE]);
+void mc_solo_start(uint8_t out[MC_START_SIZE], int character);      /* Melee external id 0..25 at port 0 */
+void mc_standin_start(uint8_t out[MC_START_SIZE], int character);   /* plus a Fox stand-in at port 1 */
 /* Edge assist (a deviation from Melee, off by default): port 0's walk stops at a floor's edge (Ottotto) whatever the
  * stick's tilt, as Melee's walk does below 75% tilt. Dash, run and air movement still go off edges. */
 int mc_set_edge_assist(int on);
