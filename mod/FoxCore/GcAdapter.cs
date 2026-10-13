@@ -82,18 +82,39 @@ namespace FoxMelee {
     /// Reads the adapter over libusb on its own thread, as Slippi Dolphin does (the kernel's HID driver is detached
     /// while the game runs). Latest() returns the newest report; null while no adapter is open.
     public sealed class GcAdapter : IDisposable {
-        const string Lib = "libusb-1.0.so.0";
         const ushort Vendor = 0x057E, Product = 0x0337;
         const byte EndpointIn = 0x81, EndpointOut = 0x02;
 
-        [DllImport(Lib)] static extern int libusb_init(out IntPtr ctx);
-        [DllImport(Lib)] static extern void libusb_exit(IntPtr ctx);
-        [DllImport(Lib)] static extern IntPtr libusb_open_device_with_vid_pid(IntPtr ctx, ushort vendor, ushort product);
-        [DllImport(Lib)] static extern int libusb_set_auto_detach_kernel_driver(IntPtr handle, int enable);
-        [DllImport(Lib)] static extern int libusb_claim_interface(IntPtr handle, int iface);
-        [DllImport(Lib)] static extern int libusb_release_interface(IntPtr handle, int iface);
-        [DllImport(Lib)] static extern void libusb_close(IntPtr handle);
-        [DllImport(Lib)] static extern int libusb_interrupt_transfer(IntPtr handle, byte endpoint, byte[] data, int length, out int transferred, uint timeoutMs);
+        // libusb, loaded at Start: Linux's system one (libusb-1.0.so.0), Windows' from the mod's folder (libusb-1.0.dll)
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int InitFn(out IntPtr ctx);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void ExitFn(IntPtr ctx);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate IntPtr OpenFn(IntPtr ctx, ushort vendor, ushort product);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HandleIntFn(IntPtr handle, int value);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void CloseFn(IntPtr handle);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int TransferFn(IntPtr handle, byte endpoint, byte[] data, int length, out int transferred, uint timeoutMs);
+        InitFn libusb_init; ExitFn libusb_exit; OpenFn libusb_open_device_with_vid_pid; CloseFn libusb_close;
+        HandleIntFn libusb_set_auto_detach_kernel_driver, libusb_claim_interface, libusb_release_interface;
+        TransferFn libusb_interrupt_transfer;
+        readonly string libPath;
+
+        /// libPath: libusb to load (default: the system's libusb-1.0.so.0).
+        public GcAdapter(string libPath = "libusb-1.0.so.0") { this.libPath = libPath; }
+
+        bool Load() {
+            var lib = NativeLib.Open(libPath, out string error);
+            if (lib == IntPtr.Zero) { Status = "libusb not found: " + error; return false; }
+            try {
+                libusb_init = NativeLib.Symbol<InitFn>(lib, "libusb_init");
+                libusb_exit = NativeLib.Symbol<ExitFn>(lib, "libusb_exit");
+                libusb_open_device_with_vid_pid = NativeLib.Symbol<OpenFn>(lib, "libusb_open_device_with_vid_pid");
+                libusb_set_auto_detach_kernel_driver = NativeLib.Symbol<HandleIntFn>(lib, "libusb_set_auto_detach_kernel_driver");
+                libusb_claim_interface = NativeLib.Symbol<HandleIntFn>(lib, "libusb_claim_interface");
+                libusb_release_interface = NativeLib.Symbol<HandleIntFn>(lib, "libusb_release_interface");
+                libusb_close = NativeLib.Symbol<CloseFn>(lib, "libusb_close");
+                libusb_interrupt_transfer = NativeLib.Symbol<TransferFn>(lib, "libusb_interrupt_transfer");
+            } catch (MeleeCoreException e) { Status = "libusb: " + e.Message; return false; }
+            return true;
+        }
 
         readonly object gate = new object();
         readonly byte[] latest = new byte[GcAdapterReport.Size];
@@ -106,8 +127,8 @@ namespace FoxMelee {
 
         /// Starts the reader; false (with Status saying why) when libusb is missing.
         public bool Start() {
-            try { if (libusb_init(out ctx) != 0) { Status = "libusb_init failed"; return false; } }
-            catch (Exception e) when (e is DllNotFoundException || e is EntryPointNotFoundException) { Status = "libusb not found: " + e.Message; return false; }
+            if (!Load()) return false;
+            if (libusb_init(out ctx) != 0) { Status = "libusb_init failed"; return false; }
             thread = new Thread(Run) { IsBackground = true, Name = "GC adapter" };
             thread.Start();
             return true;
@@ -121,7 +142,7 @@ namespace FoxMelee {
             var buf = new byte[GcAdapterReport.Size];
             while (!stop) {
                 var h = libusb_open_device_with_vid_pid(ctx, Vendor, Product);
-                if (h == IntPtr.Zero) { Status = "no GameCube adapter (or no permission: udev rule for 057e:0337)"; Thread.Sleep(1000); continue; }
+                if (h == IntPtr.Zero) { Status = Environment.OSVersion.Platform == PlatformID.Win32NT ? "no GameCube adapter (or its WinUSB driver is not installed: Zadig)" : "no GameCube adapter (or no permission: udev rule for 057e:0337)"; Thread.Sleep(1000); continue; }
                 libusb_set_auto_detach_kernel_driver(h, 1);
                 int rc = libusb_claim_interface(h, 0);
                 if (rc != 0) { Status = $"cannot claim the adapter ({rc}): is Dolphin using it?"; libusb_close(h); Thread.Sleep(1000); continue; }

@@ -6,7 +6,8 @@ namespace FoxMelee {
     /// Fox gets its values unmapped (Melee sees what a GameCube would give it); Hollow Knight sees the same controller
     /// as an InControl device for its menus, pausing (Start) and any room played as the Knight.
     sealed class GcInput {
-        readonly GcAdapter adapter = new GcAdapter();
+        readonly GcAdapter adapter = new GcAdapter(System.Environment.OSVersion.Platform == System.PlatformID.Win32NT
+            ? System.IO.Path.Combine(FoxMod.ModDir, "libusb-1.0.dll") : "libusb-1.0.so.0");
         readonly GcPads pads = new GcPads();
         readonly int port;
         string lastStatus;

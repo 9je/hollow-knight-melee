@@ -71,6 +71,28 @@ static inline double ni_div(double a, double b) { double r = a / b; return isnan
  * at load time; libm's otherwise */
 #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
 #define FMA_CLONES __attribute__((target_clones("fma", "default")))
+#elif defined(_WIN32) && defined(__x86_64__)
+/* Windows (zig cc / clang: no target_clones on PE): the FMA instruction when the CPU and OS have it (CPUID FMA, AVX and
+ * OSXSAVE, and XGETBV's SSE/AVX state), checked once; else musl's exactly rounded software fma (soft_fma.c), as MinGW's
+ * fma isn't known to round exactly */
+#include <cpuid.h>
+#define FMA_CLONES
+double gekko_soft_fma(double x, double y, double z);
+__attribute__((target("fma"))) static double hw_fma(double a, double b, double c) { return __builtin_fma(a, b, c); }
+static int cpu_fma = -1;
+static int has_fma(void) {
+  unsigned a, b, c, d;
+  if (!__get_cpuid(1, &a, &b, &c, &d)) return 0;
+  if (!(c & (1u << 12)) || !(c & (1u << 27)) || !(c & (1u << 28))) return 0;   /* FMA, OSXSAVE, AVX */
+  unsigned lo, hi;
+  __asm__ volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+  return (lo & 6u) == 6u;                                                      /* the OS saves XMM and YMM state */
+}
+static inline double win_fma(double a, double b, double c) {
+  if (cpu_fma < 0) cpu_fma = has_fma();
+  return cpu_fma ? hw_fma(a, b, c) : gekko_soft_fma(a, b, c);
+}
+#define fma win_fma
 #else
 #define FMA_CLONES
 #endif

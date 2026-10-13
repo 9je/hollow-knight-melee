@@ -364,7 +364,7 @@ namespace FoxMelee {
                 On.HeroController.Respawn += (orig, self) => Track(orig(self));
                 On.HeroController.HazardRespawn += (orig, self) => Track(orig(self));
             }
-            string dir = FoxMod.ModDir, so = Path.Combine(dir, "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
+            string dir = FoxMod.ModDir, so = Path.Combine(dir, Environment.OSVersion.Platform == PlatformID.Win32NT ? "libmelee_core.dll" : "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
             if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
             if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }

@@ -84,6 +84,10 @@ func-diff: $(B)/liboracle.a $(B)/libguest.a
 	$(CC) $(GEN_CFLAGS) $(INC) -Idifftest -I$(GEN) difftest/func_diff.c runtime/test_hooks.c \
 	  $(B)/libguest.a $(B)/liboracle.a -lstdc++ -lm -o $(B)/func_diff
 .PHONY: func-diff
+soft-fma-test: | $(B)
+	$(CC) $(GEN_CFLAGS) tests/test_soft_fma.c gekko/soft_fma.c -lm -o $(B)/test_soft_fma
+	$(B)/test_soft_fma
+.PHONY: soft-fma-test
 runtime-test: | $(B)
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_runtime.c runtime/hw.c runtime/coro.c gekko/gekko_fp.c -lm -o $(B)/test_runtime
 	$(B)/test_runtime
@@ -127,3 +131,35 @@ shared-test: shared
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_shared.c -ldl -lpthread -o $(B)/test_shared
 	$(B)/test_shared $(B)/libmelee_core.so $(CORE_GEN)/mem1.bin "$(ISO)"
 .PHONY: shared shared-test
+
+# ---- Windows (zig cc, cross or native): libmelee_core.dll from the same generated code ----
+ZIG ?= zig
+WIN_CC = $(ZIG) cc -target x86_64-windows-gnu
+WIN_CFLAGS := $(filter-out -fPIC,$(GEN_CFLAGS))
+WB := $(B)/win
+WIN_GUEST_OBJS = $(GUEST_SRCS:$(CORE_GEN)/%.c=$(WB)/guest/%.o)
+WIN_RT_OBJS = $(RUNTIME_SRCS:%=$(WB)/rt_%.o) $(WB)/dispatch.o $(WB)/gekko_fp.o $(WB)/soft_fma.o
+$(WB)/guest/%.o: $(CORE_GEN)/%.c $(GUEST_HDRS)
+	@mkdir -p $(WB)/guest
+	$(WIN_CC) $(WIN_CFLAGS) $(OPT) $(INC) -I$(CORE_GEN) -c $< -o $@
+$(WB)/rt_%.o: runtime/%.c $(RUNTIME_HDRS) $(CORE_GEN)/guest_meta.h
+	@mkdir -p $(WB)
+	$(WIN_CC) $(WIN_CFLAGS) $(INC) -I$(CORE_GEN) -c $< -o $@
+$(WB)/dispatch.o: runtime/dispatch.c runtime/guest_table.h $(GUEST_HDRS)
+	@mkdir -p $(WB); $(WIN_CC) $(WIN_CFLAGS) $(INC) -I$(CORE_GEN) -c $< -o $@
+$(WB)/gekko_fp.o: gekko/gekko_fp.c gekko/gekko_fp.h
+	@mkdir -p $(WB); $(WIN_CC) $(WIN_CFLAGS) $(INC) -c $< -o $@
+$(WB)/soft_fma.o: gekko/soft_fma.c
+	@mkdir -p $(WB); $(WIN_CC) $(WIN_CFLAGS) -c $< -o $@
+$(WB)/libmelee_core.dll: $(WIN_GUEST_OBJS) $(WIN_RT_OBJS)
+	$(WIN_CC) -shared -o $@ $^ -Wl,--out-implib,$(WB)/libmelee_core.dll.a
+win-dll:
+	$(MAKE) $(WB)/libmelee_core.dll GEN=$(CORE_GEN) -j$$(nproc)
+.PHONY: win-dll
+$(WB)/replay_check.exe: tools/replay_check.c $(WIN_GUEST_OBJS) $(WIN_RT_OBJS)
+	$(WIN_CC) $(WIN_CFLAGS) $(INC) $^ -o $@
+$(WB)/test_rooms.exe: tests/test_rooms.c $(WIN_GUEST_OBJS) $(WIN_RT_OBJS)
+	$(WIN_CC) $(WIN_CFLAGS) $(INC) $^ -o $@
+win-tests:
+	$(MAKE) $(WB)/replay_check.exe $(WB)/test_rooms.exe GEN=$(CORE_GEN) -j$$(nproc)
+.PHONY: win-tests

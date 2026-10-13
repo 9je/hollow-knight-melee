@@ -110,13 +110,13 @@ def compare(r: Replay, states: dict) -> CheckResult:
     return CheckResult(len(r.frames), values, None)
 
 
-def check_file(path: Path, mem1: Path, iso: Path, exe: Path, reload_collision: bool = False) -> CheckResult:
+def check_file(path: Path, mem1: Path, iso: Path, exe: Path, reload_collision: bool = False, runner: list | None = None) -> CheckResult:
     r = read_slp(path.read_bytes())
     run = pack_run(r, reload_collision)
     with tempfile.NamedTemporaryFile(suffix=".mcrun") as f:
         f.write(run)
         f.flush()
-        p = subprocess.run([str(exe), str(mem1), str(iso), f.name], capture_output=True, text=True)
+        p = subprocess.run([*(runner or []), str(exe), str(mem1), str(iso), f.name], capture_output=True, text=True)
     if p.returncode != 0:
         raise RuntimeError(p.stderr.strip() or f"replay_check exited {p.returncode}")
     if p.stderr.strip():
@@ -131,9 +131,13 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="stop after N replays")
     ap.add_argument("--reload-collision", action="store_true",
                     help="reload each stage's own collision through mc_load_collision first (oracle for the room API)")
+    ap.add_argument("--exe", type=Path, default=CORE_BUILD / "replay_check",
+                    help="the replay_check build to run (the Windows one: core/build/win/replay_check.exe)")
+    ap.add_argument("--runner", default="", help="a program to run it with (wine for the Windows build)")
     a = ap.parse_args(argv)
     cfg = load_dev_config(a.config)
-    exe, mem1 = CORE_BUILD / "replay_check", CORE_BUILD / "gen-core" / "mem1.bin"
+    exe, mem1 = a.exe, CORE_BUILD / "gen-core" / "mem1.bin"
+    runner = [a.runner] if a.runner else None
     files = []
     for p in a.paths or [cfg.replay_dir]:
         files += sorted(p.rglob("*.slp")) if p.is_dir() else [p]
@@ -142,7 +146,7 @@ def main(argv=None) -> int:
     bad = 0
     for path in files:
         try:
-            res = check_file(path, mem1, cfg.iso, exe, a.reload_collision)
+            res = check_file(path, mem1, cfg.iso, exe, a.reload_collision, runner)
         except ReplayUnsupported as e:
             print(f"SKIP {path.name}: {e}")
             continue
