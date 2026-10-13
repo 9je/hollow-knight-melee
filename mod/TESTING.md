@@ -181,7 +181,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Item gates:** a charm or ability pickup the Knight couldn't reach yet without an ability you lack can't be
       taken (D-pad left/right does nothing there; the log says `item: <flag> (<name>) ... not taken`). Try Mantis
       Claw before Mothwing Cloak (should refuse), and Fury of the Fallen in King's Pass (always taken). The 27 cases
-      (room and door) are listed by a survey in the commit message; send the `item:` line for any that feels wrong.
+      (room and door) a fresh save is refused all follow that order; send the `item:` line for any that feels wrong.
     - **Dive floors:** with Desolate Dive owned, land from a fast fall onto a dive floor. It breaks (`dive floor ...
       broken`).
     - **Shade Cloak gates:** without Shade Cloak, the black barriers are walls. With it, you pass.
