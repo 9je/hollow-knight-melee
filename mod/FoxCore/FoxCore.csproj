@@ -14,5 +14,6 @@
     <EmbeddedResource Include="Data/transitions.json" LogicalName="transitions.json" />
     <EmbeddedResource Include="Data/waypoints.json" LogicalName="waypoints.json" />
     <EmbeddedResource Include="Data/macros.json" LogicalName="macros.json" />
+    <EmbeddedResource Include="Data/locations.json" LogicalName="locations.json" />
   </ItemGroup>
 </Project>

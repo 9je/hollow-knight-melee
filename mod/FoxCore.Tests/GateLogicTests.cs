@@ -90,5 +90,30 @@ namespace FoxMelee.Tests {
                 "[{\"name\":\"R\",\"logic\":\"R[top1] | R[left1] | R[right1]\"}]", "{}");
             Assert.Empty(g.Blocked("R", "top1", new KnightAbilities()));
         }
+
+        [Fact]
+        public void SporeShroomWaitsForAWayAcross() {
+            // Fungus2_20: Spore Shroom (Ness's charm) sits past a gap the Knight crosses with Mothwing Cloak (or Isma's Tear, ...)
+            Assert.False(Logic.ItemOpen("Fungus2_20", "left1", new KnightAbilities(), "gotCharm_17"));
+            Assert.True(Logic.ItemOpen("Fungus2_20", "left1", new KnightAbilities { Wings = true, Dash = true }, "gotCharm_17"));
+            Assert.True(Logic.ItemOpen("Fungus2_20", "left1", Everything, "gotCharm_17"));
+            Assert.True(Logic.ItemOpen("Fungus2_20", "", new KnightAbilities(), "gotCharm_17"));       // no door: never gated
+            Assert.True(Logic.ItemOpen("Fungus2_20", "left1", new KnightAbilities(), "notAnItem"));    // unknown: open
+        }
+
+        [Fact]
+        public void AnotherRoomsItemIsNotJudgedHere() => Assert.True(Logic.ItemOpen("Town", "left1", new KnightAbilities(), "gotCharm_13"));
+        [Fact]
+        public void FuryOfTheFallenIsAlwaysThere() =>
+            Assert.True(Logic.ItemOpen("Tutorial_01", "right1", new KnightAbilities(), "gotCharm_6"));
+
+        [Theory]
+        [InlineData("gotCharm_17", "Spore_Shroom")]
+        [InlineData("gotCharm_32", "Quick_Slash")]
+        [InlineData("hasDash", "Mothwing_Cloak")]
+        [InlineData("hasWalljump", "Mantis_Claw")]
+        [InlineData("hasSuperDash", "Crystal_Heart")]
+        [InlineData("nonsense", null)]
+        public void ItemsByTheirSaveFlag(string flag, string location) => Assert.Equal(location, GateLogic.LocationOf(flag));
     }
 }

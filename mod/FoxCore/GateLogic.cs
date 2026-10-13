@@ -22,6 +22,7 @@ namespace FoxMelee {
         readonly Dictionary<string, List<Door>> doors = new Dictionary<string, List<Door>>();
         readonly Dictionary<string, string> waypoints = new Dictionary<string, string>();
         readonly Dictionary<string, string> macros = new Dictionary<string, string>();
+        readonly Dictionary<string, string> locations = new Dictionary<string, string>();
 
         public static GateLogic Load() {
             string Res(string n) {
@@ -29,11 +30,16 @@ namespace FoxMelee {
                 using var r = new StreamReader(s, Encoding.UTF8);
                 return r.ReadToEnd();
             }
-            return Parse(Res("transitions.json"), Res("waypoints.json"), Res("macros.json"));
+            return Parse(Res("transitions.json"), Res("waypoints.json"), Res("macros.json"), Res("locations.json"));
         }
 
-        public static GateLogic Parse(string transitions, string waypoints, string macros) {
+        public static GateLogic Parse(string transitions, string waypoints, string macros, string locations = null) {
             var g = new GateLogic();
+            if (locations != null)
+                foreach (var o in (List<object>)Json.Parse(locations)) {
+                    var d = (Dictionary<string, object>)o;
+                    g.locations[(string)d["name"]] = (string)d["logic"];
+                }
             foreach (var o in (List<object>)Json.Parse(transitions)) {
                 var d = (Dictionary<string, object>)o;
                 var door = new Door { Scene = (string)d["sceneName"], Gate = (string)d["gateName"], Logic = (string)d["logic"], OneWay = (string)d["oneWayType"] };
@@ -74,6 +80,49 @@ namespace FoxMelee {
                         && Evaluate(entry.Logic, t => t == self ? false : Term(t, scene, a, reached, regions, local));
             bool wayOut = back || list.Any(d => d.OneWay != "OneWayIn" && d.Gate != entryGate && reached.Contains($"{scene}[{d.Gate}]"));
             return wayOut ? blocked : none;
+        }
+
+        /// Whether the pickup that sets the PlayerData bool `flag` (a charm, an ability) may be taken in `scene`, entered by
+        /// `entryGate`, with `a`: closed only when the logic says the Knight needs an ability `a` lacks to reach it (a Melee
+        /// character's recovery crosses gaps the Knight dashes or wings over). Open when anything is in doubt: no door entry, an
+        /// item the logic doesn't know, or one it can't reach even with every ability (the save holds state it doesn't see).
+        public bool ItemOpen(string scene, string entryGate, KnightAbilities a, string flag) {
+            var name = LocationOf(flag);
+            if (name == null || !locations.TryGetValue(name, out var logic)) return true;
+            if (!doors.TryGetValue(scene, out var list) || !list.Any(d => d.Gate == entryGate)) return true;
+            var local = LocalRegions(scene);
+            if (!logic.Contains(scene + "[") && !local.Any(r => Mentions(logic, r))) return true;   // another room's pickup
+            bool Reaches(KnightAbilities k) {
+                Unreachable(scene, entryGate, k, out var reached, out var regions);
+                return Evaluate(logic, t => Skip(t) ? false : Term(t, scene, k, reached, regions, local));
+            }
+            return !Reaches(Everything) || !NeedsAbility(logic, local, 0) || Reaches(a);
+        }
+
+        // the logic's skip helpers (pogo off a shriek, a spell's air stall, a shade's hits): never the intended way
+        static bool Skip(string t) => t.StartsWith("$SHRIEKPOGO", StringComparison.Ordinal) || t.StartsWith("$CASTSPELL", StringComparison.Ordinal)
+                                      || t.StartsWith("$SHADESKIP", StringComparison.Ordinal) || t.StartsWith("$SLOPEBALL", StringComparison.Ordinal);
+
+        static readonly string[] CharmNames = { null, "Gathering_Swarm", "Wayward_Compass", "Grubsong", "Stalwart_Shell", "Baldur_Shell",
+            "Fury_of_the_Fallen", "Quick_Focus", "Lifeblood_Heart", "Lifeblood_Core", "Defender's_Crest", "Flukenest", "Thorns_of_Agony",
+            "Mark_of_Pride", "Steady_Body", "Heavy_Blow", "Sharp_Shadow", "Spore_Shroom", "Longnail", "Shaman_Stone", "Soul_Catcher",
+            "Soul_Eater", "Glowing_Womb", "Fragile_Heart", "Fragile_Greed", "Fragile_Strength", "Nailmaster's_Glory", "Joni's_Blessing",
+            "Shape_of_Unn", "Hiveblood", "Dream_Wielder", "Dashmaster", "Quick_Slash", "Spell_Twister", "Deep_Focus", "Grubberfly's_Elegy",
+            null, "Sprintmaster", "Dreamshield", "Weaversong" };
+
+        /// The randomizer's name for the pickup that sets PlayerData bool `flag`, or null.
+        public static string LocationOf(string flag) {
+            switch (flag) {
+            case "hasDash": return "Mothwing_Cloak";
+            case "hasWalljump": return "Mantis_Claw";
+            case "hasDoubleJump": return "Monarch_Wings";
+            case "hasSuperDash": return "Crystal_Heart";
+            case "hasAcidArmour": return "Isma's_Tear";
+            case "hasShadowDash": return "Shade_Cloak";
+            }
+            if (flag != null && flag.StartsWith("gotCharm_", StringComparison.Ordinal) && int.TryParse(flag.Substring(9), out var n)
+                && n > 0 && n < CharmNames.Length) return CharmNames[n];
+            return null;
         }
 
         // the room's exits (not the entrance) the Knight can't reach from it with `a`, through the logic alone

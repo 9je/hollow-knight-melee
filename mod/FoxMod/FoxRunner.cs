@@ -345,19 +345,42 @@ namespace FoxMelee {
 
         // What Hollow Knight's ListenForUp does when "up" is pressed: send its wasPressed event, for every state machine
         // listening right now (a tablet, an NPC or a bench the Knight stands at). No input device is involved, so
-        // Hollow Knight's own controller (and keyboard prompts) stay as they are.
-        static int PressUp(HeroController hero) {
+        // Hollow Knight's own controller (and keyboard prompts) stay as they are. A pickup the Knight couldn't reach yet with
+        // his abilities (GateLogic.ItemOpen: a Melee character's recovery crosses gaps he dashes over) isn't taken.
+        int PressUp(HeroController hero) {
             int n = 0;
             foreach (var fsm in new List<PlayMakerFSM>(PlayMakerFSM.FsmList)) {
                 if (fsm == null || fsm.gameObject == hero.gameObject || fsm.Fsm?.ActiveState == null) continue;
                 foreach (var a in fsm.Fsm.ActiveState.Actions)
                     if (a is HutongGames.PlayMaker.Actions.ListenForUp up && up.Enabled && up.wasPressed != null) {
+                        if (!PickupOpen(fsm.gameObject)) break;
                         fsm.Fsm.Event(up.wasPressed);
                         n++;
                         break;
                     }
             }
             return n;
+        }
+
+        // false for a shiny (its "Shiny Control" state machine, on the listener, above or below it) whose PlayerData bool the
+        // ability gates hold back from where you came in
+        bool PickupOpen(GameObject listener) {
+            if (gateLogic == null || !FoxMod.Instance.Settings.AbilityGates) return true;
+            PlayMakerFSM shiny = null;
+            for (var t = listener.transform; t != null && shiny == null; t = t.parent) shiny = ShinyControl(t.gameObject);
+            if (shiny == null) foreach (var f in listener.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Shiny Control") { shiny = f; break; }
+            var flag = shiny?.FsmVariables.FindFsmString("PD Bool Name")?.Value;
+            if (string.IsNullOrEmpty(flag)) return true;
+            var scene = GameManager.instance.sceneName;
+            var entry = GameManager.instance.entryGateName ?? "";
+            if (gateLogic.ItemOpen(scene, entry, Abilities(), flag)) return true;
+            Log($"item: {flag} ({GateLogic.LocationOf(flag)}) in {scene} not taken, came in by {entry}: the Knight needs an ability you don't have yet to reach it");
+            return false;
+        }
+
+        static PlayMakerFSM ShinyControl(GameObject o) {
+            foreach (var f in o.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Shiny Control") return f;
+            return null;
         }
 
         // D-pad down: Hollow Knight's Focus while Fox stands (spec §5.3). True while focusing.
