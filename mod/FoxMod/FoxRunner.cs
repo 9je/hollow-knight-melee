@@ -89,20 +89,24 @@ namespace FoxMelee {
                    && GameManager.instance.gameState != GlobalEnums.GameState.PAUSED,
         };
 
-        // Keyboard: while the character select (or a change loading) is up, Hollow Knight's own input is off: its pause
-        // (Escape) through acceptingInput, and the bench's own listeners (its state machine gets the Knight up on jump, attack
-        // or any arrow, read straight from the action set) through the action set itself, whose actions then read as
-        // released (InControl: EnabledInHierarchy). Asked every frame, so whatever closes the select gives it back.
+        // Keyboard: while the character select (or a change loading) is up, Hollow Knight's own input is off: its action set
+        // is disabled, so every action reads as released (InControl: EnabledInHierarchy), the pause (Escape) and the bench's
+        // own listeners (its state machine gets the Knight up on jump, attack or any arrow) included. Hollow Knight never
+        // sets the set's Enabled itself. Asked every frame, so whatever closes the select gives it back.
         bool mutedHollow;
         void MuteHollowKeys(bool want) {
             var ih = GameManager.instance?.inputHandler;
             if (ih == null || ih.inputActions == null) { mutedHollow = false; return; }
-            if (want && !mutedHollow && ih.acceptingInput) { ih.StopAcceptingInput(); ih.inputActions.Enabled = false; mutedHollow = true; }
-            else if (!want && mutedHollow) { mutedHollow = false; ih.inputActions.Enabled = true; ih.StartAcceptingInput(); }
+            if (want != mutedHollow) { ih.inputActions.Enabled = !want; mutedHollow = want; }
         }
         void OnDestroy() => MuteHollowKeys(false);
 
         void Update() {
+            // a character change stuck past SwitchTimeout gives up (Fail: Hollow Knight has the Knight and its input again)
+            if (switching != null && !switching.IsCompleted && Time.unscaledTime - switchStarted > SwitchTimeout) {
+                switching = null;
+                Fail($"the change to {switchingTo?.Name} didn't finish in {SwitchTimeout} s");
+            }
             MuteHollowKeys(state != State.Failed && (grid != null || switching != null));
             if (state == State.Failed) { GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false; return; }
             var hero = HeroController.instance;
@@ -113,6 +117,7 @@ namespace FoxMelee {
             // menus (and quitting to them: Quit_To_Menu is a gameplay scene to Hollow Knight, but Fox holding the Knight
             // there stalled the quit on a black screen): nothing of Fox lingers
             if (hero == null || gm == null || !gm.IsGameplayScene() || gm.sceneName == "Quit_To_Menu") {
+                grid = null;   // no character select outside gameplay (its keyboard mute with it)
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();
                 combat?.ReleaseAll(); grab?.Release();
@@ -386,7 +391,7 @@ namespace FoxMelee {
             var flag = shiny?.FsmVariables.FindFsmString("PD Bool Name")?.Value;
             if (string.IsNullOrEmpty(flag)) return true;
             var scene = GameManager.instance.sceneName;
-            var entry = GameManager.instance.entryGateName ?? "";
+            var entry = roomEntry;   // the door this room's gates were worked out from (a hazard respawn blanks Hollow Knight's)
             if (gateLogic.ItemOpen(scene, entry, Abilities(), flag)) return true;
             Log($"item: {flag} ({GateLogic.LocationOf(flag)}) in {scene} not taken, came in by {entry}: the Knight needs an ability you don't have yet to reach it");
             return false;
@@ -579,6 +584,8 @@ namespace FoxMelee {
         // the select screen says it is loading. FinishSwitch then sets the new character up where the Knight sits.
         System.Threading.Tasks.Task<string> switching;
         Character switchingTo;
+        float switchStarted;
+        const float SwitchTimeout = 20f;   // seconds: a core restart takes about one
 
         void SwitchCharacter(HeroController hero, Character c) {
             if (switching != null) return;
@@ -587,6 +594,7 @@ namespace FoxMelee {
             sfx?.Destroy(); sfx = null;
             switchingTo = c;
             var mem1 = Path.Combine(FoxMod.ModDir, "mem1.bin");
+            switchStarted = Time.unscaledTime;
             switching = System.Threading.Tasks.Task.Run(() => StartCoreWork(mem1, c));
         }
 
@@ -619,6 +627,7 @@ namespace FoxMelee {
         /// as the Knight (FoxSession gives him back) until the next room converts.
         bool EnterRoom(string scene) {
             terrainAt.Clear();
+            acidSeen.Clear();
             terrain = FindTerrain();
             terrainSet.Reset();
             terrainSet.Changed(Ids(terrain));
@@ -685,6 +694,7 @@ namespace FoxMelee {
         readonly List<ColliderOutline> gateWalls = new List<ColliderOutline>();
         readonly List<Collider2D> gateDoorsOff = new List<Collider2D>();
         int gatesKey = -1;
+        string roomEntry = "";
 
         static KnightAbilities Abilities() {
             var pd = PlayerData.instance;
@@ -712,7 +722,7 @@ namespace FoxMelee {
             if (gateLogic == null) return;
             var a = Abilities();
             gatesKey = AbilitiesKey(a);
-            var entry = GameManager.instance.entryGateName ?? "";
+            var entry = roomEntry = GameManager.instance.entryGateName ?? "";
             var blocked = gateLogic.Blocked(scene, entry, a);
             if (blocked.Count == 0) return;
             var closed = new List<string>();
@@ -736,7 +746,7 @@ namespace FoxMelee {
         static bool LiveTerrain(Collider2D c) =>
             c != null && c.enabled && !c.isTrigger && c.gameObject.layer == TerrainLayer && c.gameObject.activeInHierarchy;
 
-        static List<Collider2D> FindTerrain() {
+        List<Collider2D> FindTerrain() {
             var l = new List<Collider2D>();
             foreach (var c in FindObjectsOfType<Collider2D>()) if (Ground(c)) l.Add(c);
             return l;
@@ -744,10 +754,18 @@ namespace FoxMelee {
 
         // what a Melee character stands on and runs into: terrain, a Shade Cloak gate's barrier without Shade Cloak, an acid
         // pool's surface with Isma's Tear
-        static bool Ground(Collider2D c) {
+        bool Ground(Collider2D c) {
             if (LiveTerrain(c)) return true;
             var pd = PlayerData.instance;
-            return pd != null && ((!pd.hasShadowDash && ShadeGate(c)) || (pd.hasAcidArmour && AcidSurface(c)));
+            return pd != null && ((!pd.hasShadowDash && ShadeGate(c)) || (pd.hasAcidArmour && IsAcid(c)));
+        }
+
+        // AcidSurface, asked once per collider (it reads names and components, which allocate); emptied with each room
+        readonly Dictionary<Collider2D, bool> acidSeen = new Dictionary<Collider2D, bool>();
+        bool IsAcid(Collider2D c) {
+            if (c == null || !(c is BoxCollider2D)) return false;
+            if (!acidSeen.TryGetValue(c, out var acid)) acidSeen[c] = acid = AcidSurface(c);
+            return acid && c.gameObject.activeInHierarchy;
         }
 
         // an acid pool's swim region (Isma's Tear: the Knight swims across the top; a Melee character can't swim, so with Isma's
@@ -755,7 +773,7 @@ namespace FoxMelee {
         // for the Knight). Read from the game's data: the pool's "Surface Water Region" trigger box carries an "Acid Armour
         // Check" state machine, beside its "Acid Box" hazard which that check turns off.
         static bool AcidSurface(Collider2D c) {
-            if (c == null || !(c is BoxCollider2D) || !c.gameObject.activeInHierarchy || c.gameObject.name != "Surface Water Region") return false;
+            if (c.gameObject.name != "Surface Water Region") return false;
             foreach (var f in c.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Acid Armour Check") return true;
             return false;
         }

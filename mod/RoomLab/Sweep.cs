@@ -18,6 +18,8 @@ namespace FoxMelee.Lab {
             var walk = new McInput[Walk];
             for (int i = 0; i < Walk; i++) walk[i].StickX = inward;
             var t1 = Rooms.Run(core, c, sx, sy, idle, still: true);
+            if (Environment.GetEnvironmentVariable("SWEEP_DEBUG") == g.Name)
+                foreach (var p in t1) if (p.Frame < 24) { var h = c.Transform.ToHk(new V2(p.X, p.Y)); Console.WriteLine($"   f{p.Frame} ({h.X:F2},{h.Y:F2}) action {p.Action} air {p.Air}"); }
             var land = t1[^1];
             var hk = c.Transform.ToHk(new V2(land.X, land.Y));
             bool fellOut = hk.Y < c.Min.Y - 2;

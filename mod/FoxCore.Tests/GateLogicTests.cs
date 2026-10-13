@@ -101,6 +101,13 @@ namespace FoxMelee.Tests {
             Assert.True(Logic.ItemOpen("Fungus2_20", "left1", new KnightAbilities(), "notAnItem"));    // unknown: open
         }
 
+        // from Isma's Tear's lower door the logic needs Isma's Tear to reach it: an item never waits for itself
+        [Fact]
+        public void AnItemNeverWaitsForItself() {
+            Assert.True(Logic.ItemOpen("Waterways_13", "left2", new KnightAbilities { Claw = true, Dash = true, Wings = true }, "hasAcidArmour"));
+            Assert.False(Logic.ItemOpen("Fungus2_14", "right1", new KnightAbilities(), "hasWalljump"));   // Mantis Claw still waits for Mothwing Cloak
+        }
+
         [Fact]
         public void AnotherRoomsItemIsNotJudgedHere() => Assert.True(Logic.ItemOpen("Town", "left1", new KnightAbilities(), "gotCharm_13"));
         [Fact]

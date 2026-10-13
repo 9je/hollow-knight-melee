@@ -96,7 +96,22 @@ namespace FoxMelee {
                 Unreachable(scene, entryGate, k, out var reached, out var regions);
                 return Evaluate(logic, t => Skip(t) ? false : Term(t, scene, k, reached, regions, local));
             }
-            return !Reaches(Everything) || !NeedsAbility(logic, local, 0) || Reaches(a);
+            return !Reaches(Everything) || !NeedsAbility(logic, local, 0) || Reaches(WithOwn(a, flag));
+        }
+
+        // `a` and the pickup's own ability: an item never waits for itself (Isma's Tear from its lower door needs Isma's Tear)
+        static KnightAbilities WithOwn(KnightAbilities a, string flag) {
+            var k = new KnightAbilities { Claw = a.Claw, Wings = a.Wings, Dash = a.Dash, SuperDash = a.SuperDash, Acid = a.Acid,
+                ShadeCloak = a.ShadeCloak, Fireball = a.Fireball, Quake = a.Quake, Scream = a.Scream, DreamNail = a.DreamNail, Lantern = a.Lantern };
+            switch (flag) {
+            case "hasDash": k.Dash = true; break;
+            case "hasWalljump": k.Claw = true; break;
+            case "hasDoubleJump": k.Wings = true; break;
+            case "hasSuperDash": k.SuperDash = true; break;
+            case "hasAcidArmour": k.Acid = true; break;
+            case "hasShadowDash": k.ShadeCloak = true; break;
+            }
+            return k;
         }
 
         // the logic's skip helpers (pogo off a shriek, a spell's air stall, a shade's hits): never the intended way
