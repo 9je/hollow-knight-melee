@@ -82,7 +82,7 @@ namespace HkMelee.Installer {
         }
     }
 
-    /// Melee NTSC 1.02 ISOs in the usual places (Redump's size; the SHA-1 is checked by the build).
+    /// The Melee ISO the player picked: unmodified NTSC 1.02 (Redump's size and SHA-1).
     static class IsoFinder {
         public const long RedumpSize = 1459978240;
         public const string RedumpSha1 = "d4e70c064cc714ba8400a849cf299dbd1aa326fc";   // NTSC 1.02, unmodified (Redump)
@@ -95,24 +95,33 @@ namespace HkMelee.Installer {
                 return Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(f)).ToLowerInvariant() == RedumpSha1;
             } catch (Exception) { return false; }
         }
+    }
 
-        public static IEnumerable<string> Candidates(IEnumerable<string> dirs) {
-            foreach (var d in dirs) {
-                if (!Directory.Exists(d)) continue;
-                IEnumerable<string> files;
-                try { files = Directory.EnumerateFiles(d, "*.iso", new EnumerationOptions { RecurseSubdirectories = true, MaxRecursionDepth = 3, IgnoreInaccessible = true }); }
-                catch (Exception) { continue; }
-                foreach (var f in files) {
-                    long size;
-                    try { size = new FileInfo(f).Length; } catch (Exception) { continue; }
-                    if (size == RedumpSize) yield return f;
-                }
+    /// The system's own "open file" window, to pick the ISO: Windows' (through PowerShell's Windows Forms), on Linux
+    /// zenity's or kdialog's when there is one. Without one the path is typed or dragged in. Nothing is searched for.
+    static class FilePicker {
+        const string Title = "Your Super Smash Bros. Melee NTSC 1.02 ISO";
+
+        public static List<(string exe, string[] args)> Commands(bool windows, Func<string, bool> has) {
+            var l = new List<(string, string[])>();
+            if (windows) {
+                l.Add(("powershell", new[] { "-NoProfile", "-STA", "-Command",
+                    "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; " +
+                    $"$d.Title = '{Title}'; $d.Filter = 'Melee ISO (*.iso;*.gcm)|*.iso;*.gcm|All files (*.*)|*.*'; " +
+                    "$d.InitialDirectory = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'; " +
+                    "$top = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }; " +
+                    "if ($d.ShowDialog($top) -eq 'OK') { $d.FileName }" }));
+            } else {
+                if (has("zenity")) l.Add(("zenity", new[] { "--file-selection", "--title=" + Title, "--file-filter=Melee ISO | *.iso *.gcm", "--file-filter=All files | *" }));
+                if (has("kdialog")) l.Add(("kdialog", new[] { "--title", Title, "--getopenfilename", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Melee ISO (*.iso *.gcm)" }));
             }
+            return l;
         }
 
-        public static IEnumerable<string> UsualPlaces() {
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return new[] { "Downloads", "Documents", "Desktop", "Games", "ISOs", "Roms", "roms" }.Select(d => Path.Combine(home, d));
+        /// The picker's output: the chosen path, or null when it was cancelled.
+        public static string Chosen(string output) {
+            var p = (output ?? "").Trim();
+            return p.Length == 0 ? null : p;
         }
     }
 

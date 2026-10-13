@@ -36,12 +36,18 @@ namespace HkMelee.Installer.Tests {
             }
         }
 
+        // the ISO is picked by the player (a file window, or a path dragged in), never searched for
         [Fact]
-        public void IsoCandidatesHaveTheRedumpSize() {
-            var dir = Directory.CreateTempSubdirectory().FullName;
-            File.WriteAllBytes(Path.Combine(dir, "small.iso"), new byte[10]);
-            File.WriteAllText(Path.Combine(dir, "notes.txt"), "x");
-            Assert.Empty(IsoFinder.Candidates(new[] { dir }));
+        public void TheIsoIsPickedInAFileWindow() {
+            var win = FilePicker.Commands(windows: true, has: _ => false);
+            Assert.Single(win);
+            Assert.Equal("powershell", win[0].exe);
+            Assert.Contains("OpenFileDialog", string.Join(" ", win[0].args));
+            var linux = FilePicker.Commands(windows: false, has: t => t == "kdialog");
+            Assert.Equal(new[] { "kdialog" }, linux.Select(c => c.exe));
+            Assert.Empty(FilePicker.Commands(windows: false, has: _ => false));   // no picker: the path is dragged in
+            Assert.Equal("/a b/Melee.iso", FilePicker.Chosen("/a b/Melee.iso\n"));
+            Assert.Null(FilePicker.Chosen("  \n"));                              // cancelled
         }
 
         [Fact]

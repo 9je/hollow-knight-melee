@@ -14,7 +14,7 @@ chosen at a bench. Windows and Linux.
 
 1. Download **HollowKnightMeleeInstaller.exe** (Windows) or **HollowKnightMeleeInstaller-linux** (Linux) from the
    [latest release](https://github.com/9je/hollow-knight-melee/releases).
-2. Run it. It finds Hollow Knight and your Melee ISO, backs up the game and your saves (once), installs the Modding
+2. Run it. It finds Hollow Knight, asks for your Melee ISO (pick it in the window or drag it in), backs up the game and your saves (once), installs the Modding
    API, and builds the Melee core from your ISO (5-10 minutes the first time). Run it again any time to update; it
    updates itself.
 3. Start Hollow Knight from Steam.

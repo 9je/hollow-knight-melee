@@ -123,15 +123,41 @@ namespace HkMelee.Installer {
         static string FindIso() {
             var saved = State("iso");
             if (saved != null && File.Exists(saved)) { Step("Melee ISO: " + saved); return saved; }
-            Step("looking for your Melee ISO...");
-            var c = IsoFinder.Candidates(IsoFinder.UsualPlaces()).FirstOrDefault(IsoFinder.IsMelee102);
-            if (c != null) { Step("Melee ISO: " + c); SetState("iso", c); return c; }
+            bool display = Win || Environment.GetEnvironmentVariable("DISPLAY") != null || Environment.GetEnvironmentVariable("WAYLAND_DISPLAY") != null;
+            var pickers = display ? FilePicker.Commands(Win, OnPath) : new List<(string exe, string[] args)>();
+            bool window = pickers.Count > 0;
             for (;;) {
-                var p = Unquote(Ask("Drag your Super Smash Bros. Melee NTSC 1.02 ISO into this window and press Enter: "));
-                if (IsoFinder.IsMelee102(p)) { SetState("iso", p); return p; }
+                string p = null;
+                if (window) {
+                    Step("choose your Super Smash Bros. Melee NTSC 1.02 ISO in the window that opens");
+                    p = Pick(pickers);
+                    if (p == null) { window = false; Console.WriteLine("No file chosen."); }
+                }
+                p ??= Unquote(Ask("Drag your Super Smash Bros. Melee NTSC 1.02 ISO into this window and press Enter: "));
+                if (p == "") continue;
+                Step("checking it (a few seconds)...");
+                if (IsoFinder.IsMelee102(p)) { Step("Melee ISO: " + p); SetState("iso", p); return p; }
                 Console.WriteLine(File.Exists(p) ? "That isn't an unmodified NTSC 1.02 Melee ISO (modded ones such as 20XX or TM-CE won't work)." : "No file there.");
             }
         }
+
+        // the first picker that runs: the path chosen, or null (cancelled, or none would start)
+        static string Pick(List<(string exe, string[] args)> pickers) {
+            foreach (var (exe, args) in pickers) {
+                try {
+                    var psi = new ProcessStartInfo(exe) { RedirectStandardOutput = true, UseShellExecute = false };
+                    foreach (var a in args) psi.ArgumentList.Add(a);
+                    using var proc = Process.Start(psi);
+                    var output = proc.StandardOutput.ReadToEnd();
+                    proc.WaitForExit();
+                    return FilePicker.Chosen(output);
+                } catch (Exception) { }   // this one isn't there: the next
+            }
+            return null;
+        }
+
+        static bool OnPath(string exe) =>
+            (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator).Any(d => File.Exists(Path.Combine(d, exe)));
 
         static string Unquote(string s) => s.Trim().Trim('"', '\'').Trim();
 
