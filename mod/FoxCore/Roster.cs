@@ -33,6 +33,15 @@ namespace FoxMelee {
 
         public static readonly Character Fox = All[0];
 
+        /// The characters this save has: Fox always; Marth once Iselda's Quill is bought (until her shop sells him); every
+        /// other one once its charm is picked up (PlayerData gotCharm_N); all of them with UnlockAllCharacters. Roster order.
+        public static List<Character> Owned(Func<int, bool> hasCharm, bool hasQuill, bool unlockAll) {
+            var owned = new List<Character>();
+            foreach (var c in All)
+                if (unlockAll || c == Fox || (c.IselaShop && hasQuill) || (c.Charm != 0 && hasCharm(c.Charm))) owned.Add(c);
+            return owned;
+        }
+
         /// The character named `name` (case and surrounding spaces ignored); Fox when there is none.
         public static Character Find(string name, out bool known) {
             var n = name?.Trim() ?? "";

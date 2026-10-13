@@ -11,6 +11,7 @@ namespace FoxMelee {
         public Settings Settings = new Settings();
         internal GcInput GameCube;                  // null when the GameCube adapter is off in settings
         public FoxMod() : base("Hollow Knight: Melee") { Instance = this; }
+        public void SaveSettings() => SaveGlobalSettings();
         public override string GetVersion() => "0.2.0";
         public void OnLoadGlobal(Settings s) => Settings = s;
         public Settings OnSaveGlobal() => Settings;

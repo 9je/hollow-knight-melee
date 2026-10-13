@@ -42,7 +42,7 @@ namespace FoxMelee {
         SfxPlayer(SfxBank bank, float volume) {
             mixer = new SfxMixer(bank, Voices);
             this.volume = volume;
-            var go = new GameObject("FoxMelee SFX");
+            var go = root = new GameObject("FoxMelee SFX");
             UnityEngine.Object.DontDestroyOnLoad(go);
             // Hollow Knight's own sound effects group, so its sound volume setting applies too
             AudioMixerGroup group = null;
@@ -73,6 +73,10 @@ namespace FoxMelee {
                 Apply();
             }
         }
+
+        readonly GameObject root;
+        /// Gone for good (a character change makes a new player with that character's sounds).
+        public void Destroy() { StopAll(); if (root) UnityEngine.Object.Destroy(root); }
 
         public void StopAll() {
             foreach (var a in pool) if (a) a.Stop();

@@ -53,6 +53,8 @@ namespace FoxMelee {
             f.Respawning || f.Loading || f.Transitioning || !f.WaitingToTransition || f.HazardRespawning || f.HazardDeath || f.Dead;
 
         public bool NeedsRoom(string scene) => scene != roomScene;
+        /// The room is converted again (a new core after a character change has no collision).
+        public void ForgetRoom() { roomScene = null; roomReady = false; }
 
         /// Records the conversion of a scene's terrain. Returns true when the Knight Fox had taken must be
         /// given back (the room failed): the player plays the Knight there until a room converts again.

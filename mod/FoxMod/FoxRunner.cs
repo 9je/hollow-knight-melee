@@ -126,10 +126,11 @@ namespace FoxMelee {
                 holdingBody = false;
                 needPlace = true;
                 accumulator = 0;
+                if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) menu = null;
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
-                } else if (PlayerData.instance.GetBool("atBench")) Rest(hero);
+                } else if (PlayerData.instance.GetBool("atBench")) { BenchMenu(hero); if (state == State.Running) Rest(hero); }
                 combat?.ReleaseAll(); grab?.Release();
                 return;
             }
@@ -367,18 +368,10 @@ namespace FoxMelee {
             string dir = FoxMod.ModDir, so = Path.Combine(dir, Environment.OSVersion.Platform == PlatformID.Win32NT ? "libmelee_core.dll" : "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
             if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
-            if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
-            bool grabs = s.Grabs?.Enabled ?? false;
             character = Roster.Find(s.Character, out bool known);
             if (!known) FoxMod.Instance.LogWarn($"Character \"{s.Character}\" is not a Melee character: playing Fox");
-            Log("character: " + character.Name);
-            if (!core.StartMatch(character.MeleeId, grabs)) { Fail("mc_start_match: " + core.Error); return false; }
-            core.SetInput(0, new McInput());
-            if (grabs) core.SetInput(GrabBridge.Port, new McInput());
-            for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
-            for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
-            if (!core.SetEdgeAssist(s.EdgeAssist)) { Fail("mc_set_edge_assist: " + core.Error); return false; }
-            if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
+            bool grabs = s.Grabs?.Enabled ?? false;
+            if (!StartCore(mem1, character)) return false;
             if (s.ShowModel) {
                 var path = Path.Combine(dir, "fox.model");
                 try { model = FoxRenderer.Create(FoxModel.Load(path)); Log("drawing Fox's model"); }
@@ -402,6 +395,96 @@ namespace FoxMelee {
             state = State.Running;
             Log("libmelee_core running");
             return true;
+        }
+
+        /// A new Melee match with `c` (Melee's own countdown run through), as at boot and on a character change.
+        bool StartCore(string mem1, Character c) {
+            var s = FoxMod.Instance.Settings;
+            bool grabs = s.Grabs?.Enabled ?? false;
+            if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
+            Log("character: " + c.Name);
+            if (!core.StartMatch(c.MeleeId, grabs)) { Fail("mc_start_match: " + core.Error); return false; }
+            core.SetInput(0, new McInput());
+            if (grabs) core.SetInput(GrabBridge.Port, new McInput());
+            for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 180; i++) if (!core.Step()) { Fail("countdown: " + core.Error); return false; }   // past the 123-frame countdown
+            if (!core.SetEdgeAssist(s.EdgeAssist)) { Fail("mc_set_edge_assist: " + core.Error); return false; }
+            if (grabs && !core.SetStandIn(GrabBridge.Port)) { Fail("mc_standin_set: " + core.Error); return false; }
+            return true;
+        }
+
+        // ---- choosing a character at a bench (D-pad up opens; left/right choose; up again picks it; down closes) ----
+        CharacterMenu menu;
+        bool menuUp, menuLeft, menuRight, menuDown;
+
+        void BenchMenu(HeroController hero) {
+            var gc = FoxMod.Instance.GameCube?.Current();
+            var b = gc?.Buttons ?? 0;
+            bool up = (b & GcButtons.DUp) != 0 || Input.GetKey(KeyCode.T);
+            bool down = (b & GcButtons.DDown) != 0 || Input.GetKey(KeyCode.F);
+            bool left = (b & GcButtons.DLeft) != 0 || (gc?.StickX ?? 0) < -70 || Input.GetKey(KeyCode.A);
+            bool right = (b & GcButtons.DRight) != 0 || (gc?.StickX ?? 0) > 70 || Input.GetKey(KeyCode.D);
+            bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
+            bool pu = Pressed(up, ref menuUp), pd = Pressed(down, ref menuDown), pl = Pressed(left, ref menuLeft), pr = Pressed(right, ref menuRight);
+            if (menu == null) {
+                if (pu) {
+                    var data = PlayerData.instance;
+                    menu = new CharacterMenu(Roster.Owned(n => data.GetBool("gotCharm_" + n), data.GetBool("hasQuill"),
+                                                          FoxMod.Instance.Settings.UnlockAllCharacters), character);
+                }
+                return;
+            }
+            if (pl) menu.Move(-1);
+            if (pr) menu.Move(1);
+            if (pd) { menu = null; return; }
+            if (pu) {
+                var pick = menu.Current;
+                menu = null;
+                if (pick != character) SwitchCharacter(hero, pick);
+            }
+        }
+
+        void SwitchCharacter(HeroController hero, Character c) {
+            Log($"switching to {c.Name}");
+            var s = FoxMod.Instance.Settings;
+            s.Character = c.Name;
+            try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
+            combat?.ReleaseAll(); grab?.Release(); launcher?.StopAll();
+            sfx?.Destroy(); sfx = null;
+            if (!StartCore(Path.Combine(FoxMod.ModDir, "mem1.bin"), c)) return;
+            character = c;
+            if (combat != null) combat.Character = c;
+            gatesSet = uint.MaxValue;
+            if (gx != null) { if (!core.GxCapture(true)) { Fail("mc_gx_capture: " + core.Error); return; } gx.Reset(); }
+            try { sfx = SfxPlayer.Create(core, c, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
+            // the new match is on Melee's stage: this room's collision again, and the character where the Knight sits
+            session.ForgetRoom();
+            var gm = GameManager.instance;
+            if (!EnterRoom(gm.sceneName) || !WatchTerrain(gm.sceneName)) return;
+            needPlace = !PlaceAtKnight(hero);
+            if (!needPlace) session.Placed();
+        }
+
+        void OnGUI() {
+            if (menu == null) return;
+            const float w = 760, h = 150;
+            var box = new Rect((Screen.width - w) / 2, Screen.height * 0.12f, w, h);
+            GUI.color = new Color(0, 0, 0, 0.8f);
+            GUI.DrawTexture(box, Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            var title = new GUIStyle(GUI.skin.label) { fontSize = 26, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            var item = new GUIStyle(GUI.skin.label) { fontSize = 34, alignment = TextAnchor.MiddleCenter };
+            var hint = new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.MiddleCenter };
+            GUI.Label(new Rect(box.x, box.y + 8, w, 32), "Choose your character", title);
+            int n = menu.Owned.Count;
+            string prev = n > 1 ? menu.Owned[(menu.Index + n - 1) % n].Name : "", next = n > 1 ? menu.Owned[(menu.Index + 1) % n].Name : "";
+            GUI.color = new Color(1, 1, 1, 0.45f);
+            GUI.Label(new Rect(box.x, box.y + 50, w * 0.3f, 50), prev, item);
+            GUI.Label(new Rect(box.x + w * 0.7f, box.y + 50, w * 0.3f, 50), next, item);
+            GUI.color = new Color(1f, 0.85f, 0.3f);
+            GUI.Label(new Rect(box.x + w * 0.25f, box.y + 46, w * 0.5f, 56), menu.Current.Name, item);
+            GUI.color = Color.white;
+            GUI.Label(new Rect(box.x, box.y + h - 38, w, 30), $"{menu.Index + 1}/{n}   D-pad left/right: choose   up: play   down: close", hint);
         }
 
         /// Converts the scene's terrain into the core's collision. A room that cannot be converted is played

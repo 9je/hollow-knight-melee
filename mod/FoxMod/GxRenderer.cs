@@ -25,6 +25,8 @@ namespace FoxMelee {
         readonly MeshRenderer renderer;
         bool shown;
         public bool Shown => shown;
+        /// A new core (a character change): its texture generations start again, so every texture is uploaded anew.
+        public void Reset() { foreach (var k in new List<(int, int, int)>(textures.Keys)) textures[k] = (uint.MaxValue, textures[k].tex); }
         public bool Glow;                       // Fox is focusing: he pulses brighter (the Knight's focus has its glow)
         readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
 
