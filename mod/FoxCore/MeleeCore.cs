@@ -82,6 +82,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate ulong FrameFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BounceFn(int port, float vy);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void CharStartFn(byte[] start, int character);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int KoFn(int port, int star);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GatesFn(int port, uint locked);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
@@ -94,7 +95,7 @@ namespace FoxMelee {
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
-        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly OnFn ko; readonly CharStartFn soloChar, standinChar; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
+        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly KoFn ko; readonly CharStartFn soloChar, standinChar; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -122,7 +123,7 @@ namespace FoxMelee {
             edgeAssist = NativeLib.Symbol<OnFn>(lib, "mc_set_edge_assist");
             frameNo = NativeLib.Symbol<FrameFn>(lib, "mc_frame");
             bounce = NativeLib.Symbol<BounceFn>(lib, "mc_bounce");
-            ko = NativeLib.Symbol<OnFn>(lib, "mc_ko");
+            ko = NativeLib.Symbol<KoFn>(lib, "mc_ko");
             gates = NativeLib.Symbol<GatesFn>(lib, "mc_set_gates");
             start = NativeLib.Symbol<StartFn>(lib, "mc_start_match");
             input = NativeLib.Symbol<InputFn>(lib, "mc_set_input");
@@ -197,9 +198,10 @@ namespace FoxMelee {
         public bool Step() { Sync(); if (finishFrame() != 0) return Ok(-1); return Ok(step()); }
         /// Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up at vy, fast fall ended, double jump back.
         /// 0 done, 1 not airborne, -1 error.
-        public int Bounce(int port, float vy) { Sync(); localError = null; return bounce(port, vy); }
-        /// Hollow Knight's death: Melee's KO blast and voice where the fighter stands; it stays hidden until its next placement.
-        public bool Ko(int port) { Sync(); return Ok(ko(port)); }
+        public int Bounce(int port, float hop) { Sync(); localError = null; return bounce(port, hop); }
+        /// Hollow Knight's death: Melee's KO blast and voice (star: the star KO's scream) where the fighter stands; it stays
+        /// hidden until its next placement.
+        public bool Ko(int port, bool star) { Sync(); return Ok(ko(port, star ? 1 : 0)); }
         /// Move gating (spec §6): MoveGates bits of the moves that don't start.
         public bool SetGates(int port, uint locked) { Sync(); return Ok(gates(port, locked)); }
         /// Frame boundaries reached since Init.

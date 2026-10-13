@@ -87,7 +87,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     bounces Fox up (about a full hop) into Melee's normal fall, ends a fast fall and gives his double jump back; that
     touch doesn't hurt him. Down-air again to chain pogos. Acid, pits and enemies
     are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
-    `BounceSpeed` (Melee units per frame, 3.5), `GraceFrames` (8). Try it on King's Pass's first spikes.
+    `BounceHop` (share of the character's own full-hop speed, 0.9), `GraceFrames` (8). Try it on King's Pass's first spikes.
 
 17. Move gating: replaced in roster stage 1 (item 19). Movesets are complete, wall jump needs Mantis Claw.
 

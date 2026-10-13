@@ -248,13 +248,19 @@ namespace FoxMelee {
 
         // Hollow Knight's death: Melee's KO (the blast and Fox's cry) where Fox stands, played out for KoFrames while Hollow
         // Knight runs its death; the next placement (the respawn) shows him again.
-        const int KoFrames = 60;
+        const int KoFrames = 60, StarKoOneIn = 4;
+        readonly System.Random koRandom = new System.Random();
+        readonly DeathScreen deathScreen = new DeathScreen();
         readonly OutOfRoom outOfRoom = new OutOfRoom();
         int koLeft = -1;                          // Melee frames of the KO left to show; -1: none started this death
         bool Ko(HeroController hero, GameManager gm, HeroFlags f) {
-            if (!f.Dead) { koLeft = -1; return false; }
+            if (!f.Dead) { koLeft = -1; deathScreen.End(); return false; }
+            deathScreen.Frame(Log);
             if (koLeft < 0) {
-                if (state != State.Running || room == null || !core.Ko(0)) { koLeft = 0; return false; }
+                deathScreen.Begin(hero.transform.position);
+                bool star = koRandom.Next(StarKoOneIn) == 0;   // now and then the star KO's scream, as Melee's KOs vary
+                if (state != State.Running || room == null || !core.Ko(0, star)) { koLeft = 0; return false; }
+                if (star) Log("KO (star)");
                 koLeft = KoFrames;
                 accumulator = 0;
                 combat?.ReleaseAll(); grab?.Release();

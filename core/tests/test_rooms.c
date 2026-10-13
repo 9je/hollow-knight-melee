@@ -20,6 +20,7 @@ static void solo_fox(void) {
   for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
 }
 static void steps(int n, const McInput *in) { mc_set_input(0, in); for (int i = 0; i < n; i++) CHECK(mc_step() == 0); }
+static float mc_peekf(uint32_t ea) { uint32_t u = mc_peek32(ea); float f; memcpy(&f, &u, 4); return f; }
 static McFighter fox(void) { McFighter f; CHECK(mc_read_fighter(0, 0, &f) == 0); return f; }
 static int same(McFighter a, McFighter b) { return memcmp(&a, &b, sizeof a) == 0; }
 
@@ -875,7 +876,7 @@ static void test_ko(void) {
   solo_fox(); steps(180, &idle);
   while (mc_read_sfx(ev, 64) > 0) {}
   McFighter before = fox();
-  CHECK(mc_ko(0) == 0);
+  CHECK(mc_ko(0, 0) == 0);
   steps(1, &idle);
   int n = mc_read_sfx(ev, 64), starts = 0;
   for (int i = 0; i < n; i++) starts += ev[i].kind == 0;
@@ -889,6 +890,18 @@ static void test_ko(void) {
   steps(60, &idle);
   CHECK(!(mc_peek32(fp + 0x221C) & 0x8000u));
   CHECK(fox().airborne == 0);
+  mc_shutdown();
+  /* the star KO: the blast and another voice (DeadUpStar's scream) */
+  uint32_t last_plain = 0;
+  for (int i = 0; i < n; i++) if (ev[i].kind == 0) last_plain = ev[i].id;
+  solo_fox(); steps(180, &idle);
+  while (mc_read_sfx(ev, 64) > 0) {}
+  CHECK(mc_ko(0, 1) == 0);
+  steps(1, &idle);
+  int n2 = mc_read_sfx(ev, 64), starts2 = 0;
+  uint32_t last_star = 0;
+  for (int i = 0; i < n2; i++) if (ev[i].kind == 0) { starts2++; last_star = ev[i].id; }
+  CHECK(starts2 >= 2 && last_star != last_plain);
   mc_shutdown();
 }
 
@@ -982,13 +995,13 @@ static void test_render_pause(void) {
   mc_shutdown();
 }
 
-/* Hazard pogo (spec §5.4, not Melee): mc_bounce sends an airborne fighter up, ends a fast fall and gives the double jump back */
+/* Hazard pogo (spec §5.4, not Melee): mc_bounce sends an airborne fighter up at a fraction of its own full hop, ends a fast fall and gives the double jump back */
 static void test_bounce(void) {
   McInput idle = {0}, jump = {0}, down = {0};
   jump.buttons = 0x0800;            /* X */
   down.stick_y = -127;
   solo_fox(); steps(180, &idle);
-  CHECK(mc_bounce(0, 2.8f) == 1);                       /* grounded: nothing */
+  CHECK(mc_bounce(0, 0.95f) == 1);                       /* grounded: nothing */
   steps(1, &jump); steps(12, &idle);
   steps(1, &jump); steps(1, &idle);                     /* the double jump, used */
   for (int i = 0; i < 60 && fox().self_vel_y >= 0; i++) steps(1, &idle);
@@ -998,9 +1011,10 @@ static void test_bounce(void) {
   CHECK(fox().action == 69);
   uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
   CHECK(fox().airborne && (mc_peek32(fp + 0x1968) >> 24) == 2 && (mc_peek32(fp + 0x2218) & 0x0800));
-  CHECK(mc_bounce(0, 2.8f) == 0);
+  CHECK(mc_bounce(0, 0.95f) == 0);
   steps(1, &idle);
-  CHECK(fox().self_vel_y > 2.0f);                       /* up, less one frame of gravity */
+  float hop = 0.95f * mc_peekf(fp + 0x150);             /* 95% of Fox's own full hop (jump_v_initial_velocity) */
+  CHECK(fox().self_vel_y > hop - 0.3f && fox().self_vel_y < hop);   /* up, less one frame of gravity */
   CHECK(fox().action == 29);                            /* the down-air ends: Fall, as an aerial ending mid-rise */
   CHECK((mc_peek32(fp + 0x1968) >> 24) == 1 && !(mc_peek32(fp + 0x2218) & 0x0800));
   float y = fox().y;

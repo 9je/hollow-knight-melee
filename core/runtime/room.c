@@ -247,6 +247,7 @@ void room_ground_fighter(Cpu *c, uint32_t gobj, float x, float y) {
 #define FN_EF_SPAWN 0x8005FDDCu         /* efSync_Spawn(kind, gobj, ...): an effect */
 #define FN_FT_PLAY_SFX 0x80088148u      /* ft_PlaySFX(fp, id, vol, pan) */
 #define FN_FT_VOICE 0x800D38B8u         /* ftCo_800D38B8(fp, id): a voice line */
+#define FN_FT_SFX_VOICE 0x800881D8u     /* ft_800881D8(fp, id, vol, pan) */
 #define EF_KO_BLAST 0x42Bu
 #define ADDR_FT_COMMON_DATA 0x804D6554u /* p_ftCommonData */
 /* mc_ko: what ftCo_800D3BC8 (DeadDown) does that shows: the blast effect pointing up from the fighter, the blast sound, the
@@ -275,8 +276,13 @@ static void ko_boundary_jobs(Cpu *c) {
       c->gpr[5] = 0x7F; c->gpr[6] = 0x40;
       call_guest(c, FN_FT_PLAY_SFX, fp, 0x61);
       uint32_t sfx = ld32(c, ld32(c, fp + 0x10Cu) + 0x4Cu);
-      call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 4));
-      call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 8));
+      if (m->ko_pending[p] == 2) {                       /* the star KO's scream (ftCo_800D40B8's DeadUpStar) */
+        c->gpr[5] = 127; c->gpr[6] = 64;
+        call_guest(c, FN_FT_SFX_VOICE, fp, ld32(c, sfx + 0xC));
+      } else {
+        call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 4));
+        call_guest(c, FN_FT_VOICE, fp, ld32(c, sfx + 8));
+      }
       st8(c, fp + 0x221Eu, (uint8_t)(ld8(c, fp + 0x221Eu) | 0x80u));
       st8(c, fp + 0x221Fu, (uint8_t)(ld8(c, fp + 0x221Fu) | 0x40u));
     }

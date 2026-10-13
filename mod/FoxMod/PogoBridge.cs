@@ -43,7 +43,7 @@ namespace FoxMelee {
                 }
             }
             if (!pogo.Frame(fox.Action, fox.SelfVelY, touching)) return true;
-            return core.Bounce(0, (float)tuning.BounceSpeed) >= 0;
+            return core.Bounce(0, (float)tuning.BounceHop) >= 0;
         }
 
         bool TouchesSpikes(RoomTransform room, float x, float y, float radius) {

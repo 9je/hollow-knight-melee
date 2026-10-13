@@ -571,14 +571,14 @@ int mc_bounce(int port, float vy) {
   if (!m || m->dead || port < 0 || port > 3 || !isfinite(vy)) return -1;
   uint32_t fp = fighter_at(&m->cpu, port, 0);
   if (!fp || ld32(&m->cpu, fp + 0xE0) == 0) return 1;            /* no fighter, or grounded */
-  m->bounce_pending[port] = 1; m->bounce_vy[port] = vy;          /* at the next frame boundary (room.c) */
+  m->bounce_pending[port] = 1; m->bounce_vy[port] = vy * f32at(&m->cpu, fp + 0x150);   /* x its full hop; at the next boundary (room.c) */
   return 0;
 }
 
-int mc_ko(int port) {
+int mc_ko(int port, int star) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3) return -1;
-  m->ko_pending[port] = 1;                                       /* at the next frame boundary (room.c) */
+  m->ko_pending[port] = star ? 2 : 1;                                       /* at the next frame boundary (room.c) */
   return 0;
 }
 
