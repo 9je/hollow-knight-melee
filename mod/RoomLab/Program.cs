@@ -88,6 +88,21 @@ namespace FoxMelee.Lab {
                     }
                     return 0;
                 }
+                case "reach": {   // reach [--chars Fox,Bowser]: each character's jump, best height and widest gap
+                    string iso = OptS(a, "--iso") ?? Environment.GetEnvironmentVariable("MELEE_ISO");
+                    string mem1 = OptS(a, "--mem1") ?? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(CoreSo), "gen-core/mem1.bin"));
+                    if (!core.Init(mem1, iso)) { Console.Error.WriteLine(core.Error); return 1; }
+                    var names = OptS(a, "--chars")?.Split(',');
+                    foreach (var ch in Roster.All.Where(ch => names == null || names.Contains(ch.Name))) {
+                        if (!core.Init(mem1, iso) || !core.StartMatch(ch.MeleeId, false)) { Console.Error.WriteLine($"{ch.Name}: {core.Error}"); return 1; }
+                        core.SetInput(0, new McInput());
+                        for (int p = 1; p < 4; p++) core.SetInput(p, null);
+                        for (int i = 0; i < 180; i++) core.Step();
+                        var r = Reach.Measure(core, scale);
+                        Console.WriteLine($"{ch.Name,-15} jump {r.Jump,5:F1}  best height {r.High,5:F1}  widest gap {r.Gap,5:F1}");
+                    }
+                    return 0;
+                }
                 default:
                     Console.Error.WriteLine($"unknown command {a[0]}");
                     return 2;
