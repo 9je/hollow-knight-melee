@@ -94,7 +94,7 @@ namespace FoxMelee {
             if (!logic.Contains(scene + "[") && !local.Any(r => Mentions(logic, r))) return true;   // another room's pickup
             bool Reaches(KnightAbilities k) {
                 Unreachable(scene, entryGate, k, out var reached, out var regions);
-                return Evaluate(logic, t => Skip(t) ? false : Term(t, scene, k, reached, regions, local));
+                return Evaluate(logic, t => Term(t, scene, k, reached, regions, local));
             }
             return !Reaches(Everything) || !NeedsAbility(logic, local, 0) || Reaches(WithOwn(a, flag));
         }
@@ -166,6 +166,7 @@ namespace FoxMelee {
         // a term's value in this room: its doors and regions as reached so far, the Knight's abilities, the skip settings;
         // null (passable) for anything else
         bool? Term(string t, string scene, KnightAbilities a, HashSet<string> reached, HashSet<string> regions, HashSet<string> local) {
+            if (Skip(t)) return false;   // a skip helper: never the way through
             int br = t.IndexOf('[');
             if (br > 0 && t.EndsWith("]") && !t.StartsWith("$")) {
                 string s = t.Substring(0, br);

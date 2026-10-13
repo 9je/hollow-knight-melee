@@ -101,6 +101,14 @@ namespace FoxMelee.Tests {
             Assert.True(Logic.ItemOpen("Fungus2_20", "left1", new KnightAbilities(), "notAnItem"));    // unknown: open
         }
 
+        // the logic's skip helpers ($SHRIEKPOGO, $CASTSPELL, ...) aren't a way through: King's Pass's upper exit needs Mantis Claw
+        [Fact]
+        public void SkipHelpersDontOpenDoors() {
+            Assert.Contains("top2", Logic.Blocked("Tutorial_01", "right1", new KnightAbilities()));
+            Assert.Contains("top2", Logic.Blocked("Tutorial_01", "top1", new KnightAbilities()));
+            Assert.DoesNotContain("top2", Logic.Blocked("Tutorial_01", "right1", new KnightAbilities { Claw = true }));
+        }
+
         // from Isma's Tear's lower door the logic needs Isma's Tear to reach it: an item never waits for itself
         [Fact]
         public void AnItemNeverWaitsForItself() {
