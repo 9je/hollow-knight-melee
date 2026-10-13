@@ -34,9 +34,9 @@ else
 fi
 # Melee's sound effects from your ISO (never fatal: without them the mod is silent)
 if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-sfx" ]; then
-  "$venv/bin/ssbmhk-extract-sfx" "$iso" --out "$dest" || echo "melee.sfx not extracted: Fox is silent"
+  "$venv/bin/ssbmhk-extract-sfx" "$iso" --out "$dest" || echo "Melee sounds not extracted: the character is silent"
 else
-  echo "melee.sfx not extracted (no ISO in dev.toml or no tools environment): Fox is silent"
+  echo "Melee sounds not extracted (no ISO in dev.toml or no tools environment): the character is silent"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting

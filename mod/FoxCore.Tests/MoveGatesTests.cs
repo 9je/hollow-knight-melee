@@ -2,21 +2,12 @@ using Xunit;
 
 namespace FoxMelee.Tests {
     public class MoveGatesTests {
-        [Fact]
-        public void StartLocksEveryUnlockableMove() =>
-            Assert.Equal(MoveGates.DoubleJump | MoveGates.WallJump | MoveGates.Blaster | MoveGates.Illusion | MoveGates.FireFox | MoveGates.Shine,
-                         MoveGates.Locked(new HkUnlocks()));
-
-        [Fact]
-        public void EachUnlockFreesItsMove() {
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks {
-                VengefulSpirit = true, MothwingCloak = true, MantisClaw = true, CrystalHeart = true, DesolateDive = true, MonarchWings = true }));
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { VengefulSpirit = true }) & MoveGates.Shine);
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { MothwingCloak = true }) & MoveGates.Illusion);
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { MantisClaw = true }) & MoveGates.WallJump);
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { CrystalHeart = true }) & MoveGates.FireFox);
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { DesolateDive = true }) & MoveGates.Blaster);
-            Assert.Equal(0u, MoveGates.Locked(new HkUnlocks { MonarchWings = true }) & MoveGates.DoubleJump);
-        }
+        [Theory]
+        [InlineData("Fox", false, MoveGates.WallJump)]
+        [InlineData("Fox", true, 0u)]
+        [InlineData("Zelda", true, MoveGates.SpecialLw)]
+        [InlineData("Sheik", false, MoveGates.WallJump | MoveGates.SpecialLw)]
+        public void ForCharacter(string name, bool mantisClaw, uint locked) =>
+            Assert.Equal(locked, MoveGates.ForCharacter(Roster.Find(name, out _), mantisClaw));
     }
 }

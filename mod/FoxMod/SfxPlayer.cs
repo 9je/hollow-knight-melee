@@ -7,7 +7,7 @@ using UnityEngine.Audio;
 namespace FoxMelee {
     /// Plays Melee's sound effects: drains the core's sound calls after each Melee frame, runs them through
     /// SfxMixer (Melee's scripts and voice rules) and plays the samples from melee.sfx (extracted from the player's
-    /// ISO at install) on a small pool of 2D AudioSources. Without melee.sfx Fox is silent.
+    /// ISO at install) on a small pool of 2D AudioSources. Without melee.sfx the character is silent.
     sealed class SfxPlayer {
         const int Voices = 16;
         const float FrameSeconds = 1f / 60f;
@@ -21,13 +21,18 @@ namespace FoxMelee {
         readonly List<SfxAction> actions = new List<SfxAction>();
 
         /// Null (silent) when MeleeSfx is off or melee.sfx is missing or unreadable; says why once.
-        public static SfxPlayer Create(MeleeCore core, Action<string> log) {
+        public static SfxPlayer Create(MeleeCore core, Character character, Action<string> log) {
             var s = FoxMod.Instance.Settings;
             if (!s.MeleeSfx) { log("Melee sounds off (MeleeSfx)"); return null; }
             var path = Path.Combine(FoxMod.ModDir, "melee.sfx");
-            if (!File.Exists(path)) { log("melee.sfx not found (extracted from your ISO by mod/install.sh): Fox is silent"); return null; }
+            if (!File.Exists(path)) { log("melee.sfx not found (extracted from your ISO by mod/install.sh): the character is silent"); return null; }
             SfxBank bank;
-            try { bank = SfxBank.Load(path); } catch (Exception e) { log($"melee.sfx not used ({e.Message}): Fox is silent"); return null; }
+            try { bank = SfxBank.Load(path); } catch (Exception e) { log($"melee.sfx not used ({e.Message}): the character is silent"); return null; }
+            foreach (int b in character.Banks) {
+                var own = Path.Combine(FoxMod.ModDir, $"melee-{b}.sfx");
+                if (!File.Exists(own)) { log($"melee-{b}.sfx not found (run mod/install.sh): {character.Name}'s own sounds are silent"); continue; }
+                try { bank.Add(SfxBank.Load(own)); } catch (Exception e) { log($"melee-{b}.sfx not used ({e.Message})"); }
+            }
             var p = new SfxPlayer(bank, Mathf.Clamp01((float)s.SfxVolume));
             p.Drain(core, play: false);   // the boot and countdown's calls
             log($"Melee sounds: {bank.ScriptCount} sounds");

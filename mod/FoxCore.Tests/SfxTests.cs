@@ -36,6 +36,30 @@ namespace FoxMelee.Tests {
         }
 
         static SfxBank Bank() => SfxBank.Load(new MemoryStream(Bundle()));
+
+        // one sound playing one sample (MSFX v1)
+        static SfxBank OneSound(uint id, int sample) {
+            var ms = new MemoryStream();
+            var w = new BinaryWriter(ms);
+            w.Write(new[] { (byte)'M', (byte)'S', (byte)'F', (byte)'X' });
+            w.Write(1u); w.Write(1u); w.Write(1u);
+            w.Write(id); w.Write(1u); w.Write((byte)1); w.Write(new byte[3]); w.Write(sample); w.Write(0u);
+            w.Write((uint)sample); w.Write(32000u); w.Write((ushort)1); w.Write((ushort)0); w.Write(4u); w.Write(-1);
+            for (int i = 0; i < 4; i++) w.Write((short)i);
+            ms.Position = 0;
+            return SfxBank.Load(ms);
+        }
+
+        [Fact]
+        public void AddMergesAndKeepsExisting() {
+            var a = OneSound(1, 5);
+            a.Add(OneSound(110000, 7));
+            a.Add(OneSound(1, 9));                       // an id already there stays as it was
+            Assert.Equal(2, a.ScriptCount);
+            Assert.True(a.TryGetScript(110000, out _));
+            Assert.True(a.TryGetSample(7, out _));
+            Assert.True(a.TryGetScript(1, out var s1) && s1[0].Value == 5);
+        }
         static McSfx Start(uint id, byte pan = 0x80, byte track = 0, int handle = 1, byte vol = 254) =>
             new McSfx { Kind = McSfx.Start, Id = id, Vol = vol, Pan = pan, Track = track, Channel = 7, Handle = handle };
 

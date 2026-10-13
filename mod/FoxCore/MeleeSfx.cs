@@ -45,6 +45,12 @@ namespace FoxMelee {
         public bool TryGetScript(uint id, out SfxCommand[] s) => scripts.TryGetValue(id, out s);
         public bool TryGetSample(int id, out SfxSample s) => samples.TryGetValue(id, out s);
 
+        /// Another bundle's sounds and samples (a character's bank next to the main one); existing ids are kept.
+        public void Add(SfxBank other) {
+            foreach (var kv in other.scripts) if (!scripts.ContainsKey(kv.Key)) scripts[kv.Key] = kv.Value;
+            foreach (var kv in other.samples) if (!samples.ContainsKey(kv.Key)) samples[kv.Key] = kv.Value;
+        }
+
         public static SfxBank Load(string path) { using var f = File.OpenRead(path); return Load(f); }
         public static SfxBank Load(Stream stream) {
             var r = new BinaryReader(stream);

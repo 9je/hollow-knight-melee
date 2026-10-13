@@ -338,18 +338,11 @@ namespace FoxMelee {
             return focusing;
         }
 
-        // spec §6: the moves locked by what the Knight has (MoveGating); set when it changes
+        // the moves the core locks (MoveGates): wall jump until Mantis Claw, Zelda's and Sheik's transform; set when it changes
         uint gatesSet = uint.MaxValue;
+        Character character = Roster.Fox;
         bool Gate() {
-            uint locked = 0;
-            if (FoxMod.Instance.Settings.MoveGating) {
-                var pd = PlayerData.instance;
-                locked = MoveGates.Locked(new HkUnlocks {
-                    VengefulSpirit = pd.GetInt("fireballLevel") > 0, MothwingCloak = pd.GetBool("hasDash"),
-                    MantisClaw = pd.GetBool("hasWalljump"), CrystalHeart = pd.GetBool("hasSuperDash"),
-                    DesolateDive = pd.GetInt("quakeLevel") > 0, MonarchWings = pd.GetBool("hasDoubleJump"),
-                });
-            }
+            uint locked = MoveGates.ForCharacter(character, PlayerData.instance.GetBool("hasWalljump"));
             if (locked == gatesSet) return true;
             if (!core.SetGates(0, locked)) { Fail("mc_set_gates: " + core.Error); return false; }
             gatesSet = locked;
@@ -370,7 +363,10 @@ namespace FoxMelee {
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
             if (!core.Init(mem1, s.IsoPath)) { Fail("mc_init: " + core.Error); return false; }
             bool grabs = s.Grabs?.Enabled ?? false;
-            if (!(grabs ? core.StartFoxWithStandIn() : core.StartSoloFox())) { Fail("mc_start_match: " + core.Error); return false; }
+            character = Roster.Find(s.Character, out bool known);
+            if (!known) FoxMod.Instance.LogWarn($"Character \"{s.Character}\" is not a Melee character: playing Fox");
+            Log("character: " + character.Name);
+            if (!core.StartMatch(character.MeleeId, grabs)) { Fail("mc_start_match: " + core.Error); return false; }
             core.SetInput(0, new McInput());
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
             for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
@@ -395,7 +391,7 @@ namespace FoxMelee {
                     Log("drawing Melee's own graphics");
                 } catch (Exception e) { Log("Melee's graphics not drawn (" + e.Message + "): fox.model instead"); gx = null; }
             }
-            try { sfx = SfxPlayer.Create(core, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
+            try { sfx = SfxPlayer.Create(core, character, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
             focus = new FocusRules(Math.Max(1, (int)Math.Round(s.FocusSeconds * 60)), 33);
             state = State.Running;
             Log("libmelee_core running");

@@ -18,7 +18,7 @@ namespace FoxMelee {
         public EnemyHitTuning EnemyHits = new EnemyHitTuning();   // how a Hollow Knight hit becomes a Melee hit
         public bool DrawOffThread = true;           // Melee's drawing (3/4 of its frame) runs on the core's thread while Unity goes on
         public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
-        public bool MoveGating = false;             // spec §6: Fox's specials, wall jump and double jump wait for the Knight's unlocks
+        public string Character = "Fox";           // a Melee character's name (Roster): who plays until the bench select exists
         public KnockbackTuning Knockback = new KnockbackTuning();   // Fox's hits launch small enemies with Melee's knockback and hitstun
         public PogoTuning Pogo = new PogoTuning();   // spec §5.4: down-air bounces off spikes (not Melee: the one exception)
         public GrabTuning Grabs = new GrabTuning();   // spec §5 Grab: Fox's grab and Melee's push against small enemies (plan 7)

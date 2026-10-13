@@ -81,6 +81,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int OnFn(int on);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate ulong FrameFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int BounceFn(int port, float vy);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void CharStartFn(byte[] start, int character);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GatesFn(int port, uint locked);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInWakeFn(float x, float y, float facing);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxDecodeFn(ulong mask, out IntPtr verts, out int nverts, out IntPtr runs, out int nruns);
@@ -93,7 +94,7 @@ namespace FoxMelee {
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
         readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
-        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly OnFn ko; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
+        readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly OnFn ko; readonly CharStartFn soloChar, standinChar; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
@@ -112,6 +113,8 @@ namespace FoxMelee {
             finishFrame = NativeLib.Symbol<IntFn>(lib, "mc_finish_frame");
             solo = NativeLib.Symbol<SoloFn>(lib, "mc_solo_fox_start");
             standinStart = NativeLib.Symbol<SoloFn>(lib, "mc_fox_standin_start");
+            soloChar = NativeLib.Symbol<CharStartFn>(lib, "mc_solo_start");
+            standinChar = NativeLib.Symbol<CharStartFn>(lib, "mc_standin_start");
             standinSet = NativeLib.Symbol<StandInSetFn>(lib, "mc_standin_set");
             standinWake = NativeLib.Symbol<StandInWakeFn>(lib, "mc_standin_wake");
             standinSleep = NativeLib.Symbol<IntFn>(lib, "mc_standin_sleep");
@@ -161,6 +164,13 @@ namespace FoxMelee {
             Sync();
             var s = new byte[StartSize];
             solo(s);
+            return Ok(start(s, 1, 0));
+        }
+        /// A match with `character` (Melee's external id) at port 0; with the grab stand-in (always Fox) at port 1.
+        public bool StartMatch(int character, bool standIn) {
+            Sync();
+            var s = new byte[StartSize];
+            if (standIn) standinChar(s, character); else soloChar(s, character);
             return Ok(start(s, 1, 0));
         }
         /// Fox at port 0 and the grab/push stand-in's fighter at port 1 (plan 7).
