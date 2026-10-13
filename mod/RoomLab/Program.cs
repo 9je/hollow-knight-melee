@@ -62,6 +62,32 @@ namespace FoxMelee.Lab {
                     Console.WriteLine($"{c.Scene}: {trace.Count} frames from ({sx:F1}, {sy:F1}) via {gate.Name}; end action {trace[^1].Action} at ({trace[^1].X:F1}, {trace[^1].Y:F1})");
                     return 0;
                 }
+                case "sweep": {   // sweep <rooms dir> [--chars Fox,Bowser] [--rooms Town,Crossroads_01]: every character in at every side or top door
+                    string iso = OptS(a, "--iso") ?? Environment.GetEnvironmentVariable("MELEE_ISO");
+                    string mem1 = OptS(a, "--mem1") ?? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(CoreSo), "gen-core/mem1.bin"));
+                    if (!core.Init(mem1, iso)) { Console.Error.WriteLine(core.Error); return 1; }
+                    var names = OptS(a, "--chars")?.Split(',');
+                    var chars = Roster.All.Where(ch => names == null || names.Contains(ch.Name)).ToList();
+                    var only = OptS(a, "--rooms")?.Split(',');
+                    var rooms = Directory.GetFiles(a[1], "*.json").Where(f => !f.EndsWith(".melee.json")).OrderBy(f => f)
+                        .Select(RoomFile.Load).Where(r => (only == null || only.Contains(r.Scene)) && r.Colliders.Count > 0).ToList();   // built one at a time: a build lasts until the next
+                    Console.Error.WriteLine($"{rooms.Count} rooms, {chars.Count} characters");
+                    foreach (var ch in chars) {
+                        if (!core.StartMatch(ch.MeleeId, false)) { Console.Error.WriteLine($"{ch.Name}: {core.Error}"); return 1; }
+                        core.SetInput(0, new McInput());
+                        for (int p = 1; p < 4; p++) core.SetInput(p, null);
+                        for (int i = 0; i < 180; i++) core.Step();
+                        foreach (var room in rooms) {
+                            var c = Rooms.Convert(core, room, scale);
+                            if (!c.Ok) continue;
+                            foreach (var g in room.Gates) {
+                                var r = Sweep.Enter(core, c, g);
+                                if (r != null) Console.WriteLine($"{ch.Name}\t{c.Scene}\t{g.Name}\t{r}");
+                            }
+                        }
+                    }
+                    return 0;
+                }
                 default:
                     Console.Error.WriteLine($"unknown command {a[0]}");
                     return 2;

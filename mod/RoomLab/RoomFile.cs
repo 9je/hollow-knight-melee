@@ -52,13 +52,25 @@ namespace FoxMelee.Lab {
             c.Ok = true;
             return c;
         }
-            public static List<TracePoint> Run(MeleeCore core, Conversion room, double startX, double startY, McInput[] inputs) {
+            public static List<TracePoint> Run(MeleeCore core, Conversion room, double startX, double startY, McInput[] inputs, bool still = false) {
             if (!core.LoadCollision(room.Collision)) throw new System.InvalidOperationException(core.Error);
             var (bmin, bmax) = (room.Transform.ToMelee(room.Min), room.Transform.ToMelee(room.Max));
             var cam = new McBox { Left = (float)bmin.X - 40, Right = (float)bmax.X + 40, Top = (float)bmax.Y + 40, Bottom = (float)bmin.Y - 40 };
             core.SetBounds(new McBox { Left = cam.Left - 100000, Right = cam.Right + 100000, Top = cam.Top + 100000, Bottom = cam.Bottom - 100000 }, cam);
             var lo = room.Transform.ToMelee(new V2(startX, startY));
-            if (!core.PlaceFighter(0, (float)lo.X, (float)lo.Y)) throw new System.InvalidOperationException(core.Error);
+            if (!(still ? core.RespawnFighter(0, (float)lo.X, (float)lo.Y) : core.PlaceFighter(0, (float)lo.X, (float)lo.Y))) throw new System.InvalidOperationException(core.Error);
+            var trace = new List<TracePoint>();
+            for (int f = 0; f < inputs.Length; f++) {
+                core.SetInput(0, inputs[f]);
+                if (!core.Step()) throw new System.InvalidOperationException(core.Error);
+                core.ReadFighter(0, out var fx);
+                trace.Add(new TracePoint { Frame = f, X = fx.X, Y = fx.Y, Action = fx.Action, Air = (int)fx.Airborne });
+            }
+            return trace;
+        }
+
+        /// More frames from where the fighter is now (after Run).
+        public static List<TracePoint> Continue(MeleeCore core, McInput[] inputs) {
             var trace = new List<TracePoint>();
             for (int f = 0; f < inputs.Length; f++) {
                 core.SetInput(0, inputs[f]);

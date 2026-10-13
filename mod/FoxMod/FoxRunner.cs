@@ -724,9 +724,26 @@ namespace FoxMelee {
 
         static List<Collider2D> FindTerrain() {
             var l = new List<Collider2D>();
-            bool shadeCloak = PlayerData.instance != null && PlayerData.instance.hasShadowDash;
-            foreach (var c in FindObjectsOfType<Collider2D>()) if (LiveTerrain(c) || (!shadeCloak && ShadeGate(c))) l.Add(c);
+            foreach (var c in FindObjectsOfType<Collider2D>()) if (Ground(c)) l.Add(c);
             return l;
+        }
+
+        // what a Melee character stands on and runs into: terrain, a Shade Cloak gate's barrier without Shade Cloak, an acid
+        // pool's surface with Isma's Tear
+        static bool Ground(Collider2D c) {
+            if (LiveTerrain(c)) return true;
+            var pd = PlayerData.instance;
+            return pd != null && ((!pd.hasShadowDash && ShadeGate(c)) || (pd.hasAcidArmour && AcidSurface(c)));
+        }
+
+        // an acid pool's swim region (Isma's Tear: the Knight swims across the top; a Melee character can't swim, so with Isma's
+        // Tear the pool is solid to its surface and the character runs over it; without, the acid is Hollow Knight's hazard as
+        // for the Knight). Read from the game's data: the pool's "Surface Water Region" trigger box carries an "Acid Armour
+        // Check" state machine, beside its "Acid Box" hazard which that check turns off.
+        static bool AcidSurface(Collider2D c) {
+            if (c == null || !(c is BoxCollider2D) || !c.gameObject.activeInHierarchy || c.gameObject.name != "Surface Water Region") return false;
+            foreach (var f in c.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Acid Armour Check") return true;
+            return false;
         }
 
         // a Shade Cloak gate's barrier: its "solid" box is on the Knight's own layer (13), not terrain, so without this a Melee
@@ -753,7 +770,7 @@ namespace FoxMelee {
         bool WatchTerrain(string scene) {
             bool gone = false, moved = false;
             foreach (var c in terrain) {
-                if (!LiveTerrain(c)) { gone = true; break; }
+                if (!Ground(c)) { gone = true; break; }
                 // moving terrain (falling and bobbing platforms): rebuilt every frame it moves
                 var at = (Vector2)c.transform.position;
                 if (terrainAt.TryGetValue(c, out var was) && (at - was).sqrMagnitude > 1e-6f) moved = true;
