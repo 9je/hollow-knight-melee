@@ -45,6 +45,7 @@ static Tex *texs; static int ntex, captex;
 static int depth_dl;
 static uint32_t state_epoch = 1;   /* bumped by every state load: cached vertices are only valid within one epoch */
 #define PLAY_DEPTH 500.0f
+#define NO_WRITE_BIAS 0.05f   /* view units: a second pass's triangle sorts after its first-pass twin (their depths differ by float noise) */
 static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_size_mismatches) */
 static uint32_t decode_errors;
 
@@ -908,7 +909,7 @@ static void to_atlas(Tri *tr) {
 
 /* Draw order without a depth buffer, after Melee's z modes (BP 0x40):
  *  layer 1: solid depth-tested triangles, each by its own depth (Fox's body); a solid draw that doesn't write depth
- *    (a second pass over the same body) kept whole at its mean depth, so it lands after the pass it covers;
+ *    (a second pass over the same body) a hair nearer, so each triangle lands right after the one it covers;
  *  layer 0 / 2: translucent depth-tested draws (most effects), each kept whole and placed by its mean depth, behind
  *    the solid ones when it lies wholly behind their mean depth, else in front;
  *  layer 3: draws whose depth test always passes (the shield bubble, the shine's outline): over everything, in
@@ -934,10 +935,8 @@ static void order_keys(Key *k) {
     while (end < ntris && tris[end].gobj == t->gobj && tris[end].tex == t->tex && tris[end].blend == t->blend && tris[end].zmode == t->zmode) end++;
     if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
     if (t->blend == MC_GX_OPAQUE && (t->zmode & 0x10)) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
-    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written (G&W's second pass over his body): whole, at its mean depth, in Melee's order after what it covers */
-      float sum = 0;
-      for (int j = i; j < end; j++) sum += tris[j].depth;
-      for (int j = i; j < end; j++) k[j] = (Key){1, sum / (float)(end - i), j};
+    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written (G&W's second pass over his body): each triangle a hair nearer than its depth, so it lands right after the triangle it covers and still under anything in front */
+      for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + NO_WRITE_BIAS, j};
       continue;
     }
     float sum = 0, far = -1e30f;
