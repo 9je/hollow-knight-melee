@@ -7,7 +7,8 @@ namespace FoxMelee {
     /// The bench's character select, drawn as Melee's: the characters in Melee's layout on its tiles (the faces with their
     /// name plates, from the player's ISO: css.bin), the ones not owned dark with a "?", Player 1's coin on the choice, and
     /// below it Player 1's red panel with the choice's portrait in the costume picked (X / Y turn it, as Melee's costume
-    /// buttons) and its name. Without css.bin the stock icons (stocks.bin) stand in; without those, names.
+    /// buttons) and its name; under that the row of Hollow Knight's charms that are still charms (CharmRow). Without
+    /// css.bin the stock icons (stocks.bin) stand in; without those, names.
     sealed class CharacterSelect {
         readonly Texture2D[] icons = new Texture2D[26];
         readonly bool haveIcons;
@@ -58,18 +59,19 @@ namespace FoxMelee {
 
         static readonly Color P1 = new Color(0.78f, 0.1f, 0.1f), Gold = new Color(1f, 0.85f, 0.25f);
 
-        public void Draw(CharacterGrid grid, Func<Character, bool> owned, Func<Character, int> costumeOf) {
-            Backdrop(out float sw, out float sh, out float u);
+        public void Draw(CharacterGrid grid, Func<Character, bool> owned, Func<Character, int> costumeOf, CharmRow charms, bool opaque) {
+            Backdrop(out float sw, out float sh, out float u, opaque);
             // the grid: Melee's rows of tiles, Player 1's coin on the choice
             float slot = 112 * u, th = slot * 56 / 64, gap = 6 * u, top = sh * 0.09f;
             Character current = grid.Current;
+            bool onGrid = !charms.Active;
             for (int r = 0; r < CharacterGrid.Rows.Count; r++) {
                 var row = CharacterGrid.Rows[r];
                 float width = row.Count * slot + (row.Count - 1) * gap, x0 = (sw - width) / 2, y = top + r * (th + gap);
                 for (int c = 0; c < row.Count; c++) {
                     var ch = row[c];
                     float x = x0 + c * (slot + gap);
-                    bool has = owned(ch), here = r == grid.Row && c == grid.Column;
+                    bool has = owned(ch), here = onGrid && r == grid.Row && c == grid.Column;
                     Rect(x - 2 * u, y - 2 * u, slot + 4 * u, th + 4 * u, here ? Gold : new Color(0.1f, 0.12f, 0.2f));
                     var tile = Tile(ch);
                     if (tile != null) {
@@ -98,7 +100,7 @@ namespace FoxMelee {
             // Player 1's panel: the portrait in its costume, the name, the costumes as stock icons
             bool own = owned(current);
             int costume = own ? costumeOf(current) : 0;
-            float ph = 240 * u, pw = 620 * u, px = (sw - pw) / 2, py = top + 3 * (th + gap) + 24 * u;
+            float ph = 220 * u, pw = 620 * u, px = (sw - pw) / 2, py = top + 3 * (th + gap) + 20 * u;
             Rect(px - 4 * u, py - 4 * u, pw + 8 * u, ph + 8 * u, new Color(0.25f, 0.02f, 0.02f));
             Rect(px, py, pw, ph, P1);
             Rect(px, py + ph - 46 * u, pw, 46 * u, new Color(0.45f, 0.05f, 0.05f));
@@ -134,11 +136,38 @@ namespace FoxMelee {
                     }
                     ix += isz + 10 * u;
                 }
-                Shadowed(new Rect(tx, py + ph - 42 * u, tw, 36 * u), $"P1   colour {costume + 1} of {current.Costumes}   (X / Y)", Style(20 * u, FontStyle.Bold, TextAnchor.MiddleLeft), new Color(1f, 0.85f, 0.85f));
             } else {
                 Shadowed(new Rect(tx, py + 100 * u, tw, 60 * u), current.IselaShop ? "Sold by Iselda in Dirtmouth" : "Find its charm", Style(24 * u, FontStyle.Bold, TextAnchor.MiddleLeft), new Color(1f, 0.85f, 0.85f));
             }
-            Shadowed(new Rect(0, sh - 60 * u, sw, 44 * u), "A: play     B: back     Stick / D-pad: choose     X / Y: colour", Style(22 * u, FontStyle.Normal, TextAnchor.MiddleCenter), new Color(0.85f, 0.85f, 0.9f));
+            CharmRowDraw(charms, sw, sh, u, py + ph + 26 * u);
+        }
+
+        /// The charms that are still charms, under the panel: Hollow Knight's icons, the equipped ones bright with a gold
+        /// frame, their notch cost as pips, the cursor's one named; the notches in use at the right.
+        void CharmRowDraw(CharmRow charms, float sw, float sh, float u, float y) {
+            int n = charms.Charms.Count;
+            if (n == 0) return;
+            float sz = 64 * u, gap = 14 * u, width = n * sz + (n - 1) * gap;
+            if (width > sw - 200 * u) { sz = (sw - 200 * u - (n - 1) * gap) / n; width = n * sz + (n - 1) * gap; }
+            float x0 = (sw - width) / 2;
+            string name = null; int cost = 0;
+            for (int i = 0; i < n; i++) {
+                var v = CharmScreen.View(charms.Charms[i]);
+                bool here = charms.Active && charms.Index == i;
+                float x = x0 + i * (sz + gap), bob = here ? Mathf.Sin(Time.unscaledTime * 6f) * 2 * u : 0;
+                Rect(x - 3 * u, y - 3 * u - bob, sz + 6 * u, sz + 6 * u, here ? Color.white : v.Equipped ? Gold : new Color(0.1f, 0.12f, 0.2f));
+                Rect(x, y - bob, sz, sz, v.Equipped ? new Color(0.22f, 0.2f, 0.12f) : new Color(0.08f, 0.09f, 0.14f));
+                if (v.Tex != null) {
+                    GUI.color = v.Equipped || here ? Color.white : new Color(0.55f, 0.55f, 0.6f, 1f);
+                    GUI.DrawTextureWithTexCoords(new Rect(x + 4 * u, y - bob + 4 * u, sz - 8 * u, sz - 8 * u), v.Tex, v.Uv);
+                    GUI.color = Color.white;
+                } else Shadowed(new Rect(x, y - bob, sz, sz), v.Id.ToString(), Style(20 * u, FontStyle.Bold, TextAnchor.MiddleCenter), Color.white);
+                for (int k = 0; k < v.Cost; k++) Rect(x + 4 * u + k * 10 * u, y + sz + 5 * u, 7 * u, 7 * u, v.Equipped ? Gold : new Color(0.5f, 0.45f, 0.3f));
+                if (here) { name = v.Name ?? ("Charm " + v.Id); cost = v.Cost; }
+            }
+            var (filled, slots) = CharmScreen.Notches();
+            for (int k = 0; k < slots; k++) Rect(sw - 100 * u - (slots - k) * 16 * u, y + sz / 2 - 6 * u, 12 * u, 12 * u, k < filled ? Gold : new Color(0.25f, 0.25f, 0.3f));
+            if (name != null) Shadowed(new Rect(0, y + sz + 20 * u, sw, 40 * u), name, Style(26 * u, FontStyle.Bold, TextAnchor.MiddleCenter), Color.white);
         }
 
         /// A character change loading (the core restarting): the choice's portrait, and that it's on its way.
@@ -152,14 +181,14 @@ namespace FoxMelee {
             Shadowed(new Rect(0, y + h + 100 * u, sw, 50 * u), "Ready...", Style(30 * u, FontStyle.Italic, TextAnchor.MiddleCenter), Color.white);
         }
 
-        /// Melee's deep blue, darker towards the bottom, over the room.
-        void Backdrop(out float sw, out float sh, out float u) {
+        /// Melee's deep blue, darker towards the bottom, over the room (or over Hollow Knight's charm screen: then solid).
+        void Backdrop(out float sw, out float sh, out float u, bool opaque = false) {
             if (white == null) { white = new Texture2D(1, 1); white.SetPixel(0, 0, Color.white); white.Apply(); }
             sw = Screen.width; sh = Screen.height; u = sh / 1080f;
             const int bands = 12;
             for (int i = 0; i < bands; i++) {
                 float f = (float)i / (bands - 1);
-                Rect(0, sh * i / bands, sw, sh / bands + 1, new Color(0.03f + 0.07f * (1 - f), 0.05f + 0.1f * (1 - f), 0.2f + 0.25f * (1 - f), 0.93f));
+                Rect(0, sh * i / bands, sw, sh / bands + 1, new Color(0.03f + 0.07f * (1 - f), 0.05f + 0.1f * (1 - f), 0.2f + 0.25f * (1 - f), opaque ? 1f : 0.93f));
             }
         }
 
