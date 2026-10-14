@@ -567,14 +567,14 @@ namespace FoxMelee {
         int focusMasks = 1;
 
         // ---- choosing a character at a bench: Hollow Knight's charm screen (the inventory, opened while sitting) is
-        // Melee's character select (CharmScreen), with the row of charms that are still charms under it; D-pad up (keyboard
-        // T) at the bench opens it as well. Stick or D-pad moves, A (keyboard J or Enter) plays the character or equips a
+        // Melee's character select (CharmScreen), with the row of charms that are still charms under it; nothing else opens
+        // it. Stick or D-pad moves, A (keyboard J or Enter) plays the character or equips a
         // charm, B (keyboard K or Escape) closes, X / Y turn the color. While it is open the controller is the screen's:
         // Hollow Knight sees it idle, until every button is let go after it closes. ----
         CharacterGrid grid;
         CharacterSelect select;
         System.Collections.Generic.HashSet<Character> ownedNow;
-        bool selUp, selA, selB, selX, selY;
+        bool selA, selB, selX, selY;
         readonly System.Collections.Generic.Dictionary<Character, int> costumePick = new System.Collections.Generic.Dictionary<Character, int>();   // the select's costume per character
         int repeatDx, repeatDy; float repeatAt;
         CharmRow charmRow = new CharmRow(new int[0]);   // the charms under the grid
@@ -590,7 +590,7 @@ namespace FoxMelee {
             bool bk = (b & GcButtons.B) != 0 || Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.Escape);
             bool nextC = (b & GcButtons.X) != 0 || Input.GetKey(KeyCode.E), prevC = (b & GcButtons.Y) != 0 || Input.GetKey(KeyCode.Q);
             bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
-            bool pUp = Pressed(up, ref selUp), pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
+            bool pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
             bool pNext = Pressed(nextC, ref selX), pPrev = Pressed(prevC, ref selY);
             // at a bench the inventory is the charm screen (charms are equipped nowhere else): opening it, on whichever pane
             // it comes up, opens the select over it; it closes with the select. (Watching for its Charms pane instead
@@ -600,7 +600,7 @@ namespace FoxMelee {
             charmsSeen = charms;
             if (grid == null) {
                 if (GcInput.HoldFromHollow && b == 0 && Math.Abs(sx) < 30 && Math.Abs(sy) < 30) GcInput.HoldFromHollow = false;
-                if (pUp || charmsOpened) OpenSelect(charmsOpened);
+                if (charmsOpened) OpenSelect(true);
                 return;
             }
             if (inCharms && !charms) { Log("character select: Hollow Knight closed its inventory"); CloseSelect(false); return; }
@@ -644,7 +644,7 @@ namespace FoxMelee {
             inCharms = fromCharms;
             GcInput.HoldFromHollow = true;
             repeatDx = repeatDy = 0;
-            Log($"character select: open from {(fromCharms ? "the charm screen" : "D-pad up")}, {charmRow.Charms.Count} charms in the row");
+            Log($"character select: open from the charm screen, {charmRow.Charms.Count} charms in the row");
         }
 
         /// The select goes; opened over the charm screen, Hollow Knight's inventory closes with it (unless it closed itself).

@@ -247,8 +247,8 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       left and right seemed dead). Stick or D-pad moves, A plays a character, X / Y turn the color, B (or the
       inventory key) closes it and the inventory with it.
       Under the characters is the row of charms that are still charms: down from the bottom row reaches it, A equips
-      or unequips (no overcharming), the notches in use show at the right, and the cursor's charm is named. D-pad up
-      at the bench still opens the select. `ModLog.txt`: `character select: open from the charm screen, N charms in
+      or unequips (no overcharming), the notches in use show at the right, and the cursor's charm is named. Nothing
+      else opens the select (D-pad up at the bench no longer does). `ModLog.txt`: `character select: open from the charm screen, N charms in
       the row`, `charm N equipped (...)`. If the select does not open from the charm screen, send the log: the line
       `charm screen: inventory in ..., current pane ..., UI Charms ...` says what the mod saw.
     - **Vanilla look:** no color counter or button hints; "color". Sheik has her own tile and portraits, made from her
