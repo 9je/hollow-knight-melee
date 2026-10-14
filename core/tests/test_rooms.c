@@ -1140,7 +1140,8 @@ static void test_gw_black(void) {
     int any_black = 0, last = -1;
     for (int i = 0; i + 2 < nv; i += 3) {
       if (!tri_covers(&v[i], x, y)) continue;
-      int black = v[i].r == 0 && v[i].g == 0 && v[i].b == 0;
+      int black = v[i].r == 0 && v[i].g == 0 && v[i].b == 0, grey = v[i].r == 128 && v[i].g == 128 && v[i].b == 128;
+      if (!black && !grey) continue;   /* a few orange triangles at his feet are neither pass */
       any_black |= black;
       last = black;
     }
@@ -1148,7 +1149,7 @@ static void test_gw_black(void) {
     if (any_black) { both++; wrong += last != 1; }
     else grey_shows++;
   }
-  CHECK(both > 200 && grey_shows > 10);
+  CHECK(both > 200 && grey_shows > 10);   /* grey shows: the outline around him */
   CHECK(wrong == 0);
   mc_shutdown();
 }

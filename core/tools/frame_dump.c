@@ -36,7 +36,10 @@ int main(int argc, char **v) {
     if (mc_step()) die("step");
   }
   const McGxVert *vt; int nv; const McGxRun *r; int nr;
-  if (mc_gx_decode(~0ull, &vt, &nv, &r, &nr)) die("decode");
+  /* what the mod decodes: fighters, items and effects (MC_GX_MASK=<hex> for another set, ~0 for everything) */
+  uint64_t mask = (1ull << 8) | (1ull << 9) | (1ull << 11) | (1ull << 12);
+  if (getenv("MC_GX_MASK")) mask = strtoull(getenv("MC_GX_MASK"), NULL, 16);
+  if (mc_gx_decode(mask, &vt, &nv, &r, &nr)) die("decode");
   McFighter f; mc_read_fighter(0, 0, &f);
   FILE *o = fopen(v[5], "wb");
   if (!o) die("open");
