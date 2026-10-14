@@ -20,7 +20,6 @@ namespace FoxMelee {
         public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
         public bool AbilityGates = true;            // doors the Knight couldn't reach without an ability you lack are closed (GateLogic)
         public bool UnlockAllCharacters = false;    // every character at the bench, without their charms (testing)
-        public string Character = "Fox";           // a Melee character's name (Roster): who plays until the bench select exists
         public System.Collections.Generic.Dictionary<string, int> Costumes = new System.Collections.Generic.Dictionary<string, int>();   // each character's chosen costume (0: its first)
         public KnockbackTuning Knockback = new KnockbackTuning();   // Fox's hits launch small enemies with Melee's knockback and hitstun
         public PogoTuning Pogo = new PogoTuning();   // spec §5.4: down-air bounces off spikes (not Melee: the one exception)
@@ -30,5 +29,6 @@ namespace FoxMelee {
     /// Kept in each save file (the Modding API's per-save data).
     public sealed class SaveData {
         public bool MarthBought;                    // Iselda's Marth (IselaShop)
+        public string Character;                    // who this save plays (a Melee character's name, Roster); null: Fox, as every save starts
     }
 }

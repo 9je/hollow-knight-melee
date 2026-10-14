@@ -128,6 +128,8 @@ namespace FoxMelee {
             }
             if (state == State.Waiting && !Boot()) return;
             if (switching != null && !switching.IsCompleted) return;   // a character change is restarting the core: nothing else uses it
+            // another save loaded since the core started (the character is the save's): its character takes over
+            if (switching == null && state == State.Running) { var saved = SavedCharacter(); if (saved != character) { Log($"this save plays {saved.Name}"); SwitchCharacter(hero, saved, CostumeOf(saved)); return; } }
             var f = Flags(hero);
             LogBusy(f);
             // Loading a save or coming back from death, the Knight wakes on the ground: Fox lies there instead and gets
@@ -452,6 +454,15 @@ namespace FoxMelee {
         // the moves the core locks (MoveGates): wall jump until Mantis Claw, Zelda's and Sheik's transform; set when it changes
         uint gatesSet = uint.MaxValue;
         Character character = Roster.Fox;
+
+        /// The character this save plays (SaveData.Character): Fox for a fresh save, or one whose name isn't a character's.
+        Character SavedCharacter() {
+            var name = FoxMod.Instance.Save.Character;
+            if (name == null) return Roster.Fox;
+            var c = Roster.Find(name, out bool known);
+            if (!known) { FoxMod.Instance.LogWarn($"Character \"{name}\" is not a Melee character: playing Fox"); FoxMod.Instance.Save.Character = null; }
+            return c;
+        }
         bool Gate() {
             uint locked = MoveGates.ForCharacter(character, PlayerData.instance.GetBool("hasWalljump"));
             if (locked == gatesSet) return true;
@@ -473,8 +484,7 @@ namespace FoxMelee {
             string dir = FoxMod.ModDir, so = Path.Combine(dir, Environment.OSVersion.Platform == PlatformID.Win32NT ? "libmelee_core.dll" : "libmelee_core.so"), mem1 = Path.Combine(dir, "mem1.bin");
             if (string.IsNullOrEmpty(s.IsoPath) || !File.Exists(s.IsoPath)) { Fail($"set IsoPath in FoxMod.GlobalSettings.json to your Melee NTSC 1.02 ISO (now: '{s.IsoPath}')"); return false; }
             try { core = MeleeCore.Load(so); } catch (MeleeCoreException e) { Fail(e.Message); return false; }
-            character = Roster.Find(s.Character, out bool known);
-            if (!known) FoxMod.Instance.LogWarn($"Character \"{s.Character}\" is not a Melee character: playing Fox");
+            character = SavedCharacter();
             bool grabs = s.Grabs?.Enabled ?? false;
             if (!StartCore(mem1, character)) return false;
             if (s.ShowModel) {
@@ -556,8 +566,8 @@ namespace FoxMelee {
         }
         int focusMasks = 1;
 
-        // ---- choosing a character at a bench: Hollow Knight's charm screen (the inventory on its Charms pane while sitting)
-        // is Melee's character select (CharmScreen), with the row of charms that are still charms under it; D-pad up (keyboard
+        // ---- choosing a character at a bench: Hollow Knight's charm screen (the inventory, opened while sitting) is
+        // Melee's character select (CharmScreen), with the row of charms that are still charms under it; D-pad up (keyboard
         // T) at the bench opens it as well. Stick or D-pad moves, A (keyboard J or Enter) plays the character or equips a
         // charm, B (keyboard K or Escape) closes, X / Y turn the color. While it is open the controller is the screen's:
         // Hollow Knight sees it idle, until every button is let go after it closes. ----
@@ -568,8 +578,8 @@ namespace FoxMelee {
         readonly System.Collections.Generic.Dictionary<Character, int> costumePick = new System.Collections.Generic.Dictionary<Character, int>();   // the select's costume per character
         int repeatDx, repeatDy; float repeatAt;
         CharmRow charmRow = new CharmRow(new int[0]);   // the charms under the grid
-        bool inCharms;      // opened over Hollow Knight's charm screen: closing it closes the inventory
-        bool charmsSeen;    // the Charms pane was open last frame (the select opens once per opening)
+        bool inCharms;      // opened over Hollow Knight's inventory (the charm screen, at a bench): closing it closes the inventory
+        bool charmsSeen;    // the inventory was open last frame (the select opens once per opening)
 
         void BenchMenu(HeroController hero) {
             var gc = FoxMod.Instance.GameCube?.Current();
@@ -582,7 +592,10 @@ namespace FoxMelee {
             bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
             bool pUp = Pressed(up, ref selUp), pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
             bool pNext = Pressed(nextC, ref selX), pPrev = Pressed(prevC, ref selY);
-            bool charms = CharmScreen.CharmsPaneOpen(GameManager.instance);
+            // at a bench the inventory is the charm screen (charms are equipped nowhere else): opening it, on whichever pane
+            // it comes up, opens the select over it; it closes with the select. (Watching for its Charms pane instead
+            // flickered as the inventory opened, so the select was closed and reopened under the player's hands.)
+            bool charms = GcInput.InventoryOpen;
             bool charmsOpened = charms && !charmsSeen;
             charmsSeen = charms;
             if (grid == null) {
@@ -682,8 +695,8 @@ namespace FoxMelee {
             if (why != null) { Fail(why); return false; }
             Log("character: " + c.Name);
             character = c;
-            FoxMod.Instance.Settings.Character = c.Name;   // remembered once it plays
-            try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
+            FoxMod.Instance.Save.Character = c.Name;       // this save's, once it plays (saved with the game)
+            try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }   // the costume
             if (combat != null) combat.Character = c;
             if (enemies != null) enemies.Nana = c.Name == "Ice Climbers";
             gatesSet = uint.MaxValue;

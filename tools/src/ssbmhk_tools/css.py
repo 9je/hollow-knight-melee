@@ -288,7 +288,8 @@ def tile_letters(tiles: list) -> dict:
 def sheik_art(frames: list, base_tile: bytes, letters: dict, head_frame=None) -> tuple[bytes, list[bytes]]:
     """Sheik's tile (64x56) and portraits (136x188, one per frame) from transparent renders of her (frame_dump's raster),
     one per costume: each portrait is the figure fitted into the portrait, the tile is her head (from `head_frame`, a
-    render where she faces the camera; the first frame's otherwise) inside `base_tile`'s border, over a dark blue, with
+    render where she faces the camera; the first frame's otherwise) inside `base_tile`'s border, over nothing (the
+    select's backdrop shows through, as around every other head), with
     her name on its plate in `letters` (tile_letters: Melee's own lettering; the plate stays blank when a letter is
     missing)."""
     portraits, head = [], None
@@ -309,8 +310,10 @@ def sheik_art(frames: list, base_tile: bytes, letters: dict, head_frame=None) ->
     tw, th = TILE[:2]
     tile = Rgba(tw, th, base_tile)
     fx0, fy0, fx1, fy1 = 2, 2, tw - 2, 41          # the face, inside the border and above the plate
+    # the face area is transparent in Melee's tiles (the select's grey shows through around every head): the base
+    # tile's own head goes, its border's soft inner edge (the two pixels inside the frame) stays
+    tile.fill((fx0 + 2, fy0 + 2, fx1 - 2, fy1), (0, 0, 0, 0))
     face = Rgba(fx1 - fx0, fy1 - fy0)
-    face.fill((0, 0, face.w, face.h), (28, 36, 84, 255))
     hh = max(2, int(head.h * 0.24))                # the head: about the top quarter of the figure
     top = head.crop((0, 0, head.w, hh)).bbox()
     cx = (top[0] + top[2]) // 2 if top else head.w // 2

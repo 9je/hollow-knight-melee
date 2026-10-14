@@ -2,32 +2,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace FoxMelee {
-    /// Hollow Knight's charm screen at a bench is the character select: when the inventory is open on its Charms pane
-    /// while the Knight sits, Melee's select opens over it (the inventory, muted, stays open under it) with the row of
-    /// charms that are still charms under the characters; closing the select closes the inventory. The charms equip and
+    /// Hollow Knight's charm screen at a bench is the character select: when the inventory opens while the Knight sits,
+    /// Melee's select opens over it (the inventory, muted, stays open under it) with the row of charms that are still
+    /// charms under the characters; closing the select closes the inventory. The charms equip and
     /// unequip as Hollow Knight's own screen does (PlayerData's equippedCharm_N and list, the notches, CharmUpdate and the
     /// charm events), without overcharming.
     static class CharmScreen {
-        static PlayMakerFSM charmsFsm;
-        static bool lookedFor;
-
-        /// The inventory is open and showing its Charms pane.
-        public static bool CharmsPaneOpen(GameManager gm) {
-            var inv = gm != null ? gm.inventoryFSM : null;
-            if (inv == null) return false;
-            var st = inv.ActiveStateName;
-            if (string.IsNullOrEmpty(st) || st == "Closed" || st.StartsWith("Init")) return false;
-            var pane = inv.FsmVariables.FindFsmGameObject("Current Pane");
-            var charmPane = inv.FsmVariables.FindFsmGameObject("Charm Pane");
-            if (pane != null && pane.Value != null && (pane.Value.name == "Charms" || (charmPane != null && pane.Value == charmPane.Value))) return true;
-            if (!lookedFor) {
-                lookedFor = true;
-                foreach (var f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>()) if (f.FsmName == "UI Charms") { charmsFsm = f; break; }
-                FoxMod.Instance.Log($"charm screen: inventory in {st}, current pane {(pane?.Value != null ? pane.Value.name : "none")}, UI Charms {(charmsFsm != null ? "found" : "not found")}");
-            }
-            return charmsFsm != null && charmsFsm.Active && charmsFsm.ActiveStateName != "Inactive" && charmsFsm.ActiveStateName != "Init";
-        }
-
         /// Hollow Knight's inventory closes (its INVENTORY CANCEL: the charm equip check and the Knight's control back).
         public static void CloseInventory(GameManager gm) {
             var inv = gm != null ? gm.inventoryFSM : null;

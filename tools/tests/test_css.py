@@ -133,9 +133,12 @@ def test_sheik_art_makes_a_tile_and_a_portrait_per_costume(tmp_path):
     opaque = [i for i in range(0, len(px), 4) if px[i + 3] > 200]
     assert 2000 < len(opaque) < 136 * 188
     assert all(abs(px[i] - 120) < 20 for i in opaque[:50])
-    # the tile: the head's colour in its face, and her name in the plate's letters at the bottom, centred
+    # the tile: the head's colour in its face, nothing (the select's backdrop) around it, the base tile's border kept,
+    # and her name in the plate's letters at the bottom, centred
     face = [tile[i:i + 4] for i in range(4 * (64 * 20 + 20), 4 * (64 * 20 + 44), 4)]
     assert any(abs(p[2] - 200) < 20 and p[3] == 255 for p in face)
+    assert tile[4 * (64 * 6 + 6) + 3] == 0 and tile[4 * (64 * 6 + 57) + 3] == 0      # beside the head: see-through
+    assert tuple(tile[4 * (64 * 1 + 1):4 * (64 * 1 + 1) + 4]) == (30, 30, 60, 255)     # the border is the base's
     lit = [(i // 4 % 64, i // 4 // 64) for i in range(4 * 64 * 42, 4 * 64 * 52, 4) if tile[i] > 200 and tile[i + 1] > 200 and tile[i + 2] > 200]
     assert lit and min(y for _, y in lit) == 43 and max(y for _, y in lit) == 50
     xs = [x for x, _ in lit]

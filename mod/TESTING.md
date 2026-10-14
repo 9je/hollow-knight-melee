@@ -241,9 +241,11 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 22. Overnight 2026-10-13/14 (your list). Run `bash mod/install.sh` first (it now also renders Sheik for the select, so it
     takes a little longer).
-    - **The character select is the bench's charm screen.** Sit at a bench, open the inventory (D-pad right tap on the
-      GameCube pad, or your inventory key) and go to the Charms pane: Melee's select opens over it. Stick or D-pad
-      moves, A plays a character, X / Y turn the color, B (or the inventory key) closes it and the inventory with it.
+    - **The character select is the bench's charm screen.** Sit at a bench and open the inventory (D-pad right tap on
+      the GameCube pad, or your inventory key): Melee's select opens over it, whichever pane the inventory came up on
+      (watching for the Charms pane flickered as it opened, and the select closed and reopened under your hands:
+      left and right seemed dead). Stick or D-pad moves, A plays a character, X / Y turn the color, B (or the
+      inventory key) closes it and the inventory with it.
       Under the characters is the row of charms that are still charms: down from the bottom row reaches it, A equips
       or unequips (no overcharming), the notches in use show at the right, and the cursor's charm is named. D-pad up
       at the bench still opens the select. `ModLog.txt`: `character select: open from the charm screen, N charms in
@@ -251,7 +253,12 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       `charm screen: inventory in ..., current pane ..., UI Charms ...` says what the mod saw.
     - **Vanilla look:** no color counter or button hints; "color". Sheik has her own tile and portraits, made from her
       model in each costume at install (`css.bin: 26 tiles, 123 portraits` on install; if Sheik still shows Zelda's
-      portrait, install.sh printed `Sheik not rendered`).
+      portrait, install.sh printed `Sheik not rendered`). Her tile's face sits on the select's grey like the others'
+      (it had a dark blue fill). Her name is Melee's own lettering, cut from Bowser's, Yoshi's and Link's plates.
+    - **The character is the save's.** A fresh save starts as Fox whatever another save plays (the chosen character
+      was a global setting, so a new save started as the last character played: green Marth). Loading a save that
+      plays someone else switches to them as the game comes up (`this save plays Marth` in the log, then the loading
+      card). The costume per character stays a preference shared by all saves.
     - **A moment of invincibility after a hit:** a landed enemy hit gives 1 s (`EnemyHits.InvulnerableFrames`, 60) in
       which no enemy hits, as the Knight has, so two enemies at once or a bounce back into one don't combo you. Shielded
       and dodged hits give none.
