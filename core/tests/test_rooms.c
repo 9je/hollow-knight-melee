@@ -887,6 +887,26 @@ static void test_edge_assist(void) {
   mc_shutdown();
 }
 
+
+/* A full tilt held at the edge (the common case on a GameCube stick): one teeter, then its wait, steady, as Melee plays
+ * them. The assist stopped the walk at the edge every frame and the teeter restarted every frame: a frozen pose. */
+static void test_edge_assist_holds_the_teeter(void) {
+  CHECK(walk_to_left_edge(1) == 0);
+  McInput full = {0}; full.stick_x = -127;
+  int enters = 0, waits = 0; uint32_t last = fox().action;
+  for (int i = 0; i < 90; i++) {
+    steps(1, &full);
+    uint32_t a = fox().action;
+    if (a == 245 && last != 245) enters++;
+    if (a == 246) waits++;
+    last = a;
+  }
+  CHECK(fox().airborne == 0);
+  CHECK(enters <= 1);              /* the teeter starts once */
+  CHECK(waits >= 60);              /* and its wait plays on */
+  mc_shutdown();
+}
+
 /* Edge assist stops a walk only at a real drop: a step down shorter than Fox (a stair) is walked off at full tilt, the ledge
  * past it still holds him. Ground y=0 to x=0, a step down to y=-8, then a 92-unit drop at x=100. */
 static void test_edge_assist_steps(void) {
@@ -1273,6 +1293,7 @@ int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   if (argc > 3 && strcmp(argv[3], "gw") == 0) { test_gw_black(); puts("gw passed"); return 0; }   /* one test, while working on it */
+  if (argc > 3 && strcmp(argv[3], "teeter") == 0) { test_edge_assist_holds_the_teeter(); puts("teeter passed"); return 0; }
   test_reload_is_invisible();
   test_bounds();
   test_place();
@@ -1299,6 +1320,7 @@ int main(int argc, char **argv) {
   test_standin_hold();
   test_edge_assist();
   test_edge_assist_steps();
+  test_edge_assist_holds_the_teeter();
   test_ko();
   test_character_start();
   test_nana_follows();

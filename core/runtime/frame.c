@@ -81,6 +81,8 @@ uint32_t hle_gm_801A4B88(Cpu *c) {
 
 #define FN_PROC_ATTACK_COLL 0x8006CB94u   /* Fighter_procAttackColl: the victim side of every hit */
 #define FN_WALK_COLL 0x800C9788u          /* ftCo_Walk_Coll: ft_80084280, which stops at an edge if |lstick x| < 0.75 */
+#define FN_OTTOTTO_IASA 0x8009A4A4u       /* the teeter's input check (action state table entry 245, Ottotto) */
+#define FN_OTTOTTOWAIT_IASA 0x8009A72Cu   /* its wait's (246, OttottoWait) */
 #define EDGE_STOP_TILT 0.7375f
 #define EDGE_LOOK 6.0f                    /* how far past Fox the floor is looked for */
 #define EDGE_STEP 18.0f                   /* the deepest step walked off */            /* the largest tilt below 0.75 the GameCube stick gives (59/80) */
@@ -142,6 +144,20 @@ uint32_t guest_call_indirect(Cpu *c, uint32_t target) {
   }
   GuestFn f = guest_lookup(target);
   if (!f) mc_die("indirect call to %08X, which is not recompiled code", target);
+  if ((target == FN_OTTOTTO_IASA || target == FN_OTTOTTOWAIT_IASA) && m->edge_assist && !m->edge_teetered && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
+    /* edge assist, teetering: a full tilt towards the edge reads as a slight one, so the teeter holds and its wait plays on.
+     * Melee would walk off; the assist stopped that walk at the edge every frame and the teeter restarted every frame: a
+     * frozen pose. Easing the stick (edge_teetered) hands the edge back to Melee's rules; a tilt away from the edge is as it is. */
+    uint32_t fp = ld32(c, c->gpr[3] + 0x2C), was = ld32(c, fp + 0x620u), uf = ld32(c, fp + 0x2Cu);
+    float x, facing; memcpy(&x, &was, 4); memcpy(&facing, &uf, 4);
+    if ((x > EDGE_STOP_TILT && facing > 0) || (x < -EDGE_STOP_TILT && facing < 0)) {
+      float t = x > 0 ? EDGE_STOP_TILT : -EDGE_STOP_TILT; uint32_t u; memcpy(&u, &t, 4);
+      st32(c, fp + 0x620u, u);
+      uint32_t r = f(c);
+      st32(c, fp + 0x620u, was);
+      return r;
+    }
+  }
   if (target == FN_WALK_COLL && m->edge_assist && !m->edge_teetered && c->gpr[3] == ld32(c, 0x80453080u + 0xB0u)) {
     /* edge assist: the edge check sees a tilt below 0.75, so the walk stops at the edge as a slower walk does */
     uint32_t fp = ld32(c, c->gpr[3] + 0x2C), was = ld32(c, fp + 0x620u);
