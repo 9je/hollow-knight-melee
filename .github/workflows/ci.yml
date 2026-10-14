@@ -85,6 +85,8 @@ jobs:
           ./test_runtime.exe
           "$ZIG" cc -target x86_64-windows-gnu $CF -Igekko -Iruntime tests/test_room.c runtime/room_check.c runtime/room_build.c -o test_room.exe
           ./test_room.exe
+          # frame_dump (Sheik's select renders) compiles for Windows: the installer links it against the player's core
+          "$ZIG" cc -target x86_64-windows-gnu $CF -Igekko -Iruntime -c tools/frame_dump.c -o frame_dump.o
       - name: Installer tests on Windows
         run: dotnet test installer/Installer.Tests -nologo
 

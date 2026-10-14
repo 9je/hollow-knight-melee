@@ -60,20 +60,72 @@ def test_extract_from_iso(iso, tmp_path):
 
 
 def _figure(path, color, w=300, h=400):
-    """A rendered frame stand-in: a transparent PNG with a coloured figure (a head over a body) in the middle."""
-    from PIL import Image, ImageDraw
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.ellipse((120, 60, 180, 120), fill=color)          # the head
-    d.rectangle((130, 120, 170, 330), fill=color)       # the body
-    img.save(path)
+    """A rendered frame stand-in (frame_dump's raster: u32 width, u32 height, RGBA): a transparent image with a coloured
+    figure (a head over a body) in the middle."""
+    px = bytearray(w * h * 4)
+    for y in range(h):
+        for x in range(w):
+            head = (x - 150) ** 2 + (y - 90) ** 2 <= 30 ** 2
+            body = 130 <= x <= 170 and 120 <= y <= 330
+            if head or body:
+                px[4 * (y * w + x):4 * (y * w + x) + 4] = bytes(color)
+    path.write_bytes(struct.pack("<II", w, h) + px)
     return path
 
 
+def _plate_tile(name, columns, plate=(33, 0, 0, 255), rows=range(43, 51)):
+    """A select tile stand-in: a plate with `name` written in white blocks, one per (first, last) column in `columns`."""
+    px = bytearray(plate * (64 * 56))
+    for (x0, x1), ch in zip(columns, name):
+        for y in rows:
+            for x in range(x0, x1 + 1):
+                if ch == "I" or (x in (x0, x1) or y in (rows[0], rows[-1])):   # a hollow block, or a bar for I
+                    px[4 * (y * 64 + x):4 * (y * 64 + x) + 4] = bytes((214, 214, 214, 255))
+    return bytes(px)
+
+
+def test_tile_letters_are_cut_from_melees_name_plates():
+    tiles = [(6, 0, _plate_tile("LINK", [(11, 17), (22, 23), (29, 35), (41, 47)])),
+             (5, 0, _plate_tile("BOWSER", [(4, 9), (13, 20), (24, 32), (37, 42), (45, 50), (53, 59)])),
+             (18, 0, _plate_tile("ZELDA", [(8, 13), (18, 23), (28, 33), (38, 43), (49, 55)]))]
+    letters = css.tile_letters(tiles)
+    assert set("LINKBOWSER") <= set(letters)                  # Zelda's tile isn't a letter source: her tile is Sheik's base
+    assert (letters["I"].w, letters["I"].h) == (2, 8) and (letters["K"].w, letters["K"].h) == (7, 8)
+    assert letters["S"].get(37 - 37, 0)[:3] == (214, 214, 214) and letters["S"].get(1, 1)[3] == 0   # the plate isn't copied
+
+
+def test_tile_letters_skip_a_plate_whose_letters_do_not_separate():
+    tiles = [(6, 0, _plate_tile("LINK", [(11, 17), (18, 19), (29, 35), (41, 47)]))]   # L and I touch: three runs, four letters
+    assert css.tile_letters(tiles) == {}
+
+
+def test_rgba_round_trips(tmp_path):
+    img = css.Rgba(3, 2, bytes(range(24)))
+    img.save(tmp_path / "a.rgba")
+    back = css.Rgba.load(tmp_path / "a.rgba")
+    assert (back.w, back.h, bytes(back.px)) == (3, 2, bytes(range(24)))
+    assert back.get(1, 1) == (16, 17, 18, 19)
+
+
+def test_rgba_resize_averages_and_bbox_finds_the_drawn_part():
+    img = css.Rgba(4, 4, bytes(16 * 4))
+    img.fill((1, 1, 3, 3), (200, 100, 0, 255))
+    assert img.bbox() == (1, 1, 3, 3)
+    small = img.resize(2, 2)
+    assert small.get(0, 0)[:3] == (200, 100, 0) and small.get(0, 0)[3] == 64    # a quarter of the area was drawn
+    assert small.get(1, 1)[3] == 64
+
+
+def _letters():
+    return css.tile_letters([(6, 0, _plate_tile("LINK", [(11, 17), (22, 23), (29, 35), (41, 47)])),
+                             (5, 0, _plate_tile("BOWSER", [(4, 9), (13, 20), (24, 32), (37, 42), (45, 50), (53, 59)])),
+                             (17, 0, _plate_tile("YOSHI", [(4, 9), (13, 20), (24, 29), (34, 40), (44, 45)]))])
+
+
 def test_sheik_art_makes_a_tile_and_a_portrait_per_costume(tmp_path):
-    frames = [_figure(tmp_path / f"s{k}.png", (40 + 40 * k, 60, 200, 255)) for k in range(3)]
+    frames = [_figure(tmp_path / f"s{k}.rgba", (40 + 40 * k, 60, 200, 255)) for k in range(3)]
     base = bytes([30, 30, 60, 255]) * (64 * 56)   # a plain tile to borrow the border and plate from
-    tile, portraits = css.sheik_art(frames, base)
+    tile, portraits = css.sheik_art(frames, base, _letters())
     assert len(tile) == 64 * 56 * 4
     assert len(portraits) == 3 and all(len(p) == 136 * 188 * 4 for p in portraits)
     # the portrait: the figure, scaled, over nothing; its colour is the costume's
@@ -81,16 +133,36 @@ def test_sheik_art_makes_a_tile_and_a_portrait_per_costume(tmp_path):
     opaque = [i for i in range(0, len(px), 4) if px[i + 3] > 200]
     assert 2000 < len(opaque) < 136 * 188
     assert all(abs(px[i] - 120) < 20 for i in opaque[:50])
-    # the tile: the head's colour in its face, and a name plate with light (text) pixels at the bottom
+    # the tile: the head's colour in its face, and her name in the plate's letters at the bottom, centred
     face = [tile[i:i + 4] for i in range(4 * (64 * 20 + 20), 4 * (64 * 20 + 44), 4)]
     assert any(abs(p[2] - 200) < 20 and p[3] == 255 for p in face)
-    plate = [tile[i:i + 4] for i in range(4 * (64 * 46), 4 * (64 * 52), 4)]
-    assert any(p[0] > 200 and p[1] > 200 and p[2] > 200 for p in plate)
+    lit = [(i // 4 % 64, i // 4 // 64) for i in range(4 * 64 * 42, 4 * 64 * 52, 4) if tile[i] > 200 and tile[i + 1] > 200 and tile[i + 2] > 200]
+    assert lit and min(y for _, y in lit) == 43 and max(y for _, y in lit) == 50
+    xs = [x for x, _ in lit]
+    assert abs((min(xs) + max(xs)) / 2 - 31.5) <= 1                                   # S H E I K, centred on the plate
+
+
+def test_sheik_art_takes_the_face_from_the_head_frame(tmp_path):
+    frames = [_figure(tmp_path / "s0.rgba", (10, 20, 200, 255))]
+    head = _figure(tmp_path / "head.rgba", (200, 20, 10, 255))
+    base = bytes([30, 30, 60, 255]) * (64 * 56)
+    tile, portraits = css.sheik_art(frames, base, {}, head)
+    face = [tile[i:i + 4] for i in range(4 * (64 * 20 + 20), 4 * (64 * 20 + 44), 4)]
+    assert any(abs(p[0] - 200) < 20 and p[3] == 255 for p in face) and not any(abs(p[2] - 200) < 20 for p in face)
+    px = portraits[0]
+    assert any(px[i + 3] == 255 and abs(px[i + 2] - 200) < 20 for i in range(0, len(px), 4))   # the portrait stays the costume's
+
+
+def test_sheik_art_without_letters_leaves_the_plate_blank(tmp_path):
+    frames = [_figure(tmp_path / "s0.rgba", (10, 20, 200, 255))]
+    base = bytes([30, 30, 60, 255]) * (64 * 56)
+    tile, _ = css.sheik_art(frames, base, {})
+    assert not any(tile[i] > 200 for i in range(4 * 64 * 42, 4 * 64 * 52, 4))
 
 
 def test_extract_takes_sheik_frames(tmp_path, monkeypatch):
     sections = {"tiles": ((64, 56), [(18, 0, bytes([1, 2, 3, 255]) * (64 * 56))]), "portraits": ((136, 188), []), "stocks": ((24, 24), [])}
-    frames = [_figure(tmp_path / f"s{k}.png", (10, 20, 200, 255)) for k in range(2)]
+    frames = [_figure(tmp_path / f"s{k}.rgba", (10, 20, 200, 255)) for k in range(2)]
     css.add_sheik(sections, frames)
     assert [c for c, _, _ in sections["tiles"][1]] == [18, 19]
     assert [(c, k) for c, k, _ in sections["portraits"][1]] == [(19, 0), (19, 1)]

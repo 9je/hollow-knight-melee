@@ -7,7 +7,8 @@ Steps (each skipped when its output is current, keyed by its inputs):
   3. recompile main.dol into C (with the core's HLE, tap and Gecko lists) and mem1.bin;
   4. compile it and the runtime with a C compiler (zig cc for Windows; gcc or zig on Linux) in parallel, and link
      libmelee_core.dll / libmelee_core.so;
-  5. extract fox.model, the sound banks, the stock icons and the character select (css.bin).
+  5. extract fox.model, the sound banks, the stock icons and the character select (css.bin), with Sheik's tile and
+     portraits made of renders of her by the core (frame_dump, built against the same objects; a cross build skips them).
 
 Only the standard library is used, so an embeddable Python runs it. usage:
   ssbmhk-build-core <iso> --core <repo core dir> --out <dir> [--cc "zig cc"] [--target windows|linux] [--jobs N]
@@ -120,6 +121,11 @@ def generate(iso: Path, core: Path, cache: Path) -> Path:
     return gen
 
 
+def object_paths(core: Path, gen: Path, cache: Path, target: str) -> list[Path]:
+    """The objects of libmelee_core, as compile_core leaves them (one per source, in cache/<target>)."""
+    return [cache / target / (s.parent.name + "_" + s.stem + ".o") for s, _ in sources(core, gen, target)]
+
+
 def compile_core(core: Path, gen: Path, cache: Path, cc: list[str], target: str, jobs: int) -> Path:
     """libmelee_core.dll (windows) or .so (linux) in cache/<target>, compiled in parallel."""
     objdir = cache / target
@@ -153,7 +159,7 @@ def compile_core(core: Path, gen: Path, cache: Path, cc: list[str], target: str,
         _log(f"compiling {len(todo)} files with {jobs} jobs (several minutes the first time)...")
         with ThreadPoolExecutor(jobs) as ex:
             list(ex.map(build, todo))
-    objs = [str(objdir / (s.parent.name + "_" + s.stem + ".o")) for s, _ in srcs]
+    objs = [str(o) for o in object_paths(core, gen, cache, target)]
     if target == "windows":
         out = objdir / "libmelee_core.dll"
         cmd = cc + ["-shared", "-o", str(out)] + objs
@@ -164,6 +170,50 @@ def compile_core(core: Path, gen: Path, cache: Path, cc: list[str], target: str,
     _log("linking " + out.name)
     subprocess.run(cmd, check=True)
     return out
+
+
+# Sheik's renders for the select (css.py's --sheik-frames and --sheik-head): her costumes idle, and one two frames into a
+# turn, where she faces the camera, for her tile's face
+SHEIK, SHEIK_COSTUMES, IDLE, FACING = 19, 5, "..........", "l.."
+
+
+def frame_dump_command(core: Path, gen: Path, objs: list, cc: list[str], target: str, out: Path) -> list[str]:
+    """frame_dump (core/tools) linked against the core's objects, for this machine."""
+    cmd = cc + CFLAGS + ["-I", str(core / "gekko"), "-I", str(core / "runtime"), "-I", str(gen), str(core / "tools/frame_dump.c")]
+    cmd += [str(o) for o in objs] + ["-o", str(out)]
+    if target == "linux":
+        cmd += ["-lm", "-lpthread"]
+    return cmd
+
+
+def render_sheik(iso: Path, core: Path, gen: Path, cache: Path, cc: list[str], target: str) -> tuple[list[Path], Path | None]:
+    """(her costume renders, the one facing the camera) in cache/sheik, by frame_dump built against the core's objects;
+    nothing when the build isn't for this machine (frame_dump couldn't run) or when anything fails: the select then
+    shows Zelda's art for her."""
+    if target != ("windows" if os.name == "nt" else "linux"):
+        _log("Sheik not rendered for the select (a cross build): she gets Zelda's portrait")
+        return [], None
+    try:
+        exe = cache / target / ("frame_dump.exe" if target == "windows" else "frame_dump")
+        p = subprocess.run(frame_dump_command(core, gen, object_paths(core, gen, cache, target), cc, target, exe), capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError("frame_dump: " + p.stderr.strip()[-2000:])
+        out = cache / "sheik"
+        out.mkdir(exist_ok=True)
+        frames, head = [], out / "facing.rgba"
+        for k in range(SHEIK_COSTUMES):
+            frames.append(out / f"costume{k}.rgba")
+        for script, costume, raster in [(IDLE, k, f) for k, f in enumerate(frames)] + [(FACING, 0, head)]:
+            p = subprocess.run([str(exe), str(gen / "mem1.bin"), str(iso), str(SHEIK), script, str(out / "frame.bin"), str(costume), str(raster), "400"],
+                               capture_output=True, text=True)
+            if p.returncode != 0 or not raster.exists():
+                raise RuntimeError("frame_dump: " + (p.stdout + p.stderr).strip()[-2000:])
+        (out / "frame.bin").unlink(missing_ok=True)   # the decoded frame (tens of MB): only the raster is wanted
+        _log("Sheik rendered for the select")
+        return frames, head
+    except (OSError, RuntimeError) as e:
+        _log(f"Sheik not rendered for the select ({e}): she gets Zelda's portrait")
+        return [], None
 
 
 def main(argv=None) -> int:
@@ -193,7 +243,8 @@ def main(argv=None) -> int:
     foxmodel.write_model(foxmodel.build_model(hsd.read_joints(dat, dat.roots["PlyFox5K_Share_joint"])), a.out / "fox.model")
     meleesfx.main([str(a.iso), "--out", str(a.out)])
     stocks.main([str(a.iso), "--out", str(a.out)])
-    css.main([str(a.iso), "--out", str(a.out)])
+    frames, head = render_sheik(a.iso.resolve(), core, gen, cache, cc, a.target)
+    css.main([str(a.iso), "--out", str(a.out)] + (["--sheik-frames", *map(str, frames), "--sheik-head", str(head)] if frames else []))
     _log(f"done: {a.out}")
     return 0
 

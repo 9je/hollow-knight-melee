@@ -5,8 +5,10 @@ the 25 select tiles (64x56, the faces with their name plates, in the select's or
 costume, then every character's second, and so on (the portraits skip Sheik, as Melee's select does).
 
 Sheik has no tile or portrait in Melee's select (she is Zelda's transformation); given frames of her rendered by the
-core (frame_dump + ssbmhk-frame-png --alpha, one per costume), she gets a portrait made of each and a tile made of her
-head on another tile's border and plate, with her name (--sheik-frames), so she stands in the select like the rest.
+core (frame_dump's raster, one per costume, and one facing the camera), she gets a portrait made of each and a tile
+made of her head on Zelda's tile's border and plate, her name in the lettering cut from the other tiles' plates
+(--sheik-frames, --sheik-head), so she stands in the select like the rest. The standard library only: the player's
+installer makes it with an embeddable Python.
 
 css.bin: "CSS1"; then three sections, each u32 width, height, count followed by count entries of u8 character (Melee's
 external id), u8 costume, u16 0, and the RGBA image (top row first): tiles, portraits, stock icons."""
@@ -133,67 +135,208 @@ def stock_entries(images: list[bytes]) -> list[tuple[int, int, bytes]]:
 
 
 SHEIK = 19
-FONTS = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "C:/Windows/Fonts/arialbd.ttf", "/Library/Fonts/Arial Bold.ttf"]
+# the tiles whose name plates spell Sheik's letters: S and E from Bowser's, H from Yoshi's, I and K from Link's
+LETTER_TILES = {5: "BOWSER", 6: "LINK", 17: "YOSHI"}
+HEAD_ZOOM, HEAD_TOP = 0.9, 0.05                     # the tile's face: this much of the head's height, from this far down it
+LETTER_GAP = 4                                      # between the letters of a name on a plate, as Melee spaces short names
 
 
-def sheik_art(frames: list, base_tile: bytes) -> tuple[bytes, list[bytes]]:
-    """Sheik's tile (64x56) and portraits (136x188, one per frame) from transparent renders of her, one per costume: each
-    portrait is the figure fitted into the portrait, the tile is her head (from the first frame) inside `base_tile`'s
-    border, over a dark blue, with her name on its plate."""
-    from PIL import Image, ImageDraw, ImageFont
+class Rgba:
+    """An RGBA image (top row first) and the little that Sheik's art needs of one; the standard library only, so the
+    player's installer (an embeddable Python) can make the art."""
+
+    def __init__(self, w: int, h: int, px=None):
+        self.w, self.h = w, h
+        self.px = bytearray(px) if px is not None else bytearray(w * h * 4)
+
+    @classmethod
+    def load(cls, path) -> "Rgba":
+        """frame_dump's raster: u32 width, u32 height, RGBA."""
+        b = Path(path).read_bytes()
+        w, h = struct.unpack_from("<II", b)
+        if len(b) != 8 + w * h * 4:
+            raise ValueError(f"{path}: {len(b)} bytes for a {w}x{h} raster")
+        return cls(w, h, b[8:])
+
+    def save(self, path) -> None:
+        Path(path).write_bytes(struct.pack("<II", self.w, self.h) + bytes(self.px))
+
+    def get(self, x: int, y: int) -> tuple:
+        i = 4 * (y * self.w + x)
+        return tuple(self.px[i:i + 4])
+
+    def bbox(self):
+        """(x0, y0, x1, y1) around the drawn pixels (alpha > 0), the end exclusive; None when nothing is drawn."""
+        x0, y0, x1, y1 = self.w, self.h, -1, -1
+        for y in range(self.h):
+            row = self.px[4 * y * self.w + 3:4 * (y + 1) * self.w:4]
+            if not any(row):
+                continue
+            xs = [x for x, a in enumerate(row) if a]
+            x0, x1 = min(x0, xs[0]), max(x1, xs[-1])
+            y0, y1 = min(y0, y), max(y1, y)
+        return None if x1 < 0 else (x0, y0, x1 + 1, y1 + 1)
+
+    def crop(self, box) -> "Rgba":
+        """The box (x0, y0, x1, y1), the end exclusive; outside the image is transparent."""
+        x0, y0, x1, y1 = box
+        out = Rgba(x1 - x0, y1 - y0)
+        for y in range(max(y0, 0), min(y1, self.h)):
+            sx0, sx1 = max(x0, 0), min(x1, self.w)
+            if sx1 > sx0:
+                d = 4 * ((y - y0) * out.w + sx0 - x0)
+                out.px[d:d + 4 * (sx1 - sx0)] = self.px[4 * (y * self.w + sx0):4 * (y * self.w + sx1)]
+        return out
+
+    def resize(self, w: int, h: int) -> "Rgba":
+        """Box-filtered: each new pixel averages the source area it covers, its colour weighted by alpha."""
+        out = Rgba(w, h)
+        for y in range(h):
+            sy0, sy1 = y * self.h / h, (y + 1) * self.h / h
+            for x in range(w):
+                sx0, sx1 = x * self.w / w, (x + 1) * self.w / w
+                r = g = b = a = area = 0.0
+                for sy in range(int(sy0), min(self.h, int(-(-sy1 // 1)))):
+                    fy = min(sy1, sy + 1) - max(sy0, sy)
+                    if fy <= 0:
+                        continue
+                    for sx in range(int(sx0), min(self.w, int(-(-sx1 // 1)))):
+                        fx = min(sx1, sx + 1) - max(sx0, sx)
+                        if fx <= 0:
+                            continue
+                        f = fx * fy
+                        i = 4 * (sy * self.w + sx)
+                        pa = self.px[i + 3] * f
+                        r += self.px[i] * pa; g += self.px[i + 1] * pa; b += self.px[i + 2] * pa; a += pa; area += f
+                i = 4 * (y * w + x)
+                if a > 0:
+                    out.px[i:i + 4] = bytes((int(r / a + 0.5), int(g / a + 0.5), int(b / a + 0.5), int(a / area + 0.5)))
+        return out
+
+    def fill(self, box, color) -> None:
+        x0, y0, x1, y1 = box
+        row = bytes(color) * (x1 - x0)
+        for y in range(y0, y1):
+            self.px[4 * (y * self.w + x0):4 * (y * self.w + x1)] = row
+
+    def paste(self, img: "Rgba", x: int, y: int) -> None:
+        """img over this image at (x, y): alpha blended."""
+        for sy in range(img.h):
+            dy = y + sy
+            if not 0 <= dy < self.h:
+                continue
+            for sx in range(img.w):
+                dx = x + sx
+                if not 0 <= dx < self.w:
+                    continue
+                si, di = 4 * (sy * img.w + sx), 4 * (dy * self.w + dx)
+                a = img.px[si + 3]
+                if a == 0:
+                    continue
+                if a == 255:
+                    self.px[di:di + 4] = img.px[si:si + 4]
+                    continue
+                da = self.px[di + 3]
+                oa = a + da * (255 - a) // 255
+                for c in range(3):
+                    self.px[di + c] = (img.px[si + c] * a + self.px[di + c] * da * (255 - a) // 255) // max(oa, 1)
+                self.px[di + 3] = oa
+
+
+def _lit(px: tuple) -> bool:
+    """A letter's pixel on a name plate (the letters are light grey, the plates dark)."""
+    return px[3] > 0 and px[0] + px[1] + px[2] > 350
+
+
+def tile_letters(tiles: list) -> dict:
+    """The letters of the names on Melee's select tiles (LETTER_TILES), each cut out of its plate as an Rgba whose
+    non-letter pixels are transparent (its `top`: the row the text starts on): the plate's text, in rows 42..51 between the border columns, read as runs of
+    columns with a lit pixel; a plate whose runs don't match its name (letters touching) gives no letters."""
+    letters = {}
+    tw, th = TILE[:2]
+    for c, _, img in tiles:
+        name = LETTER_TILES.get(c)
+        if not name or len(img) != tw * th * 4:
+            continue
+        tile = Rgba(tw, th, img)
+        lit = [[_lit(tile.get(x, y)) for y in range(42, 52)] for x in range(tw)]
+        runs, x = [], 3
+        while x < tw - 3:
+            if any(lit[x]):
+                x0 = x
+                while x < tw - 3 and any(lit[x]):
+                    x += 1
+                runs.append((x0, x))
+            else:
+                x += 1
+        if len(runs) != len(name):
+            continue
+        rows = [y for y in range(42, 52) if any(lit[x][y - 42] for x in range(3, tw - 3))]
+        y0, y1 = rows[0], rows[-1] + 1
+        for (x0, x1), ch in zip(runs, name):
+            glyph = Rgba(x1 - x0, y1 - y0)
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    px = tile.get(x, y)
+                    if _lit(px):
+                        glyph.px[4 * ((y - y0) * glyph.w + x - x0):4 * ((y - y0) * glyph.w + x - x0) + 4] = bytes(px)
+            glyph.top = y0                           # the row the plate's text starts on
+            letters.setdefault(ch, glyph)
+    return letters
+
+
+def sheik_art(frames: list, base_tile: bytes, letters: dict, head_frame=None) -> tuple[bytes, list[bytes]]:
+    """Sheik's tile (64x56) and portraits (136x188, one per frame) from transparent renders of her (frame_dump's raster),
+    one per costume: each portrait is the figure fitted into the portrait, the tile is her head (from `head_frame`, a
+    render where she faces the camera; the first frame's otherwise) inside `base_tile`'s border, over a dark blue, with
+    her name on its plate in `letters` (tile_letters: Melee's own lettering; the plate stays blank when a letter is
+    missing)."""
     portraits, head = [], None
+    if head_frame is not None:
+        img = Rgba.load(head_frame)
+        head = img.crop(img.bbox() or (0, 0, img.w, img.h))
     pw, ph = PORTRAIT[:2]
     for i, f in enumerate(frames):
-        img = Image.open(f).convert("RGBA")
-        box = img.getbbox() or (0, 0, img.width, img.height)
-        fig = img.crop(box)
-        scale = min((pw - 12) / fig.width, (ph - 8) / fig.height)
-        fw, fh = max(1, round(fig.width * scale)), max(1, round(fig.height * scale))
-        small = fig.resize((fw, fh), Image.LANCZOS)
-        out = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
-        out.paste(small, ((pw - fw) // 2, ph - 4 - fh), small)
-        portraits.append(out.tobytes())
-        if i == 0:
+        img = Rgba.load(f)
+        fig = img.crop(img.bbox() or (0, 0, img.w, img.h))
+        scale = min((pw - 12) / fig.w, (ph - 8) / fig.h)
+        fw, fh = max(1, round(fig.w * scale)), max(1, round(fig.h * scale))
+        out = Rgba(pw, ph)
+        out.paste(fig.resize(fw, fh), (pw - fw) // 2, ph - 4 - fh)
+        portraits.append(bytes(out.px))
+        if i == 0 and head is None:
             head = fig
     tw, th = TILE[:2]
-    tile = Image.frombytes("RGBA", (tw, th), bytes(base_tile))
+    tile = Rgba(tw, th, base_tile)
     fx0, fy0, fx1, fy1 = 2, 2, tw - 2, 41          # the face, inside the border and above the plate
-    face = Image.new("RGBA", (fx1 - fx0, fy1 - fy0), (28, 36, 84, 255))
-    hh = max(2, int(head.height * 0.24))           # the head: about the top quarter of the figure
-    top = head.crop((0, 0, head.width, hh)).getbbox()
-    cx = (top[0] + top[2]) // 2 if top else head.width // 2
-    rh = hh * 1.1                                   # the face fills the tile, as the others' do
-    rw = rh * face.width / face.height
-    crop = head.crop((int(cx - rw / 2), int(-hh * 0.12), int(cx + rw / 2), int(-hh * 0.12 + rh))).resize(face.size, Image.LANCZOS)
-    face.paste(crop, (0, 0), crop)
-    tile.paste(face, (fx0, fy0))
-    plate = tile.getpixel((4, 48))
-    ImageDraw.Draw(tile).rectangle((fx0, fy1, fx1 - 1, th - 3), fill=plate)
-    font = None
-    for path in FONTS:
-        try:
-            font = ImageFont.truetype(path, 12)
-            break
-        except OSError:
-            continue
-    font = font or ImageFont.load_default()
-    d = ImageDraw.Draw(tile)
-    name, spacing = "SHEIK", 2
-    widths = [d.textlength(ch, font=font) for ch in name]
-    x = (tw - (sum(widths) + spacing * (len(name) - 1))) / 2
-    bb = d.textbbox((0, 0), name, font=font)              # the letters centred on the plate (rows fy1 .. th-3)
-    y = fy1 + ((th - 3 - fy1) - (bb[3] - bb[1])) / 2 - bb[1]
-    for ch, w in zip(name, widths):
-        d.text((x, y), ch, font=font, fill=(255, 255, 255, 255))
-        x += w + spacing
-    return tile.tobytes(), portraits
+    face = Rgba(fx1 - fx0, fy1 - fy0)
+    face.fill((0, 0, face.w, face.h), (28, 36, 84, 255))
+    hh = max(2, int(head.h * 0.24))                # the head: about the top quarter of the figure
+    top = head.crop((0, 0, head.w, hh)).bbox()
+    cx = (top[0] + top[2]) // 2 if top else head.w // 2
+    rh = hh * HEAD_ZOOM                            # the face fills the tile, as the others' do
+    rw = rh * face.w / face.h
+    crop = head.crop((int(cx - rw / 2), int(hh * HEAD_TOP), int(cx + rw / 2), int(hh * HEAD_TOP + rh))).resize(face.w, face.h)
+    face.paste(crop, 0, 0)
+    tile.paste(face, fx0, fy0)
+    plate = tile.get(4, 48)
+    tile.fill((fx0, fy1, fx1, th - 3), plate)
+    name = "SHEIK"
+    if all(ch in letters for ch in name):
+        glyphs = [letters[ch] for ch in name]
+        x = round((tw - (sum(g.w for g in glyphs) + LETTER_GAP * (len(name) - 1))) / 2)
+        for g in glyphs:
+            tile.paste(g, x, g.top)
+            x += g.w + LETTER_GAP
+    return bytes(tile.px), portraits
 
 
-def add_sheik(sections: dict, frames: list) -> None:
-    """Sheik's tile and portraits (sheik_art) into the sections, on Zelda's tile's border and plate (any tile's if hers is missing)."""
+def add_sheik(sections: dict, frames: list, head_frame=None) -> None:
+    """Sheik's tile and portraits (sheik_art) into the sections, on Zelda's tile's border and plate (any tile's if hers is
+    missing), her name in the other tiles' lettering."""
     tiles = sections["tiles"][1]
     base = next((img for c, _, img in tiles if c == 18), tiles[0][2] if tiles else bytes([0, 0, 0, 255]) * (TILE[0] * TILE[1]))
-    tile, portraits = sheik_art(frames, base)
+    tile, portraits = sheik_art(frames, base, tile_letters(tiles), head_frame)
     tiles.append((SHEIK, 0, tile))
     sections["portraits"][1].extend((SHEIK, k, p) for k, p in enumerate(portraits))
 
@@ -212,11 +355,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Extract Melee's character select (tiles, portraits, stock icons) from your ISO into css.bin (not for distribution).")
     ap.add_argument("iso", type=Path)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--sheik-frames", type=Path, nargs="*", default=[], help="transparent renders of Sheik, one per costume (frame_dump + ssbmhk-frame-png --alpha): her tile and portraits")
+    ap.add_argument("--sheik-frames", type=Path, nargs="*", default=[], help="renders of Sheik, one per costume (frame_dump's raster, .rgba): her portraits, and her tile")
+    ap.add_argument("--sheik-head", type=Path, help="a render of Sheik facing the camera (two frames into a turn): her tile's face (the first of --sheik-frames otherwise)")
     a = ap.parse_args(argv)
     sections = extract(a.iso)
     if a.sheik_frames:
-        add_sheik(sections, a.sheik_frames)
+        add_sheik(sections, a.sheik_frames, a.sheik_head)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "css.bin").write_bytes(pack(sections))
     print("css.bin: " + ", ".join(f"{len(e)} {k}" for k, ((w, h), e) in sections.items()))

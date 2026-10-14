@@ -225,7 +225,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       character's portrait. **Colours:** X / Y (keyboard E / Q) turn the costume; the portrait and the stock icons under
       the name change with it; A plays it (the same character in a new colour restarts the core like a change). The
       colour is remembered per character (`Costumes` in the settings). No extra downloads: Melee loads its costume
-      files from the ISO. Sheik has Zelda's portrait and no tile, as in Melee.
+      files from the ISO. Sheik's tile and portraits are made at install from her model (both installers).
     - **Peach's turnip** is white with a purple shade, not black (its body subtracts a shadow texture in a second
       TEV stage; the decoder now samples a draw's other textures per vertex instead of taking them as white). Her
       down-B pulls one; throw it, look at it on the ground.

@@ -3,10 +3,14 @@
 #include <string.h>
 #include "melee_core.h"
 #include "standin.h"
+#include "raster.h"
 /* frame_dump: one character, a few frames in, Melee's drawing captured and decoded, dumped for ssbmhk-frame-png (tools/src/ssbmhk_tools/framepng.py): the frame's
- * triangles, their vertex colours and the textures they sample. usage: frame_dump <mem1> <iso> <id> <script> <out.bin> [costume]
+ * triangles, their vertex colours and the textures they sample; and, given a raster path, the frame drawn as the mod draws it
+ * (raster.h) over a transparent background: u32 width, u32 height, then RGBA (top row first), for art made of a render.
+ * usage: frame_dump <mem1> <iso> <id> <script> <out.bin> [costume [raster.rgba [size]]]
  * script: a string of per-frame letters, '.' idle, 'b' down-B, 'B' neutral B, 'a' A, 'd' down tilt (stick down), 'r' right,
- * 'l' left, 't' taunt (D-pad up), 'j' jump; 180 idle frames first. costume: the character's costume number (0: its first) */
+ * 'l' left, 't' taunt (D-pad up), 'j' jump; 180 idle frames first. costume: the character's costume number (0: its first).
+ * size: the raster's width and height in pixels (400 by default) */
 static void die(const char *w) { printf("FAIL %s: %s\n", w, mc_error()); exit(1); }
 int main(int argc, char **v) {
   int id = atoi(v[3]);
@@ -66,5 +70,16 @@ int main(int argc, char **v) {
   }
   fclose(o);
   printf("%d: action %u, %d verts, %d runs, %d textures -> %s\n", id, f.action, nv, nr, ns, v[5]);
+  if (argc > 7) {
+    uint32_t size = argc > 8 ? (uint32_t)atoi(v[8]) : 400;
+    if (size < 16 || size > 4096) { printf("FAIL raster: size %u\n", size); return 1; }
+    uint8_t *img = malloc((size_t)size * size * 4);
+    raster_frame(vt, nv, r, nr, (int)size, img);
+    FILE *ro = fopen(v[7], "wb");
+    if (!ro) die("open raster");
+    fwrite(&size, 4, 1, ro); fwrite(&size, 4, 1, ro); fwrite(img, 4, (size_t)size * size, ro);
+    fclose(ro); free(img);
+    printf("raster %ux%u -> %s\n", size, size, v[7]);
+  }
   return 0;
 }

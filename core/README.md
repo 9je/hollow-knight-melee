@@ -83,7 +83,8 @@ make -C core rooms-test    # reload, bounds, placement and a built room in the r
 make -C core switch-test   # the mod's character change: Sheik then Link, a KO and a respawn between
 make -C core frame-dump CHAR=12 SCRIPT="b........" OUT=/tmp/peach.bin   # one decoded frame (COSTUME=n for a colour); then
 #   tools/.venv/bin/ssbmhk-frame-png /tmp/peach.bin /tmp/peach.png      # ... a PNG of what the mod would draw
-#   (--alpha for a transparent background: Sheik's select art is made this way at install)
+# RASTER=/tmp/peach.rgba [RASTER_SIZE=400]: the frame drawn over a transparent background by tools/raster.h (u32 w, u32 h,
+# RGBA), what the installers render Sheik with for her select tile and portraits (ssbmhk-extract-css --sheik-frames)
 (cd tools && .venv/bin/ssbmhk-replay-check --reload-collision)   # stages' own collision through the room API
 ```
 

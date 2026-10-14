@@ -5,6 +5,7 @@
 #include <string.h>
 #include "melee_core.h"
 #include "standin.h"
+#include "../tools/raster.h"
 
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %s:%d: %s (%s)\n", __FILE__, __LINE__, #x, mc_error()); exit(1); } } while (0)
 static const char *g_mem1, *g_iso;
@@ -1223,6 +1224,38 @@ static void test_turnip_face(void) {
   mc_shutdown();
 }
 
+/* Sheik's frames for the select (buildcore renders her in each costume: frame_dump's raster): the figure, drawn as the mod
+ * draws it, fills the view upright over a transparent background, in her costume's colour. */
+static void test_sheik_raster(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 19);                              /* Sheik, her first costume */
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(3, &idle);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode((1ull << 8) | (1ull << 9) | (1ull << 11) | (1ull << 12), &v, &nv, &r, &nr) == 0 && nv > 1000);
+  enum { N = 200 };
+  static uint8_t img[N * N * 4];
+  raster_frame(v, nv, r, nr, N, img);
+  int opaque = 0, blue = 0, top = N, bottom = -1, left = N, right = -1;
+  for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+    const uint8_t *p = img + 4 * (y * N + x);
+    if (p[3] == 0) continue;
+    top = y < top ? y : top; bottom = y > bottom ? y : bottom; left = x < left ? x : left; right = x > right ? x : right;
+    if (p[3] == 255) opaque++;
+    if (p[2] > p[0] + 40 && p[3] > 128) blue++;          /* her blue suit */
+  }
+  CHECK(img[3] == 0 && img[4 * (N - 1) + 3] == 0 && img[4 * N * (N - 1) + 3] == 0 && img[4 * (N * N - 1) + 3] == 0);
+  CHECK(opaque > 1500 && blue > 300);
+  CHECK(bottom - top > N * 6 / 10 && bottom - top > right - left);   /* she stands: taller than wide, filling the view */
+  CHECK(top > 0 && bottom < N - 1 && left > 0 && right < N - 1);
+  mc_shutdown();
+}
+
 static void test_attributes(void) {
   float normal = run_distance(1.0f), fast = run_distance(1.1f);
   CHECK(fast > normal * 1.05f);
@@ -1374,6 +1407,7 @@ int main(int argc, char **argv) {
   if (argc > 3 && strcmp(argv[3], "gw") == 0) { test_gw_black(); puts("gw passed"); return 0; }   /* one test, while working on it */
   if (argc > 3 && strcmp(argv[3], "cutout") == 0) { test_cutout_edges_keep_their_colour(); puts("cutout passed"); return 0; }
   if (argc > 3 && strcmp(argv[3], "turnip") == 0) { test_turnip_face(); puts("turnip passed"); return 0; }
+  if (argc > 3 && strcmp(argv[3], "raster") == 0) { test_sheik_raster(); puts("raster passed"); return 0; }
   if (argc > 3 && strcmp(argv[3], "teeter") == 0) { test_edge_assist_holds_the_teeter(); puts("teeter passed"); return 0; }
   test_reload_is_invisible();
   test_bounds();
@@ -1415,6 +1449,7 @@ int main(int argc, char **argv) {
   test_gw_black();
   test_cutout_edges_keep_their_colour();
   test_turnip_face();
+  test_sheik_raster();
   puts("rooms tests passed");
   return 0;
 }

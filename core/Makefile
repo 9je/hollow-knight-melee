@@ -123,10 +123,12 @@ switch-test: core
 	$(B)/test_switch $(CORE_GEN)/mem1.bin "$(ISO)" 19 6
 .PHONY: switch-test
 # a frame of one character, decoded, for ssbmhk-frame-png: make frame-dump CHAR=12 SCRIPT=b.... OUT=frame.bin [COSTUME=1]
+# [RASTER=frame.rgba [RASTER_SIZE=400]] (the frame drawn over a transparent background: u32 w, u32 h, RGBA; tools/raster.h)
 COSTUME ?= 0
+RASTER_SIZE ?= 400
 frame-dump: core
 	$(CC) $(GEN_CFLAGS) $(INC) tools/frame_dump.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/frame_dump
-	$(B)/frame_dump $(CORE_GEN)/mem1.bin "$(ISO)" $(CHAR) "$(SCRIPT)" $(OUT) $(COSTUME)
+	$(B)/frame_dump $(CORE_GEN)/mem1.bin "$(ISO)" $(CHAR) "$(SCRIPT)" $(OUT) $(COSTUME) $(if $(RASTER),"$(RASTER)" $(RASTER_SIZE))
 .PHONY: frame-dump
 
 # ---- rooms (plan 2) ----

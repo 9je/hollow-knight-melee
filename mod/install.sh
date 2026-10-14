@@ -43,23 +43,22 @@ if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-stocks" ]; t
   "$venv/bin/ssbmhk-extract-stocks" "$iso" --out "$dest" || echo "stocks.bin not extracted: characters are shown by name only"
 fi
 # Melee's character select (its tiles, every costume's portrait and stock icon) from your ISO; never fatal. Sheik has none
-# in Melee: the core renders her in each costume (frame_dump) and the select gets a tile and portraits made of the renders.
+# in Melee: the core renders her in each costume and once facing the camera (frame_dump's raster) and the select gets a
+# tile and portraits made of the renders, her name in the other tiles' lettering (as the Windows installer does).
 if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-css" ]; then
   sheik=()
-  if [ -x "$venv/bin/ssbmhk-frame-png" ]; then
-    tmp="$(mktemp -d)"
-    for k in 0 1 2 3 4; do
-      if make -s -C "$repo/core" frame-dump CHAR=19 SCRIPT=.......... OUT="$tmp/sheik$k.bin" COSTUME=$k >/dev/null 2>&1 \
-         && "$venv/bin/ssbmhk-frame-png" "$tmp/sheik$k.bin" "$tmp/sheik$k.png" --alpha --size 800 >/dev/null 2>&1; then sheik+=("$tmp/sheik$k.png"); else break; fi
-    done
-    [ "${#sheik[@]}" -eq 5 ] || { echo "Sheik not rendered for the select: she gets Zelda's portrait"; sheik=(); }
-  fi
+  tmp=$(mktemp -d)
+  for k in 0 1 2 3 4; do
+    if make -s -C "$repo/core" frame-dump CHAR=19 SCRIPT=.......... OUT="$tmp/frame.bin" COSTUME=$k RASTER="$tmp/sheik$k.rgba" >/dev/null 2>&1; then sheik+=("$tmp/sheik$k.rgba"); else break; fi
+  done
+  make -s -C "$repo/core" frame-dump CHAR=19 SCRIPT=l.. OUT="$tmp/frame.bin" COSTUME=0 RASTER="$tmp/facing.rgba" >/dev/null 2>&1 || true
+  [ "${#sheik[@]}" -eq 5 ] && [ -f "$tmp/facing.rgba" ] || { echo "Sheik not rendered for the select: she gets Zelda's portrait"; sheik=(); }
   if [ "${#sheik[@]}" -gt 0 ]; then
-    "$venv/bin/ssbmhk-extract-css" "$iso" --out "$dest" --sheik-frames "${sheik[@]}" || echo "css.bin not extracted: the character select shows stock icons only"
+    "$venv/bin/ssbmhk-extract-css" "$iso" --out "$dest" --sheik-frames "${sheik[@]}" --sheik-head "$tmp/facing.rgba" || echo "css.bin not extracted: the character select shows stock icons only"
   else
     "$venv/bin/ssbmhk-extract-css" "$iso" --out "$dest" || echo "css.bin not extracted: the character select shows stock icons only"
   fi
-  [ -n "${tmp:-}" ] && rm -rf "$tmp"
+  rm -rf "$tmp"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting
