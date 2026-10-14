@@ -60,6 +60,7 @@ namespace FoxMelee {
                 case GrabEvent.Grabbed:
                     if (hm == null) break;
                     held = hm;
+                    if (!core.StandInHold((float)GrabTargets.HoldFrames(held.hp, tuning))) return false;   // held by its health: a weak one for a minute
                     feetOffset = held.transform.position.y - Feet(held);
                     Launcher?.Stop(held.gameObject);
                     freeze = new EnemyFreeze(held.gameObject, AwayFromFox(held));

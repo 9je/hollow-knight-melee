@@ -5,4 +5,5 @@
 int mc_standin_set(int port);                          /* 0 ok; -1 clears. Asleep from the next frame boundary */
 int mc_standin_wake(float x, float y, float facing);   /* next boundary: at (x, y), Wait on a floor there, else Fall */
 int mc_standin_sleep(void);                            /* next boundary: Melee's Sleep (no logic, push or drawing) */
-int mc_standin_held(void);                             /* 1 while in a grab link, 0 not, -1 no stand-in */
+int mc_standin_held(void);
+int mc_standin_hold(float frames);   /* the grab's release timer, set while held (frames) */                             /* 1 while in a grab link, 0 not, -1 no stand-in */

@@ -46,7 +46,7 @@ typedef struct Machine {
   int edge_assist;                      /* mc_set_edge_assist: port 0's walks teeter at edges */
   int edge_teetered;
   int ko_pending[4], ko[4]; float ko_x[4], ko_y[4];   /* mc_ko: KO'd, held invisible at (ko_x, ko_y) until placed */
-  int bounce_pending[4]; float bounce_vy[4];   /* mc_bounce, run at the next boundary (room.c) */                    /* port 0 teetered and eased the stick: Melee's own edge rule again */
+  int bounce_pending[4]; float bounce_height[4];   /* mc_bounce, run at the next boundary (room.c) */                    /* port 0 teetered and eased the stick: Melee's own edge rule again */
   uint32_t gates[4];                    /* mc_set_gates: locked moves per port (gates.c) */
   uint8_t walljump_off[4];              /* gates.c turned that fighter's can_walljump off */
   uint32_t special_entry[8], special_saved[8];   /* gates.c: blanked ftData_Special* entries and their functions */

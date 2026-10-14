@@ -13,15 +13,24 @@ namespace FoxMelee {
         struct Pending { public GameObject Go; public CollisionSide Side; public int Amount, Hazard; }
 
         readonly EnemyHitTuning tuning;
-        readonly EnemyHits hits;
+        readonly EnemyHits hits, nanaHits;
         readonly System.Func<bool> foxDrives;
         readonly List<Pending> pending = new List<Pending>(), landed = new List<Pending>(), later = new List<Pending>();
         bool passThrough;
+        /// The Ice Climbers: Nana is hit on her own (NanaFrame), her percent and knockback hers, no masks of the Knight's.
+        public bool Nana;
+        readonly McHurtbox[] nanaHurt = new McHurtbox[16];
+        readonly Collider2D[] found = new Collider2D[32];
+        ContactFilter2D filter;
 
         public EnemyBridge(EnemyHitTuning tuning, System.Func<bool> foxDrives) {
             this.tuning = tuning;
             this.foxDrives = foxDrives;
             hits = new EnemyHits(tuning.CooldownFrames);
+            nanaHits = new EnemyHits(tuning.CooldownFrames);
+            filter = new ContactFilter2D();
+            filter.NoFilter();
+            filter.useTriggers = true;   // enemies' DamageHero colliders are triggers
             On.HeroController.TakeDamage += TakeDamage;
         }
 
@@ -51,7 +60,7 @@ namespace FoxMelee {
         public void Guard(GameObject enemy) => hits.Guard(enemy, tuning.GraceFrames);
 
         /// At the hit pause (mc_step_to_hits): Melee resolves each held-back hit.
-        public bool Frame(MeleeCore core, RoomTransform room, Vector2 knight) {
+        public bool Frame(MeleeCore core, RoomTransform room, Vector2 knight, HeroController hero) {
             later.Clear();
             foreach (var p in pending) {
                 var from = p.Go != null ? (Vector2)p.Go.transform.position : knight;
@@ -63,6 +72,32 @@ namespace FoxMelee {
             }
             pending.Clear();
             pending.AddRange(later);   // more hits than one frame takes: the next frame's pause
+            return Nana ? NanaFrame(core, room, hero) : true;
+        }
+
+        /// Nana, at the hit pause: Hollow Knight tests its enemies against the Knight's box only, which stands at Popo, so
+        /// an enemy's DamageHero collider touching her hurtboxes is her hit, applied to her through Melee. Her own cooldown
+        /// per enemy; the Knight's gate (respawn invulnerability and the rest) holds for her too.
+        bool NanaFrame(MeleeCore core, RoomTransform room, HeroController hero) {
+            int n = core.ReadHurtboxes(nanaHurt, 1);
+            if (n <= 0 || !HollowWouldAccept(hero)) return true;
+            for (int i = 0; i < n; i++) {
+                var b = nanaHurt[i];
+                if (b.State != 0) continue;
+                var a = room.ToHk(new V2(b.Ax, b.Ay)); var z = room.ToHk(new V2(b.Bx, b.By));
+                float r = (float)(b.Radius / room.Scale);
+                int k = Physics2D.OverlapCapsule(new Vector2((float)(a.X + z.X) / 2, (float)(a.Y + z.Y) / 2),
+                                                 new Vector2(2 * r, Vector2.Distance(new Vector2((float)a.X, (float)a.Y), new Vector2((float)z.X, (float)z.Y)) + 2 * r),
+                                                 CapsuleDirection2D.Vertical, Mathf.Atan2((float)(z.X - a.X), (float)(z.Y - a.Y)) * -Mathf.Rad2Deg, filter, found);
+                for (int j = 0; j < k; j++) {
+                    var d = found[j].GetComponentInParent<DamageHero>();
+                    if (d == null || d.hazardType != 1 || d.damageDealt <= 0 || !found[j].enabled) continue;
+                    if (!nanaHits.Accept(Enemy(found[j].gameObject, hero))) continue;
+                    var from = room.ToMelee(new V2(found[j].transform.position.x, found[j].transform.position.y));
+                    int rc = core.ApplyHitToFollower(EnemyHits.ToMelee(tuning, d.damageDealt, (float)from.X, (float)from.Y, tuning.UnblockableFromMasks));
+                    if (rc < 0) return false;
+                }
+            }
             return true;
         }
 
@@ -77,10 +112,10 @@ namespace FoxMelee {
                 finally { passThrough = false; }
             }
             landed.Clear();
-            hits.Tick();
+            hits.Tick(); nanaHits.Tick();
         }
 
         /// Hollow Knight takes the Knight (transitions, death): nothing held back carries over.
-        public void Clear() { pending.Clear(); landed.Clear(); hits.Clear(); }
+        public void Clear() { pending.Clear(); landed.Clear(); hits.Clear(); nanaHits.Clear(); }
     }
 }

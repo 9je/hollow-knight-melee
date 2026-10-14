@@ -140,7 +140,7 @@ namespace FoxMelee {
             Prompts.Active = !session.KnightVisible(f);
             if (session.Owner(f, Time.unscaledDeltaTime) == HeroOwner.Hollow) {
                 DreamNailHeld();
-                QuickMapHeld();
+                QuickMapHeld(hero);
                 if (Ko(hero, gm, f)) return;
                 enemies?.Clear();
                 // Transitions, hazards, death and unconvertible rooms are Hollow Knight's: it needs the Knight's
@@ -150,10 +150,11 @@ namespace FoxMelee {
                 needPlace = true;
                 accumulator = 0;
                 if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) { grid = null; GcInput.HoldFromHollow = false; }
-                if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
+                if (!session.Interacting) {     // a transition, a death: nothing of the character is drawn
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
-                } else if (PlayerData.instance.GetBool("atBench")) {
+                } else if (!PlayerData.instance.GetBool("atBench")) Settle(hero);   // a shop, a tablet, an NPC: he stands where he stopped
+                else {
                     // Rest steps the core: never while a character change (BenchMenu may have just started one) restarts
                     // it on its own thread (the two overlapped and the core's worker crashed: Sheik to Link froze the game)
                     if (FinishSwitch(hero)) { BenchMenu(hero); if (state == State.Running && switching == null) Rest(hero); }
@@ -226,7 +227,7 @@ namespace FoxMelee {
                     if (at == 0 && combat != null && !combat.Frame(core, room)) { Fail("reading Fox's hitboxes: " + core.Error); return; }
                     profBridgeMs += profWatch.Elapsed.TotalMilliseconds - bt;
                     if (at == 0 && combat != null && enemies != null) foreach (var go in combat.Struck) enemies.Guard(go);
-                    if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position)) { Fail("applying a hit to Fox: " + core.Error); return; }
+                    if (at == 0 && enemies != null && !enemies.Frame(core, room, hero.transform.position, hero)) { Fail("applying a hit to Fox: " + core.Error); return; }
                 }
                 // StepToHits returning 1 means that frame already ran to its end (no hit resolution for port 0). With
                 // DrawOffThread (and Melee's graphics) the frame runs to Melee's drawing here; GxRenderer.Draw finishes it
@@ -261,6 +262,7 @@ namespace FoxMelee {
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
+            FitKnightBox(hero);
             if (frames > 0 && outOfRoom.Frame(hk.X, hk.Y, gm.sceneWidth, gm.sceneHeight)) {
                 Log($"out of the room at ({hk.X:F1}, {hk.Y:F1}): pit");
                 hero.TakeDamage(null, GlobalEnums.CollisionSide.top, 1, 5);   // Hollow Knight's pit (hazard type 5)
@@ -326,6 +328,7 @@ namespace FoxMelee {
         // while a tablet, NPC or bench has him, then Fox carries on from where he stands.
         void Interact(HeroController hero) {
             session.BeginInteract();
+            settled = 0;
             hero.RegainControl();
             hero.AcceptInput();
             hero.cState.onGround = true;
@@ -336,21 +339,23 @@ namespace FoxMelee {
         void QuickMap(HeroController hero) {
             mapping = true;
             session.BeginInteract();
+            settled = 0;
             session.HoldHollow(MapHold);   // renewed while held (QuickMapHeld); the map button comes 0.1 s after (DPadRight.MapButtonDelay)
             hero.RegainControl();
             hero.AcceptInput();
             hero.cState.onGround = true;
-            Log($"quick map (can open: {hero.CanQuickMap()})");
+            mapWatch.Begin(hero);
         }
 
         // each Update while Hollow Knight has the Knight for the quick map: held, keep it (Hollow Knight opens the map only if
         // its button is still down a moment after the press, and closes it when it's let go or the Knight isn't its)
         bool mapping;
         const float MapHold = 0.15f;   // seconds the Knight stays Hollow Knight's after the last held frame
-        void QuickMapHeld() {
+        readonly MapWatch mapWatch = new MapWatch(Log);   // its state machine and conditions, logged while held
+        void QuickMapHeld(HeroController hero) {
             if (!mapping) return;
-            if (GcInput.QuickMapHeld || Input.GetKey(KeyCode.Tab)) session.HoldHollow(MapHold);
-            else mapping = false;
+            if (GcInput.QuickMapHeld || Input.GetKey(KeyCode.Tab)) { session.HoldHollow(MapHold); mapWatch.Frame(hero); }
+            else { mapping = false; mapWatch.End(); }
         }
 
         // D-pad up held: Hollow Knight's Dream Nail (the Dreamers, the Seer, dream bosses: a Melee character can't swing it). The
@@ -479,7 +484,7 @@ namespace FoxMelee {
             }
             if (s.FoxHits) combat = new CombatBridge { Character = character };
             if (combat != null && (s.Knockback?.Enabled ?? false)) { launcher = new EnemyLauncher(); combat.Launcher = launcher; combat.Knockback = s.Knockback; }
-            if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running);
+            if (s.EnemiesHitFox) enemies = new EnemyBridge(s.EnemyHits ?? new EnemyHitTuning(), () => holdingBody && state == State.Running) { Nana = character.Name == "Ice Climbers" };
             if (grabs) grab = new GrabBridge(s.Grabs, enemies) { Launcher = launcher };
             if (s.Pogo?.Enabled ?? false) pogo = new PogoBridge(s.Pogo, () => holdingBody && state == State.Running);
             try { effects = new EffectsRenderer(); } catch (Exception e) { Log("effects not drawn: " + e.Message); }
@@ -629,6 +634,7 @@ namespace FoxMelee {
             FoxMod.Instance.Settings.Character = c.Name;   // remembered once it plays
             try { FoxMod.Instance.SaveSettings(); } catch (Exception e) { Log("settings not saved: " + e.Message); }
             if (combat != null) combat.Character = c;
+            if (enemies != null) enemies.Nana = c.Name == "Ice Climbers";
             gatesSet = uint.MaxValue;
             if (gx != null) { if (!core.GxCapture(true)) { Fail("mc_gx_capture: " + core.Error); return false; } gx.Reset(); }
             try { sfx = SfxPlayer.Create(core, c, Log); } catch (Exception e) { Log("Melee sounds off: " + e.Message); }
@@ -882,6 +888,25 @@ namespace FoxMelee {
             }
         }
 
+        // An interact takes the Knight mid-move (a dash into a shop, a jump at a tablet): the character's animation plays on
+        // with the controller let go until it stands (Wait), for SettleFrames at most, then holds there. Where it stopped is
+        // where it stays: PlaceAtKnight brings the Knight to it afterwards if it is near.
+        const int SettleFrames = 120;
+        int settled;
+        void Settle(HeroController hero) {
+            if (gx == null || fox.Action == ActionWait || settled >= SettleFrames) return;
+            restClock += Time.unscaledDeltaTime;
+            int frames = 0;
+            while (restClock >= Frame && frames < 4 && settled < SettleFrames) {
+                restClock -= Frame;
+                core.SetInput(0, new McInput());
+                if (!core.Step()) { Fail("libmelee_core stopped: " + core.Error); return; }
+                frames++; settled++;
+            }
+            if (restClock > Frame) restClock = 0;
+            if (core.ReadFighter(0, out fox)) gx.Draw(core, room, hero.GetComponent<MeshRenderer>(), hero.transform.position.z, frames > 0);
+        }
+
         // Sitting at a bench: Fox crouches where he stood (Melee keeps running with the stick held down), so resting
         // is plain to see; Hollow Knight has the Knight and the controller.
         float restClock;
@@ -987,10 +1012,19 @@ namespace FoxMelee {
 
         // Fox keeps his action and velocity; he starts where Hollow Knight put the Knight (feet to feet).
         // After spikes or death he comes back still, as the Knight does (no momentum to carry him back in).
+        const float JoinDistance = 1.5f;   // Hollow Knight units
         bool PlaceAtKnight(HeroController hero) {
             var feet = (Vector2)hero.transform.position - new Vector2(0, HeroFeetOffset(hero));
             var at = room.ToMelee(new V2(feet.x, feet.y));
             bool respawn = session.TakeRespawns();
+            // back from an interact the character stands near where the Knight is (a dash ran out while a shop was open):
+            // the Knight comes to him, so nothing jumps; farther (Hollow Knight moved him: a cutscene) he goes to the Knight
+            var standing = room.ToHk(new V2(fox.X, fox.Y));
+            if (!respawn && gxRoom == room && fox.Airborne == 0 && Vector2.Distance(feet, new Vector2((float)standing.X, (float)standing.Y)) < JoinDistance) {
+                hero.transform.position = new Vector3((float)standing.X, (float)standing.Y + HeroFeetOffset(hero), hero.transform.position.z);
+                Log($"the Knight joins Fox at ({standing.X:F2}, {standing.Y:F2})");
+                return true;
+            }
             Log($"Fox takes the Knight at ({feet.x:F2}, {feet.y:F2}) → Melee ({at.X:F1}, {at.Y:F1}){(respawn ? ", respawned" : "")}");
             if (respawn) respawnHold.Arm();
             // King's Pass's opening drop (the Knight falls in through top1): Fox tumbles in and lands hard unless he techs
@@ -1036,6 +1070,30 @@ namespace FoxMelee {
             return feetOffset < 0 ? 0f : feetOffset;
         }
 
+        // The Knight's box (KnightBox): as wide and tall as the character's hurtboxes while the character drives him, so
+        // spikes, enemies, benches, doors and prompts meet the body that is seen; his own box again when Hollow Knight
+        // gets his body back (its moves through doors and respawns are sized for it)
+        static BoxCollider2D knightBox; static Vector2 knightSize, knightOffset; static bool knightBoxFitted;
+        readonly McHurtbox[] hurt = new McHurtbox[24];
+        void FitKnightBox(HeroController hero) {
+            if (knightBox == null) {
+                knightBox = hero.GetComponent<BoxCollider2D>();
+                if (knightBox == null) return;
+                knightSize = knightBox.size; knightOffset = knightBox.offset;
+            }
+            int n = core.ReadHurtboxes(hurt);
+            if (n <= 0) return;
+            var fit = KnightBox.For(hurt, n, fox.X, fox.Y, (float)room.Scale, knightSize.x, knightSize.y, knightOffset.y);
+            knightBox.size = new Vector2(fit.Width, fit.Height);
+            knightBox.offset = new Vector2(knightOffset.x, fit.OffsetY);
+            knightBoxFitted = true;
+        }
+        static void RestoreKnightBox() {
+            if (knightBox == null || !knightBoxFitted) return;
+            knightBox.size = knightSize; knightBox.offset = knightOffset;
+            knightBoxFitted = false;
+        }
+
         // The Knight follows Fox: no input, no gravity, a kinematic body that still touches static triggers
         // (room exits, hazards: Unity 2D kinematic bodies ignore static colliders unless full contacts are on).
         static void TakeHero(HeroController hero, bool ignoreInput, bool relinquish) {
@@ -1050,6 +1108,7 @@ namespace FoxMelee {
         static void GiveBodyBack(HeroController hero) {
             var rb = hero.GetComponent<Rigidbody2D>();
             if (rb != null) rb.isKinematic = false;
+            RestoreKnightBox();
         }
 
         static void SetKnightVisible(HeroController hero, bool visible) {
@@ -1061,6 +1120,7 @@ namespace FoxMelee {
             var hero = HeroController.instance;
             if (hero == null) return;
             GiveBodyBack(hero);
+            RestoreKnightBox();
             hero.AffectedByGravity(true);
             var r = hero.GetComponent<MeshRenderer>();
             if (r != null) r.enabled = true;

@@ -9,6 +9,10 @@ namespace FoxMelee {
         public int MaxHp = 200;                             // tougher enemies (bosses) can't be grabbed
         public double PercentAtFullHp = 0, PercentAtNoHp = 100;   // the stand-in's percent: throws launch weak enemies further
         public double LaunchScale = 1.0;                    // thrown enemy's velocity = Melee knockback velocity x this
+        // how long a grabbed enemy stays held (Melee frames) before it struggles out, by its health: a weak one is carried
+        // for a minute (and can't do a thing about it), a strong one is out soon; between, the stronger the sooner
+        public double HoldFramesWeak = 3600, HoldFramesStrong = 45;
+        public int HoldWeakHp = 8, HoldStrongHp = 70;
     }
 
     public struct GrabCandidate { public int Id; public double X, Y, Width, Height; public int Hp, MaxHp; }   // X, Y: feet, HK units
@@ -32,6 +36,14 @@ namespace FoxMelee {
             && System.Math.Abs(e.X - fx) <= t.WakeRangeX && System.Math.Abs(e.Y - fy) <= t.WakeRangeY;
 
         /// The stand-in's percent: an enemy low on health flies further when thrown.
+        /// Melee frames a grab holds this enemy (its health now: a hurt enemy struggles less), HoldFramesWeak up to
+        /// HoldWeakHp, HoldFramesStrong from HoldStrongHp, a straight line between.
+        public static double HoldFrames(int hp, GrabTuning t) {
+            if (t.HoldStrongHp <= t.HoldWeakHp) return hp <= t.HoldWeakHp ? t.HoldFramesWeak : t.HoldFramesStrong;
+            double f = System.Math.Max(0, System.Math.Min(1, (double)(hp - t.HoldWeakHp) / (t.HoldStrongHp - t.HoldWeakHp)));
+            return t.HoldFramesWeak + (t.HoldFramesStrong - t.HoldFramesWeak) * f;
+        }
+
         public static double Percent(GrabCandidate c, GrabTuning t) {
             double f = c.MaxHp > 0 ? System.Math.Max(0, System.Math.Min(1, (double)c.Hp / c.MaxHp)) : 1;
             return t.PercentAtNoHp + (t.PercentAtFullHp - t.PercentAtNoHp) * f;

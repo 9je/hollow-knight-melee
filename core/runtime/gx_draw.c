@@ -10,6 +10,7 @@
  * of one texture and blend mode, drawn in order by the host. Textures are decoded once and cached by their source.
  * Approximations: TEV is evaluated per vertex; alpha compare, fog, indirect textures and dst-alpha are ignored. */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mc_internal.h"
@@ -616,6 +617,55 @@ static int skip_draw(Rd *r, const uint8_t *first, uint32_t vsz, int n, int error
 typedef struct { uint32_t epoch, hash, size; uint8_t bytes[64]; Vtx v; } VCacheEntry;
 static VCacheEntry vcache[VCACHE];
 
+/* MC_GX_TRACE=<p_link>: every draw of that kind of object, with the state that coloured it, on stdout (a debugging aid:
+ * which TEV, lighting or texture makes a part black) */
+static int trace_plink = -2;
+static void trace_draw(const DrawSetup *d, const Vtx *vs, int n, int prim) {
+  if (trace_plink == -2) { const char *e = getenv("MC_GX_TRACE"); trace_plink = e ? atoi(e) : -1; }
+  if (trace_plink < 0 || span_plink != trace_plink || n == 0) return;
+  printf("draw gobj %08x prim %02x n %d ntev %d cull %d blend %d cmode %06x zmode %02x vcd_lo %05x nch %u\n", span_gobj, prim, n, d->ntev, d->cull, d->blend, S.bp[0x41], d->zmode, S.vcd_lo, S.xfr[0x09] & 3);
+  for (int ch = 0; ch < 2; ch++)
+    printf("  chan%d ctl %06x actl %06x mat %08x amb %08x\n", ch, S.xfr[0x0E + ch], S.xfr[0x10 + ch], S.xfr[0x0C + ch], S.xfr[0x0A + ch]);
+  for (int st = 0; st < d->ntev; st++) {
+    uint32_t tref = S.bp[0x28 + st / 2] >> ((st & 1) ? 12 : 0), ksel = S.bp[0xF6 + st / 2];
+    printf("  tev%d ce %06x ae %06x tref %03x (map %u coord %u texen %u chsel %u) kc %u ka %u\n", st, S.bp[0xC0 + 2 * st], S.bp[0xC1 + 2 * st], tref & 0xFFF,
+           tref & 7, (tref >> 3) & 7, (tref >> 6) & 1, (tref >> 7) & 7, (ksel >> ((st & 1) ? 14 : 4)) & 0x1F, (ksel >> ((st & 1) ? 19 : 9)) & 0x1F);
+  }
+  for (int i = 0; i < 4; i++) printf("  reg%d %06x %06x konst%d %06x %06x\n", i, tev_raw[i][0], tev_raw[i][1], i, konst_raw[i][0], konst_raw[i][1]);
+  if (d->tex >= 0) {
+    const Tex *t = &texs[d->tex];
+    double sum[4] = {0, 0, 0, 0}; uint32_t nt = t->w * t->h;
+    for (uint32_t k = 0; k < nt; k++) for (int c = 0; c < 4; c++) sum[c] += t->rgba[4 * k + c];
+    printf("  tex %d addr %08x fmt %u %ux%u wrap %u tlut %08x mean %.0f %.0f %.0f a %.0f\n", d->tex, t->addr, t->fmt, t->w, t->h, t->wrap, t->tlut_hash, sum[0] / nt, sum[1] / nt, sum[2] / nt, sum[3] / nt);
+  } else printf("  tex none (texmap %d)\n", d->texmap);
+  printf("  v0 chan0 %.2f %.2f %.2f %.2f chan1 %.2f %.2f %.2f %.2f col %.2f %.2f %.2f %.2f uv %.3f %.3f\n",
+         vs[0].chan[0].r, vs[0].chan[0].g, vs[0].chan[0].b, vs[0].chan[0].a, vs[0].chan[1].r, vs[0].chan[1].g, vs[0].chan[1].b, vs[0].chan[1].a,
+         vs[0].col.r, vs[0].col.g, vs[0].col.b, vs[0].col.a, vs[0].u, vs[0].v);
+  int black = 0, first = -1; float lo = 9, hi = -9;
+  for (int i = 0; i < n; i++) {
+    float m = (vs[i].col.r + vs[i].col.g + vs[i].col.b) / 3;
+    if (m < lo) lo = m; if (m > hi) hi = m;
+    if (m < 0.02f) { black++; if (first < 0) first = i; }
+  }
+  printf("  cols mean %.2f..%.2f black %d/%d", lo, hi, black, n);
+  if (first >= 0) printf("  first black v%d chan0 %.2f %.2f %.2f %.2f chan1 %.2f %.2f %.2f %.2f uv %.3f %.3f", first,
+                         vs[first].chan[0].r, vs[first].chan[0].g, vs[first].chan[0].b, vs[first].chan[0].a,
+                         vs[first].chan[1].r, vs[first].chan[1].g, vs[first].chan[1].b, vs[first].chan[1].a, vs[first].u, vs[first].v);
+  printf("\n");
+  /* the stages one by one, for v0 (and the first black vertex), with the white texture */
+  for (int which = 0; which < (first > 0 ? 2 : 1); which++) {
+    const Vtx *v = &vs[which ? first : 0];
+    C4 reg[4]; memcpy(reg, tev_regs, sizeof reg);
+    printf("  stages v%d:", which ? first : 0);
+    for (int st = 0; st < d->ntev; st++) {
+      DrawSetup one = *d; one.ntev = st + 1;
+      C4 o = tev(&one, v->chan, NULL);
+      printf(" [%d] %.2f %.2f %.2f %.2f", st, o.r, o.g, o.b, o.a);
+    }
+    printf("\n");
+  }
+}
+
 static int draw(Rd *r, int op) {
   int prim = op & 0xF8, vat = op & 7;
   if (!rd_ok(r, 2)) return 0;
@@ -649,6 +699,7 @@ static int draw(Rd *r, int op) {
     if (!read_vertex(r, vat, &d, &vs[i])) return skip_draw(r, first, vsz, n, 1);
     if ((uint32_t)(r->p - at) != vsz) size_mismatches++;
   }
+  trace_draw(&d, vs, n, prim);
   if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
   switch (prim) {
     case 0x80: for (int i = 0; i + 3 < n; i += 4) { emit_tri(&vs[i], &vs[i + 1], &vs[i + 2], &d); emit_tri(&vs[i], &vs[i + 2], &vs[i + 3], &d); } break;

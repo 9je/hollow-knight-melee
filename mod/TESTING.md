@@ -87,7 +87,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     bounces Fox up (about a full hop) into Melee's normal fall, ends a fast fall and gives his double jump back; that
     touch doesn't hurt him. Down-air again to chain pogos. Acid, pits and enemies
     are never pogoed; any other spike contact is Hollow Knight's hazard as before. Settings under `Pogo`: `Enabled`,
-    `BounceHop` (share of the character's own full-hop speed, 0.9), `GraceFrames` (8). Try it on King's Pass's first spikes.
+    `BounceHeight` (Hollow Knight units the bounce peaks at, 2.5, every character alike), `GraceFrames` (8). Try it on King's Pass's first spikes.
 
 17. Move gating: replaced in roster stage 1 (item 19). Movesets are complete, wall jump needs Mantis Claw.
 
@@ -141,8 +141,8 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Death:** Melee's KO blast plays, with now and then the star-KO scream (`KO (star)`), and no Knight mask or shade
       animation. Hollow Knight's death sound is muted. Each hidden or muted thing is logged as `death: hid ...` /
       `death: muted ...`; send those lines if something still shows.
-    - **Pogo:** each character bounces about 80% of their own jump height (`BounceHop` 0.9), so Marth no longer
-      flies off.
+    - **Pogo:** every character bounces to the same height (`BounceHeight` 2.5 Hollow Knight units, about the Knight's
+      own nail bounce), the down-air playing on through the bounce.
     - **Mod list:** the mod is now called "Hollow Knight: Melee" (version 0.2.0).
     - **Windows (a friend's PC, or yours):**
       1. Download `HollowKnightMeleeInstaller.exe` from the newest pre-release on GitHub.
@@ -206,6 +206,22 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       before).
     - **Dream Nail:** hold D-pad up (a tap is still the taunt). The Knight's Dream Nail swings: try it on a
       Dreamer, the Seer, or a dream-nailable enemy (`dream nail (can: True)`).
+    - **Selecting a character never freezes the game** (Link did: the bench's Rest stepped the core while the change
+      restarted it on another thread). Switch between every pair you like, several times, mid-rest.
+    - **Sheik's death:** die as Sheik (or Zelda), respawn at the bench: no Zelda (or Sheik) standing behind.
+    - **The Knight's box is the character's body:** spikes between Sheik's legs hurt; a tall character's head meets
+      overhead spikes; the bench's Rest prompt appears as soon as the body is in front of it (no wiggle); enemies hit the
+      body you see. Through doors and respawns the Knight is his own size again.
+    - **Nana is hit on her own** (Ice Climbers): an enemy touching Nana gives her percent and knockback; your masks
+      don't move. Far from Popo (down a pit) she comes back beside him.
+    - **Pogo:** every character bounces to the same height, the down-air swing playing on through the bounce.
+    - **A grab holds by health:** DK's cargo (any grab) keeps a Crawlid for a minute; a tough enemy is out in under a
+      second. Settings: `Grabs.HoldFramesWeak`/`HoldFramesStrong`, `HoldWeakHp`/`HoldStrongHp`.
+    - **Entering a shop or tablet mid-dash:** the character finishes the move and stands (no frozen mid-dash pose);
+      leaving, the Knight comes to where the character stands (`the Knight joins Fox at ...` in the log) instead of the
+      character snapping back.
+    - **Quick map, logged:** while D-pad right is held, `ModLog.txt` logs Hollow Knight's Map Control states (`quick map:
+      Button Down Check; button down, CanQuickMap True ...`). If the map doesn't open, send those lines.
     - **Quick map:** hold D-pad right (or Tab): the map opens after a moment and stays while held. It failed before at
       high frame rates (the Knight was taken back after 30 frames, 0.12 s at 250 fps). Benches and NPCs also get a
       fixed 0.2 s to react now, whatever the frame rate.

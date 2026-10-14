@@ -676,6 +676,30 @@ static float mirror_uv_span(uint64_t mask) {
   }
   return span;
 }
+/* mc_apply_hit_to: a hit on the port's follower lands on Nana alone (her percent, her launch); Popo is untouched */
+static void test_apply_hit_nana(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 14);
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  McFighter nana, popo = fox();
+  CHECK(mc_read_fighter(0, 1, &nana) == 0);
+  McHit hit = {0};
+  hit.damage = 12; hit.angle = 45; hit.growth = 100; hit.base_kb = 30;
+  hit.from_x = nana.x - 10; hit.from_y = nana.y + 5;
+  CHECK(mc_step_to_hits() == 0);
+  CHECK(mc_apply_hit_to(0, 1, &hit) == MC_HIT_LANDED);
+  CHECK(mc_step() == 0);
+  for (int i = 0; i < 12; i++) steps(1, &idle);
+  McFighter n2; CHECK(mc_read_fighter(0, 1, &n2) == 0);
+  CHECK(fabsf(n2.percent - 12) < 0.01f && n2.kb_vel_x > 0);
+  CHECK(fabsf(fox().percent - popo.percent) < 0.01f);
+  mc_shutdown();
+}
+
 static void test_gx_post_texture_matrices(void) {
   const uint64_t EFFECTS = (1ull << 11) | (1ull << 12);
   McInput idle = {0}, upb = {0};
@@ -756,6 +780,30 @@ static void test_standin_survives_room_load(void) {
   steps(3, &idle);
   CHECK(standin().action == 11);
   mc_shutdown();
+}
+
+/* mc_standin_hold: the grab lasts as long as the host says (a weak enemy carried for a minute, a strong one soon out) */
+static void test_standin_hold(void) {
+  McInput idle = {0}, grab = {0};
+  grab.buttons = 0x0010;
+  for (int round = 0; round < 2; round++) {
+    fox_and_standin(); steps(180, &idle);
+    CHECK(mc_standin_set(1) == 0);
+    steps(2, &idle);
+    CHECK(mc_standin_hold(100) == 1);                  /* not held: nothing */
+    McFighter f = fox();
+    CHECK(mc_standin_wake(f.x + 8 * f.facing, f.y, -f.facing) == 0);
+    steps(2, &idle);
+    steps(1, &grab);
+    int held = 0;
+    for (int i = 0; i < 20 && !held; i++) { steps(1, &idle); held = mc_standin_held() == 1; }
+    CHECK(held);
+    CHECK(mc_standin_hold(round ? 5.0f : 240.0f) == 0);
+    int frames = 0;
+    while (mc_standin_held() == 1 && frames < 400) { steps(1, &idle); frames++; }
+    if (round) CHECK(frames < 12); else CHECK(frames > 200 && frames < 260);
+    mc_shutdown();
+  }
 }
 
 /* Fox's real grab catches the stand-in; pummel and forward throw act on it as on any fighter */
@@ -1092,32 +1140,54 @@ static void test_render_pause(void) {
   mc_shutdown();
 }
 
-/* Hazard pogo (spec §5.4, not Melee): mc_bounce sends an airborne fighter up at a fraction of its own full hop, ends a fast fall and gives the double jump back */
-static void test_bounce(void) {
-  McInput idle = {0}, jump = {0}, down = {0};
+/* Hazard pogo (spec §5.4, not Melee): mc_bounce sends an airborne fighter up to a height of the host's choosing (Hollow Knight's
+ * pogo height, the same for every character, whatever its gravity), its aerial playing on, a fast fall ended and the double
+ * jump back */
+static float bounce_peak(int character, float height, uint32_t *action_after) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0}, jump = {0}, down = {0}, dair = {0};
   jump.buttons = 0x0800;            /* X */
   down.stick_y = -127;
-  solo_fox(); steps(180, &idle);
-  CHECK(mc_bounce(0, 0.95f) == 1);                       /* grounded: nothing */
+  dair.cstick_y = -127;
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, character);
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  CHECK(mc_bounce(0, height) == 1);                      /* grounded: nothing */
   steps(1, &jump); steps(12, &idle);
   steps(1, &jump); steps(1, &idle);                     /* the double jump, used */
   for (int i = 0; i < 60 && fox().self_vel_y >= 0; i++) steps(1, &idle);
-  McInput dair = {0};
-  dair.cstick_y = -127;
   steps(1, &down); steps(1, &dair); steps(2, &idle);    /* fast falling, down-air */
   CHECK(fox().action == 69);
   uint32_t fp = mc_peek32(mc_peek32(0x80453080u + 0xB0u) + 0x2Cu);
   CHECK(fox().airborne && (mc_peek32(fp + 0x1968) >> 24) == 2 && (mc_peek32(fp + 0x2218) & 0x0800));
-  CHECK(mc_bounce(0, 0.95f) == 0);
+  float y0 = fox().y;
+  CHECK(mc_bounce(0, height) == 0);
   steps(1, &idle);
-  float hop = 0.95f * mc_peekf(fp + 0x150);             /* 95% of Fox's own full hop (jump_v_initial_velocity) */
-  CHECK(fox().self_vel_y > hop - 0.3f && fox().self_vel_y < hop);   /* up, less one frame of gravity */
-  CHECK(fox().action == 29);                            /* the down-air ends: Fall, as an aerial ending mid-rise */
-  CHECK((mc_peek32(fp + 0x1968) >> 24) == 1 && !(mc_peek32(fp + 0x2218) & 0x0800));
-  float y = fox().y;
-  steps(1, &jump); steps(10, &idle);
-  CHECK(fox().y > y + 5);                               /* the double jump again */
+  CHECK(fox().self_vel_y > 0);
+  *action_after = fox().action;
+  CHECK((mc_peek32(fp + 0x1968) >> 24) == 1 && !(mc_peek32(fp + 0x2218) & 0x0800));   /* double jump back, fast fall off */
+  float peak = fox().y;
+  for (int i = 0; i < 120 && fox().self_vel_y > 0; i++) { steps(1, &idle); if (fox().y > peak) peak = fox().y; }
+  for (int i = 0; i < 120 && fox().action == 69 && fox().airborne; i++) steps(1, &idle);   /* the down-air runs its course */
+  if (fox().airborne) {                                 /* the double jump again (a jump press during the swing does nothing) */
+    float y = fox().y;
+    steps(1, &jump); steps(10, &idle);
+    CHECK(fox().y > y + 5);
+  }
   mc_shutdown();
+  return peak - y0;
+}
+static void test_bounce(void) {
+  uint32_t action;
+  float fox_rise = bounce_peak(2, 30.0f, &action);
+  CHECK(action == 69);                                  /* the down-air plays on (Hollow Knight's nail bounce doesn't cut the swing) */
+  CHECK(fox_rise > 27.0f && fox_rise < 33.0f);
+  float bowser_rise = bounce_peak(5, 30.0f, &action);   /* heavier and floatier: the same height */
+  CHECK(bowser_rise > 27.0f && bowser_rise < 33.0f);
+  float low = bounce_peak(2, 12.0f, &action);
+  CHECK(low > 10.0f && low < 14.0f);
 }
 
 /* Move gating (spec §6): a locked special does nothing when its input comes; a locked double jump counts as used; a locked
@@ -1180,12 +1250,14 @@ int main(int argc, char **argv) {
   test_sfx();
   test_laser_hits();
   test_apply_hit();
+  test_apply_hit_nana();
   test_respawn_after_hit();
   test_tumble_fighter();
   test_standin_sleeps_and_wakes();
   test_standin_push_and_no_hits();
   test_standin_survives_room_load();
   test_standin_grab_pummel_throw();
+  test_standin_hold();
   test_edge_assist();
   test_edge_assist_steps();
   test_ko();

@@ -354,15 +354,20 @@ void room_boundary_jobs(Cpu *c) {
       }
   edge_assist_boundary(c);
   ko_boundary_jobs(c);
-  for (int p = 0; p < 4; p++) {   /* mc_bounce (hazard pogo): the aerial ends in Fall, going up; no fast fall; double jump back */
+  for (int p = 0; p < 4; p++) {   /* mc_bounce (hazard pogo): up to the asked height, the aerial playing on; no fast fall; double jump back */
     if (!m->bounce_pending[p]) continue;
     m->bounce_pending[p] = 0;
     uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + 0xB0u);
     if (!gobj) continue;
     uint32_t fp = ld32(c, gobj + 0x2C);
     if (ld32(c, fp + 0xE0) == 0) continue;                       /* landed meanwhile */
-    call_guest(c, FN_FALL_ENTER, gobj, 0);
-    stf(c, fp + 0x84, m->bounce_vy[p]);                          /* self_vel.y */
+    /* the speed that peaks `height` up under this fighter's gravity (co_attrs gravity, fp+0x16C), as Melee integrates it: a
+     * frame's gravity comes off before the first move, so the peak is v^2/2g - v/2; v = sqrt(2gh) + g/2 lands within g/8 */
+    float g = ldf(c, fp + 0x16Cu);
+    if (!(g > 0.0f)) g = 0.1f;
+    float v = sqrtf(2.0f * g * m->bounce_height[p]) + g * 0.5f;
+    stf(c, fp + 0x84, v);                                        /* self_vel.y: the action (the down-air) goes on */
+    stf(c, fp + 0x8C, 0.0f);                                     /* kb_vel.y: nothing pulls it back down */
     st8(c, fp + 0x221A, (uint8_t)(ld8(c, fp + 0x221A) & ~0x08u)); /* fall_fast */
     if (ld8(c, fp + 0x1968) > 1) st8(c, fp + 0x1968, 1);         /* x1968_jumpsUsed: the double jump is back */
   }

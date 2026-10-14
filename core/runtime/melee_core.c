@@ -506,7 +506,7 @@ int mc_read_items(McItem out[], int max) {
 #define ADDR_HIT_DESC 0x80002F40u   /* our descriptors (0x24 bytes each), below the OS globals, after the runtime words */
 #define HIT_SLOTS 4                 /* per hit pause: Melee's damage log keeps a pointer to each until it is processed */
 
-typedef struct { int port; const McHit *hit; int result; } ApplyArgs;
+typedef struct { int port; const McHit *hit; int result; int follower; } ApplyArgs;
 
 static int intangible(Cpu *c, uint32_t fp) {
   /* ftColl_80078C70's gate: intangibility/invincibility timers and flag, or no hurtbox that can be hit */
@@ -521,8 +521,8 @@ static void apply_on_worker(void *arg) {
   Machine *m = g_m;
   Cpu *c = &m->cpu;
   const McHit *h = a->hit;
-  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)a->port + 0xB0u);
-  uint32_t fp = fighter_at(c, a->port, 0);
+  uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)a->port + (a->follower ? 0xB4u : 0xB0u));
+  uint32_t fp = fighter_at(c, a->port, a->follower);
   if (!fp) { a->result = -1; return; }
   if (intangible(c, fp)) { a->result = MC_HIT_INTANGIBLE; return; }
   float x = f32at(c, fp + 0xB0), dir = x > h->from_x ? -1.0f : 1.0f;   /* Melee: -1 sends the victim to +x */
@@ -562,21 +562,22 @@ static void apply_on_worker(void *arg) {
   a->result = MC_HIT_LANDED;
 }
 
-int mc_apply_hit(int port, const McHit *hit) {
+int mc_apply_hit_to(int port, int follower, const McHit *hit) {
   Machine *m = g_m;
   if (!m || m->dead || port < 0 || port > 3 || !hit) return -1;
   if (!m->at_hits) { snprintf(m->error, sizeof m->error, "mc_apply_hit: only at the hit pause (mc_step_to_hits)"); return -1; }
-  ApplyArgs a = {port, hit, -1};
+  ApplyArgs a = {port, hit, -1, follower != 0};
   worker_call(apply_on_worker, &a);
   return m->dead ? -1 : a.result;
 }
+int mc_apply_hit(int port, const McHit *hit) { return mc_apply_hit_to(port, 0, hit); }
 
-int mc_bounce(int port, float vy) {
+int mc_bounce(int port, float height) {
   Machine *m = g_m;
-  if (!m || m->dead || port < 0 || port > 3 || !isfinite(vy)) return -1;
+  if (!m || m->dead || port < 0 || port > 3 || !isfinite(height) || height <= 0.0f) return -1;
   uint32_t fp = fighter_at(&m->cpu, port, 0);
   if (!fp || ld32(&m->cpu, fp + 0xE0) == 0) return 1;            /* no fighter, or grounded */
-  m->bounce_pending[port] = 1; m->bounce_vy[port] = vy * f32at(&m->cpu, fp + 0x150);   /* x its full hop; at the next boundary (room.c) */
+  m->bounce_pending[port] = 1; m->bounce_height[port] = height;   /* at the next boundary (room.c) */
   return 0;
 }
 

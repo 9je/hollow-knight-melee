@@ -51,10 +51,10 @@ void mc_standin_start(uint8_t out[MC_START_SIZE], int character);   /* plus a Fo
 /* Edge assist (a deviation from Melee, off by default): port 0's walk stops at a floor's edge (Ottotto) whatever the
  * stick's tilt, as Melee's walk does below 75% tilt. Dash, run and air movement still go off edges. */
 int mc_set_edge_assist(int on);
-/* Hazard pogo (spec §5.4, not Melee): an airborne fighter's vertical speed becomes vy times its own full-hop speed
- * (jump_v_initial_velocity, so each character bounces to a share of its own jump), a fast fall
- * ends and its double jump is back. 0 done, 1 not airborne (nothing), -1 error. */
-int mc_bounce(int port, float vy);
+/* Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up to peak `height` (Melee units) above where it is, the
+ * same for every character whatever its gravity (Hollow Knight's pogo height); its aerial plays on (the bounce doesn't cut
+ * the swing, as the nail's doesn't), a fast fall ends and its double jump is back. 0 done, 1 not airborne (nothing), -1 error. */
+int mc_bounce(int port, float height);
 /* Hollow Knight's death while the fighter plays: Melee's KO, the blast (as at the bottom blast line, ftCo_800D3BC8) and the
  * fighter's KO voice where it stands, without the stock loss or rebirth; then it is invisible and held there until its next
  * placement (mc_place_fighter, mc_respawn_fighter) brings it back. star: the star KO's scream (DeadUpStar's voice) instead of
@@ -115,6 +115,7 @@ typedef struct {
 #define MC_HIT_INTANGIBLE 2
 #define MC_HIT_LATER 3       /* this pause already took 4 hits: apply it at the next one */
 int mc_apply_hit(int port, const McHit *hit);
+int mc_apply_hit_to(int port, int follower, const McHit *hit);   /* the same on the port's follower (Nana: her own percent and knockback) */
 int mc_set_percent(int port, float percent);   /* Fighter dmg.x1830 (Focus, benches, deaths); 0 ok, 1 no fighter */
 /* A fighter's attribute (Fighter co_attrs: fp+0x110 + offset, offset 0..0x180 in 4s; e.g. 0x1C dash_initial_velocity,
  * 0x28 dash_max_velocity, 0x88 weight), for the boost charms. It holds until the fighter is spawned again (a new

@@ -60,6 +60,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void VoidFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate IntPtr ErrorFn();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int IntFn();
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HoldFn(float frames);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void SoloFn(byte[] start);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StartFn(byte[] start, uint seed, uint flags);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void InputFn(int port, IntPtr input);
@@ -76,6 +77,7 @@ namespace FoxMelee {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int GxCaptureFn(int on);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int HitlagFn(int damage);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ApplyHitFn(int port, ref McHit hit);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int ApplyHitToFn(int port, int follower, ref McHit hit);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int SetPercentFn(int port, float percent);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int StandInSetFn(int port);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int OnFn(int on);
@@ -96,12 +98,12 @@ namespace FoxMelee {
 
         const int StartSize = 0x138;
         readonly InitFn init; readonly VoidFn shutdown; readonly ErrorFn error; readonly IntFn step, stepToHits, stepToRender, finishFrame;
-        readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld;
+        readonly SoloFn solo, standinStart; readonly StandInSetFn standinSet; readonly StandInWakeFn standinWake; readonly IntFn standinSleep, standinHeld; readonly HoldFn standinHold;
         readonly StartFn start; readonly OnFn edgeAssist; readonly FrameFn frameNo; readonly BounceFn bounce; readonly KoFn ko; readonly GetAttrFn getAttr; readonly SetAttrFn setAttr; readonly CharStartFn soloChar, standinChar; readonly GatesFn gates; readonly InputFn input; readonly ReadFn read;
         readonly BuildFn build; readonly LoadFn load; readonly BoundsFn bounds; readonly PlaceFn place, respawn, tumble; readonly BonesFn bones; readonly DobjsFn dobjs;
         readonly HitboxFn hitboxes; readonly HurtboxFn hurtboxes; readonly ReportFn report;
         readonly ShieldFn shield; readonly ItemsFn items;
-        readonly HitlagFn hitlag; readonly ApplyHitFn applyHit; readonly SetPercentFn setPercent;
+        readonly HitlagFn hitlag; readonly ApplyHitFn applyHit; ApplyHitToFn applyHitTo; readonly SetPercentFn setPercent;
         readonly GxCaptureFn gxCapture; readonly GxDecodeFn gxDecode; readonly GxTextureFn gxTexture; readonly GxAtlasDirtyFn gxAtlasDirty; readonly SfxFn sfx;
         readonly IntPtr inputBuf = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(McInput)));
         string localError;
@@ -122,6 +124,7 @@ namespace FoxMelee {
             standinWake = NativeLib.Symbol<StandInWakeFn>(lib, "mc_standin_wake");
             standinSleep = NativeLib.Symbol<IntFn>(lib, "mc_standin_sleep");
             standinHeld = NativeLib.Symbol<IntFn>(lib, "mc_standin_held");
+            standinHold = NativeLib.Symbol<HoldFn>(lib, "mc_standin_hold");
             edgeAssist = NativeLib.Symbol<OnFn>(lib, "mc_set_edge_assist");
             frameNo = NativeLib.Symbol<FrameFn>(lib, "mc_frame");
             bounce = NativeLib.Symbol<BounceFn>(lib, "mc_bounce");
@@ -148,6 +151,7 @@ namespace FoxMelee {
             gxCapture = NativeLib.Symbol<GxCaptureFn>(lib, "mc_gx_capture");
             hitlag = NativeLib.Symbol<HitlagFn>(lib, "mc_hitlag_frames");
             applyHit = NativeLib.Symbol<ApplyHitFn>(lib, "mc_apply_hit");
+            applyHitTo = NativeLib.Symbol<ApplyHitToFn>(lib, "mc_apply_hit_to");
             setPercent = NativeLib.Symbol<SetPercentFn>(lib, "mc_set_percent");
             gxDecode = NativeLib.Symbol<GxDecodeFn>(lib, "mc_gx_decode");
             gxTexture = NativeLib.Symbol<GxTextureFn>(lib, "mc_gx_texture");
@@ -190,6 +194,8 @@ namespace FoxMelee {
         public bool StandInWake(float x, float y, float facing) { lock (gate) { Sync(); return Ok(standinWake(x, y, facing)); } }
         public bool StandInSleep() { lock (gate) { Sync(); return Ok(standinSleep()); } }
         public int StandInHeld() { lock (gate) { Sync(); return standinHeld(); } }
+        /// The grab's release timer while the stand-in is held: `frames` more of Melee's hold (a mashing victim's count-down).
+        public bool StandInHold(float frames) { lock (gate) { Sync(); return Ok(standinHold(frames)); } }
         /// Edge assist (not Melee): port 0's walk teeters at an edge whatever the tilt, as Melee's walk does below 75% tilt.
         public bool SetEdgeAssist(bool on) { lock (gate) { Sync(); return Ok(edgeAssist(on ? 1 : 0)); } }
         public void SetInput(int port, McInput? value) {
@@ -200,9 +206,9 @@ namespace FoxMelee {
         /// Runs one frame (or the rest of one paused at the hit pause). A frame left paused at Melee's drawing
         /// (StepToRender) is finished first, then a whole frame runs.
         public bool Step() { lock (gate) { Sync(); if (finishFrame() != 0) return Ok(-1); return Ok(step()); } }
-        /// Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up at vy, fast fall ended, double jump back.
-        /// 0 done, 1 not airborne, -1 error.
-        public int Bounce(int port, float hop) { lock (gate) { Sync(); localError = null; return bounce(port, hop); } }
+        /// Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up to `height` (Melee units) above where it is, its
+        /// aerial playing on, fast fall ended, double jump back. 0 done, 1 not airborne, -1 error.
+        public int Bounce(int port, float height) { lock (gate) { Sync(); localError = null; return bounce(port, height); } }
         /// Hollow Knight's death: Melee's KO blast and voice (star: the star KO's scream) where the fighter stands; it stays
         /// hidden until its next placement.
         /// A fighter's attribute (Fighter co_attrs + offset: 0x1C dash_initial_velocity, 0x28 dash_max_velocity, 0x88 weight).
@@ -248,7 +254,8 @@ namespace FoxMelee {
             if (n > 0) Array.Copy(hitboxTmp, 0, o, at, n);
             return n;
         } }
-        public int ReadHurtboxes(McHurtbox[] o) { lock (gate) { Sync(); return hurtboxes(0, 0, o, o.Length); } }
+        /// Port 0's leader's (follower 0) or Nana's (1) hurtboxes; the count, 0 with no such fighter.
+        public int ReadHurtboxes(McHurtbox[] o, int follower = 0) { lock (gate) { Sync(); return hurtboxes(0, follower, o, o.Length); } }
         /// Fox's hit in `group` landed outside Melee: Melee records it and gives Fox its attacker hitlag next frame.
         public bool ReportHit(uint group, float damage, int follower = 0) { lock (gate) { Sync(); return Ok(report(0, follower, group, damage)); } }
         /// Melee's ItemKind for Fox's laser.
@@ -260,6 +267,8 @@ namespace FoxMelee {
         public int HitlagFrames(int damage) { lock (gate) { Sync(); return hitlag(damage); } }
         /// A hit from outside Melee on port 0, at the hit pause (StepToHits): McHit.Landed / Shielded / Intangible, -1 error.
         public int ApplyHit(McHit hit) { lock (gate) { Sync(); localError = null; return applyHit(0, ref hit); } }
+        /// The same on port 0's follower (Nana: her own percent and knockback).
+        public int ApplyHitToFollower(McHit hit) { lock (gate) { Sync(); localError = null; return applyHitTo(0, 1, ref hit); } }
         /// Port 0's percent (Focus, benches and deaths reset it).
         public bool SetPercent(float percent) { lock (gate) { Sync(); return Ok(setPercent(0, percent)); } }
         public bool SetPercent(int port, float percent) { lock (gate) { Sync(); return Ok(setPercent(port, percent)); } }

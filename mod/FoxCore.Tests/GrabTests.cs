@@ -95,3 +95,23 @@ namespace FoxMelee.Tests {
         }
     }
 }
+
+namespace FoxMelee.Tests {
+    public class GrabHoldTests {
+        // DK's cargo (any grab): a weak enemy is carried for a minute and can't do a thing about it; a strong one struggles
+        // out soon; a hurt enemy of either kind holds longer than it did fresh
+        [Theory]
+        [InlineData(1, 3600)]
+        [InlineData(8, 3600)]
+        [InlineData(70, 45)]
+        [InlineData(500, 45)]
+        public void HeldByHealth(int hp, double frames) => Assert.Equal(frames, GrabTargets.HoldFrames(hp, new GrabTuning()), 3);
+
+        [Fact]
+        public void BetweenWeakAndStrongTheHoldShortensWithHealth() {
+            var t = new GrabTuning();
+            double a = GrabTargets.HoldFrames(20, t), b = GrabTargets.HoldFrames(40, t);
+            Assert.True(t.HoldFramesWeak > a && a > b && b > t.HoldFramesStrong);
+        }
+    }
+}

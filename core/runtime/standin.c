@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "mc_internal.h"
+#include <math.h>
+#include <string.h>
 #include "melee_core.h"
 #include "standin.h"
 
@@ -39,6 +41,20 @@ int mc_standin_sleep(void) {
   Machine *m = g_m;
   if (!m || m->dead || m->standin_port < 0) return -1;
   m->standin_req = 2;
+  return 0;
+}
+/* How long the stand-in stays in a grab: Melee's own release timer (the held fighter's x1A4C, frames, counted down each frame
+ * and faster for a mashing victim) set to `frames` while it is held. The host sets it as the grab lands, from the enemy's health:
+ * a weak enemy is carried for as long as the player likes, a strong one struggles out soon. 0 ok, 1 not held, -1 error. */
+int mc_standin_hold(float frames) {
+  Machine *m = g_m;
+  if (!m || m->dead || m->standin_port < 0 || !isfinite(frames) || frames < 0) return -1;
+  uint32_t gobj = ld32(&m->cpu, PLAYER_BLOCK(m->standin_port) + 0xB0u);
+  if (!gobj) return 1;
+  uint32_t fp = ld32(&m->cpu, gobj + 0x2C);
+  if (ld32(&m->cpu, fp + 0x1A58u) == 0) return 1;
+  uint32_t u; memcpy(&u, &frames, 4);
+  st32(&m->cpu, fp + 0x1A4Cu, u);
   return 0;
 }
 int mc_standin_held(void) {

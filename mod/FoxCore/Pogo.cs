@@ -1,9 +1,9 @@
 namespace FoxMelee {
-    /// Spec §5.4 (the one deliberate exception to Melee): Fox's down-air on spikes bounces him like a bumper, with his
-    /// double jump back, and that touch doesn't hurt him.
+    /// Spec §5.4 (the one deliberate exception to Melee): a down-air on spikes bounces the character like the Knight's nail
+    /// does him, to the same height whoever it is, the swing playing on, the double jump back, and that touch doesn't hurt.
     public sealed class PogoTuning {
         public bool Enabled = true;
-        public double BounceHop = 0.9;    // the bounce's speed as a share of the character's own full hop (about 80% of its height)
+        public double BounceHeight = 2.5;  // how high the bounce peaks, Hollow Knight units, the same for every character (the Knight's nail bounce: about half his jump)
         public int GraceFrames = 8;       // Melee frames after a bounce in which spikes don't hurt Fox
     }
 
