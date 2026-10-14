@@ -238,6 +238,40 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       high frame rates (the Knight was taken back after 30 frames, 0.12 s at 250 fps). Benches and NPCs also get a
       fixed 0.2 s to react now, whatever the frame rate.
 
+
+22. Overnight 2026-10-13/14 (your list). Run `bash mod/install.sh` first (it now also renders Sheik for the select, so it
+    takes a little longer).
+    - **The character select is the bench's charm screen.** Sit at a bench, open the inventory (D-pad right tap on the
+      GameCube pad, or your inventory key) and go to the Charms pane: Melee's select opens over it. Stick or D-pad
+      moves, A plays a character, X / Y turn the color, B (or the inventory key) closes it and the inventory with it.
+      Under the characters is the row of charms that are still charms: down from the bottom row reaches it, A equips
+      or unequips (no overcharming), the notches in use show at the right, and the cursor's charm is named. D-pad up
+      at the bench still opens the select. `ModLog.txt`: `character select: open from the charm screen, N charms in
+      the row`, `charm N equipped (...)`. If the select does not open from the charm screen, send the log: the line
+      `charm screen: inventory in ..., current pane ..., UI Charms ...` says what the mod saw.
+    - **Vanilla look:** no color counter or button hints; "color". Sheik has her own tile and portraits, made from her
+      model in each costume at install (`css.bin: 26 tiles, 123 portraits` on install; if Sheik still shows Zelda's
+      portrait, install.sh printed `Sheik not rendered`).
+    - **A moment of invincibility after a hit:** a landed enemy hit gives 1 s (`EnemyHits.InvulnerableFrames`, 60) in
+      which no enemy hits, as the Knight has, so two enemies at once or a bounce back into one don't combo you. Shielded
+      and dodged hits give none.
+    - **Nana** is no longer hit by nothing: only a collider the Knight's own box would take counts (an enemy's wide
+      detection trigger counted as its hit). Each of her hits is logged (`Nana hit by ...`); send those lines if she
+      still flies for no reason. She has the same invincibility after a hit.
+    - **Pogo:** one bounce per swing (Marth's long down-air bounced twice), and the Knight's nail clank plays on the
+      bounce (the spikes' own tink effect).
+    - **Pause menu:** the d-pad reaches Reset character (the menu's own button list now holds it). Reset character
+      fades the scene back in (`Reset character: scene in, fading in`); a black screen here would log `camera fade
+      still in ...` and fade in again.
+    - **Ledge:** holding the stick at full tilt towards an edge teeters once and the teeter's wait plays on (the
+      teeter restarted every frame before: a frozen pose). Easing the stick, then pushing or dashing goes off as before.
+    - **Game & Watch** is black with his light outline (his grey pass was being drawn over his black one). Thin light
+      lines where limbs overlap are Melee's own outline.
+    - **Peach's turnip has its face** (a decal pass: the face texture multiplied over the body). Bob-ombs, Mr. Saturn
+      and the Beam Sword she can pull are not checked: look at them when they come.
+    - **DK:** nothing found offline (he renders right). Press **F9** while he is on screen: the dump in
+      `Mods/FoxMelee/dump/<time>/` now holds `frame.bin`, which renders here exactly as the game drew it; send that folder.
+
 ## What to send back
 
 - `ModLog.txt` (whole file).

@@ -122,10 +122,11 @@ switch-test: core
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_switch.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_switch
 	$(B)/test_switch $(CORE_GEN)/mem1.bin "$(ISO)" 19 6
 .PHONY: switch-test
-# a frame of one character, decoded, for ssbmhk-frame-png: make frame-dump CHAR=12 SCRIPT=b.... OUT=frame.bin
+# a frame of one character, decoded, for ssbmhk-frame-png: make frame-dump CHAR=12 SCRIPT=b.... OUT=frame.bin [COSTUME=1]
+COSTUME ?= 0
 frame-dump: core
 	$(CC) $(GEN_CFLAGS) $(INC) tools/frame_dump.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/frame_dump
-	$(B)/frame_dump $(CORE_GEN)/mem1.bin "$(ISO)" $(CHAR) "$(SCRIPT)" $(OUT)
+	$(B)/frame_dump $(CORE_GEN)/mem1.bin "$(ISO)" $(CHAR) "$(SCRIPT)" $(OUT) $(COSTUME)
 .PHONY: frame-dump
 
 # ---- rooms (plan 2) ----

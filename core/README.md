@@ -81,8 +81,9 @@ make -C core replay-check-tool && (cd tools && .venv/bin/ssbmhk-replay-check)   
 make -C core room-test     # validation and the outline builder (no game needed)
 make -C core rooms-test    # reload, bounds, placement and a built room in the real game
 make -C core switch-test   # the mod's character change: Sheik then Link, a KO and a respawn between
-make -C core frame-dump CHAR=12 SCRIPT="b........" OUT=/tmp/peach.bin   # one decoded frame; then
+make -C core frame-dump CHAR=12 SCRIPT="b........" OUT=/tmp/peach.bin   # one decoded frame (COSTUME=n for a colour); then
 #   tools/.venv/bin/ssbmhk-frame-png /tmp/peach.bin /tmp/peach.png      # ... a PNG of what the mod would draw
+#   (--alpha for a transparent background: Sheik's select art is made this way at install)
 (cd tools && .venv/bin/ssbmhk-replay-check --reload-collision)   # stages' own collision through the room API
 ```
 

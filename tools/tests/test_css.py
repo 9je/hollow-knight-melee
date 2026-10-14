@@ -57,3 +57,40 @@ def test_extract_from_iso(iso, tmp_path):
     keys = [(b[stocks_at + i * (4 + 24 * 24 * 4)], b[stocks_at + 1 + i * (4 + 24 * 24 * 4)]) for i in range(sizes["stocks"][2])]
     assert len(set(keys)) == len(keys) and keys[:26] == [(c, 0) for c in range(26)]
     assert sorted(k for c, k in keys if c == 2) == [0, 1, 2, 3]
+
+
+def _figure(path, color, w=300, h=400):
+    """A rendered frame stand-in: a transparent PNG with a coloured figure (a head over a body) in the middle."""
+    from PIL import Image, ImageDraw
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((120, 60, 180, 120), fill=color)          # the head
+    d.rectangle((130, 120, 170, 330), fill=color)       # the body
+    img.save(path)
+    return path
+
+
+def test_sheik_art_makes_a_tile_and_a_portrait_per_costume(tmp_path):
+    frames = [_figure(tmp_path / f"s{k}.png", (40 + 40 * k, 60, 200, 255)) for k in range(3)]
+    base = bytes([30, 30, 60, 255]) * (64 * 56)   # a plain tile to borrow the border and plate from
+    tile, portraits = css.sheik_art(frames, base)
+    assert len(tile) == 64 * 56 * 4
+    assert len(portraits) == 3 and all(len(p) == 136 * 188 * 4 for p in portraits)
+    # the portrait: the figure, scaled, over nothing; its colour is the costume's
+    px = portraits[2]
+    opaque = [i for i in range(0, len(px), 4) if px[i + 3] > 200]
+    assert 2000 < len(opaque) < 136 * 188
+    assert all(abs(px[i] - 120) < 20 for i in opaque[:50])
+    # the tile: the head's colour in its face, and a name plate with light (text) pixels at the bottom
+    face = [tile[i:i + 4] for i in range(4 * (64 * 20 + 20), 4 * (64 * 20 + 44), 4)]
+    assert any(abs(p[2] - 200) < 20 and p[3] == 255 for p in face)
+    plate = [tile[i:i + 4] for i in range(4 * (64 * 46), 4 * (64 * 52), 4)]
+    assert any(p[0] > 200 and p[1] > 200 and p[2] > 200 for p in plate)
+
+
+def test_extract_takes_sheik_frames(tmp_path, monkeypatch):
+    sections = {"tiles": ((64, 56), [(18, 0, bytes([1, 2, 3, 255]) * (64 * 56))]), "portraits": ((136, 188), []), "stocks": ((24, 24), [])}
+    frames = [_figure(tmp_path / f"s{k}.png", (10, 20, 200, 255)) for k in range(2)]
+    css.add_sheik(sections, frames)
+    assert [c for c, _, _ in sections["tiles"][1]] == [18, 19]
+    assert [(c, k) for c, k, _ in sections["portraits"][1]] == [(19, 0), (19, 1)]

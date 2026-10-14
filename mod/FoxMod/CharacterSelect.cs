@@ -46,7 +46,8 @@ namespace FoxMelee {
         }
         Texture2D Portrait(Character c, int costume) {
             if (css == null) return null;
-            int id = c.Name == "Sheik" ? 18 : c.MeleeId;   // Melee's select shows Zelda's portrait for Sheik
+            int id = c.MeleeId;
+            if (c.Name == "Sheik" && !css.Portraits.ContainsKey((19, 0))) id = 18;   // without her own (css.bin made with no renders of her): Zelda's, as Melee's select
             if (!css.Portraits.TryGetValue((id, costume), out var img) && !css.Portraits.TryGetValue((id, 0), out img)) return null;
             if (!portraits.TryGetValue((id, costume), out var t)) portraits[(id, costume)] = t = Texture(img.Rgba, img.Width, img.Height, true);
             return t;

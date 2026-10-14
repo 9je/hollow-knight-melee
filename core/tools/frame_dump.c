@@ -4,14 +4,16 @@
 #include "melee_core.h"
 #include "standin.h"
 /* frame_dump: one character, a few frames in, Melee's drawing captured and decoded, dumped for ssbmhk-frame-png (tools/src/ssbmhk_tools/framepng.py): the frame's
- * triangles, their vertex colours and the textures they sample. usage: frame_dump <mem1> <iso> <id> <script> <out.bin>
- * script: a string of per-frame letters, '.' idle, 'b' down-B, 'B' neutral B, 'a' A, 'd' down tilt (stick down); 60 idle frames first */
+ * triangles, their vertex colours and the textures they sample. usage: frame_dump <mem1> <iso> <id> <script> <out.bin> [costume]
+ * script: a string of per-frame letters, '.' idle, 'b' down-B, 'B' neutral B, 'a' A, 'd' down tilt (stick down), 'r' right,
+ * 'l' left, 't' taunt (D-pad up), 'j' jump; 180 idle frames first. costume: the character's costume number (0: its first) */
 static void die(const char *w) { printf("FAIL %s: %s\n", w, mc_error()); exit(1); }
 int main(int argc, char **v) {
   int id = atoi(v[3]);
   uint8_t s[MC_START_SIZE];
   if (mc_init(v[1], v[2])) die("init");
   mc_solo_start(s, id);
+  if (argc > 6) s[0x60 + 3] = (uint8_t)atoi(v[6]);   /* the player block's costume byte */
   if (mc_start_match(s, 1, 0)) die("start");
   McInput z = {0};
   mc_set_input(1, NULL); mc_set_input(2, NULL); mc_set_input(3, NULL);
@@ -25,6 +27,9 @@ int main(int argc, char **v) {
       case 'a': in.buttons = 0x0100; break;
       case 'd': in.stick_y = -127; break;
       case 'r': in.stick_x = 127; break;
+      case 'l': in.stick_x = -127; break;
+      case 't': in.buttons = 0x0008; break;
+      case 'j': in.buttons = 0x0800; break;
       default: break;
     }
     mc_set_input(0, &in);

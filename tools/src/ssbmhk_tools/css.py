@@ -4,6 +4,10 @@ the 25 select tiles (64x56, the faces with their name plates, in the select's or
 (one texture each); its texture animations hold the portraits and stock icons, costume-major: every character's first
 costume, then every character's second, and so on (the portraits skip Sheik, as Melee's select does).
 
+Sheik has no tile or portrait in Melee's select (she is Zelda's transformation); given frames of her rendered by the
+core (frame_dump + ssbmhk-frame-png --alpha, one per costume), she gets a portrait made of each and a tile made of her
+head on another tile's border and plate, with her name (--sheik-frames), so she stands in the select like the rest.
+
 css.bin: "CSS1"; then three sections, each u32 width, height, count followed by count entries of u8 character (Melee's
 external id), u8 costume, u16 0, and the RGBA image (top row first): tiles, portraits, stock icons."""
 import argparse
@@ -128,6 +132,70 @@ def stock_entries(images: list[bytes]) -> list[tuple[int, int, bytes]]:
     return out
 
 
+SHEIK = 19
+FONTS = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "C:/Windows/Fonts/arialbd.ttf", "/Library/Fonts/Arial Bold.ttf"]
+
+
+def sheik_art(frames: list, base_tile: bytes) -> tuple[bytes, list[bytes]]:
+    """Sheik's tile (64x56) and portraits (136x188, one per frame) from transparent renders of her, one per costume: each
+    portrait is the figure fitted into the portrait, the tile is her head (from the first frame) inside `base_tile`'s
+    border, over a dark blue, with her name on its plate."""
+    from PIL import Image, ImageDraw, ImageFont
+    portraits, head = [], None
+    pw, ph = PORTRAIT[:2]
+    for i, f in enumerate(frames):
+        img = Image.open(f).convert("RGBA")
+        box = img.getbbox() or (0, 0, img.width, img.height)
+        fig = img.crop(box)
+        scale = min((pw - 12) / fig.width, (ph - 8) / fig.height)
+        fw, fh = max(1, round(fig.width * scale)), max(1, round(fig.height * scale))
+        small = fig.resize((fw, fh), Image.LANCZOS)
+        out = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+        out.paste(small, ((pw - fw) // 2, ph - 4 - fh), small)
+        portraits.append(out.tobytes())
+        if i == 0:
+            head = fig
+    tw, th = TILE[:2]
+    tile = Image.frombytes("RGBA", (tw, th), bytes(base_tile))
+    fx0, fy0, fx1, fy1 = 2, 2, tw - 2, 41          # the face, inside the border and above the plate
+    face = Image.new("RGBA", (fx1 - fx0, fy1 - fy0), (28, 36, 84, 255))
+    hh = max(2, int(head.height * 0.24))           # the head: about the top quarter of the figure
+    top = head.crop((0, 0, head.width, hh)).getbbox()
+    cx = (top[0] + top[2]) // 2 if top else head.width // 2
+    rh = hh * 1.1                                   # the face fills the tile, as the others' do
+    rw = rh * face.width / face.height
+    crop = head.crop((int(cx - rw / 2), int(-hh * 0.12), int(cx + rw / 2), int(-hh * 0.12 + rh))).resize(face.size, Image.LANCZOS)
+    face.paste(crop, (0, 0), crop)
+    tile.paste(face, (fx0, fy0))
+    plate = tile.getpixel((4, 48))
+    ImageDraw.Draw(tile).rectangle((fx0, fy1, fx1 - 1, th - 3), fill=plate)
+    font = None
+    for path in FONTS:
+        try:
+            font = ImageFont.truetype(path, 12)
+            break
+        except OSError:
+            continue
+    font = font or ImageFont.load_default()
+    d = ImageDraw.Draw(tile)
+    name, spacing = "SHEIK", 2
+    widths = [d.textlength(ch, font=font) for ch in name]
+    x = (tw - (sum(widths) + spacing * (len(name) - 1))) / 2
+    for ch, w in zip(name, widths):
+        d.text((x, fy1 + 1), ch, font=font, fill=(255, 255, 255, 255))
+        x += w + spacing
+    return tile.tobytes(), portraits
+
+
+def add_sheik(sections: dict, frames: list) -> None:
+    """Sheik's tile and portraits (sheik_art) into the sections, on Zelda's tile's border and plate (any tile's if hers is missing)."""
+    tiles = sections["tiles"][1]
+    base = next((img for c, _, img in tiles if c == 18), tiles[0][2] if tiles else bytes([0, 0, 0, 255]) * (TILE[0] * TILE[1]))
+    tile, portraits = sheik_art(frames, base)
+    tiles.append((SHEIK, 0, tile))
+    sections["portraits"][1].extend((SHEIK, k, p) for k, p in enumerate(portraits))
+
+
 def pack(sections: dict) -> bytes:
     out = [b"CSS1"]
     for key in ("tiles", "portraits", "stocks"):
@@ -142,8 +210,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Extract Melee's character select (tiles, portraits, stock icons) from your ISO into css.bin (not for distribution).")
     ap.add_argument("iso", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--sheik-frames", type=Path, nargs="*", default=[], help="transparent renders of Sheik, one per costume (frame_dump + ssbmhk-frame-png --alpha): her tile and portraits")
     a = ap.parse_args(argv)
     sections = extract(a.iso)
+    if a.sheik_frames:
+        add_sheik(sections, a.sheik_frames)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "css.bin").write_bytes(pack(sections))
     print("css.bin: " + ", ".join(f"{len(e)} {k}" for k, ((w, h), e) in sections.items()))
