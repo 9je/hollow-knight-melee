@@ -45,6 +45,7 @@ static Tex *texs; static int ntex, captex;
 static int depth_dl;
 static uint32_t state_epoch = 1;   /* bumped by every state load: cached vertices are only valid within one epoch */
 #define PLAY_DEPTH 500.0f
+#define DECAL_BIAS 0.001f     /* view units: a decal pass's triangle sorts just after its own (emit_tri) */
 #define NO_WRITE_BIAS 0.05f   /* view units: an unwritten pass's triangle sorts just before or after its writing twin (their depths differ by float noise): order_keys */
 static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_size_mismatches) */
 static uint32_t decode_errors;
@@ -118,13 +119,17 @@ typedef struct { float r, g, b, a; } C4;
 
 #define STAGES 8
 /* what a TEV stage's texture input is: TEX_NONE (the stage has no texture: the hardware gives 0), TEX_PRIMARY (the
- * draw's texture, left to the host: evaluated as white), TEX_SAMPLED (another texture, sampled per vertex) */
-enum { TEX_NONE, TEX_PRIMARY, TEX_SAMPLED };
+ * draw's texture, left to the host: evaluated as white), TEX_SAMPLED (another texture, sampled per vertex), TEX_DECAL
+ * (another texture subtracted from or multiplied into the colour so far: a decal with its own texture coordinates, like
+ * the turnip's face, which per-vertex sampling loses; the stage reads as nothing here and the draw gets a second pass
+ * that multiplies the decal in, MC_GX_MULTIPLY) */
+enum { TEX_NONE, TEX_PRIMARY, TEX_SAMPLED, TEX_DECAL };
 typedef struct {
   int ntev, texmap, texcoord, cull;
   int32_t tex;
   uint8_t blend, zmode;   /* zmode: BP 0x40 (bit 0 compare, bits 1-3 function, bit 4 update) */
   int stage_kind[STAGES]; int32_t stage_tex[STAGES]; int stage_coord[STAGES];
+  int decal_stage, decal_sub; int32_t decal_tex;   /* the decal pass: its stage, subtracted (1) or multiplied (0), the texture it draws with (-1: none) */
 } DrawSetup;
 
 #define tev_raw S.tev_raw
@@ -214,7 +219,8 @@ static C4 tev(const DrawSetup *d, const C4 *chan, const C4 *texc, const C4 *stex
     int chsel = (int)((tref >> 7) & 7);
     C4 ras = chsel == 0 ? chan[0] : chsel == 1 ? chan[1] : (C4){0, 0, 0, 0};
     int kind = s < STAGES ? d->stage_kind[s] : TEX_PRIMARY;
-    C4 tex = kind == TEX_NONE ? (C4){0, 0, 0, 0} : kind == TEX_SAMPLED && stex ? stex[s] : texc ? *texc : (C4){1, 1, 1, 1};
+    C4 tex = kind == TEX_NONE ? (C4){0, 0, 0, 0} : kind == TEX_DECAL ? (d->decal_sub ? (C4){0, 0, 0, 1} : (C4){1, 1, 1, 1})
+           : kind == TEX_SAMPLED && stex ? stex[s] : texc ? *texc : (C4){1, 1, 1, 1};
     uint32_t ksel = S.bp[0xF6 + s / 2];
     int kc = (int)((ksel >> ((s & 1) ? 14 : 4)) & 0x1F), ka = (int)((ksel >> ((s & 1) ? 19 : 9)) & 0x1F);
     uint32_t ce = S.bp[0xC0 + 2 * s], ae = S.bp[0xC1 + 2 * s];
@@ -283,12 +289,35 @@ static C4 tev(const DrawSetup *d, const C4 *chan, const C4 *texc, const C4 *stex
   return (C4){clampf(last.r, 0, 1), clampf(last.g, 0, 1), clampf(last.b, 0, 1), clampf(last.a, 0, 1)};
 }
 
+/* a sampled stage that is a decal: colour = CPREV - TEXC (a, b, c, d = TEXC, ZERO, ZERO, CPREV, subtracting: the
+ * turnip's face) or CPREV x TEXC (lerp(ZERO, TEXC, CPREV) or lerp(ZERO, CPREV, TEXC)), into CPREV, unscaled. The stage
+ * reads as nothing (tev) and the draw gets a multiplying second pass with the decal's texture (inverted when subtracted:
+ * white - face = what remains) and texture coordinates (emit_tri). The first such stage of a draw. */
+static int32_t decal_texture(int32_t src, int invert);
+static void find_decal(DrawSetup *d) {
+  for (int s = 0; s < d->ntev && s < STAGES; s++) {
+    if (d->stage_kind[s] != TEX_SAMPLED) continue;
+    uint32_t ce = S.bp[0xC0 + 2 * s];
+    int a = (int)((ce >> 12) & 0xF), b = (int)((ce >> 8) & 0xF), c = (int)((ce >> 4) & 0xF), dd = (int)(ce & 0xF);
+    int bias = (int)((ce >> 16) & 3), sub = (int)((ce >> 18) & 1), scale = (int)((ce >> 20) & 3), dest = (int)((ce >> 22) & 3);
+    if (bias || scale || dest) continue;
+    int subtract = sub && a == 8 && b == 15 && c == 15 && dd == 0;
+    int multiply = !sub && dd == 15 && a == 15 && ((b == 8 && c == 0) || (b == 0 && c == 8));
+    if (!subtract && !multiply) continue;
+    int32_t t = decal_texture(d->stage_tex[s], subtract);
+    if (t < 0) continue;
+    d->stage_kind[s] = TEX_DECAL; d->decal_stage = s; d->decal_sub = subtract; d->decal_tex = t;
+    return;
+  }
+}
+
 static void setup_draw(DrawSetup *d) {
   uint32_t gen = S.bp[0x00];
   d->ntev = (int)((gen >> 10) & 0xF) + 1;
   d->cull = (int)((gen >> 14) & 3);
   d->texmap = d->texcoord = -1;
   d->tex = -1;
+  d->decal_stage = -1; d->decal_sub = 0; d->decal_tex = -1;
   for (int s = 0; s < d->ntev && d->texmap < 0; s++) {
     uint32_t tref = S.bp[0x28 + s / 2] >> ((s & 1) ? 12 : 0);
     if (!((tref >> 6) & 1)) continue;   /* texture disabled for this stage */
@@ -311,6 +340,7 @@ static void setup_draw(DrawSetup *d) {
     if (t < 0) { d->stage_kind[s] = TEX_PRIMARY; continue; }   /* unreadable: as white, the old way */
     d->stage_kind[s] = TEX_SAMPLED; d->stage_tex[s] = t; d->stage_coord[s] = (int)((tref >> 3) & 7);
   }
+  find_decal(d);
   uint32_t cm = S.bp[0x41];
   int blend = (int)(cm & 1), src = (int)((cm >> 8) & 7), dst = (int)((cm >> 5) & 7);
   d->blend = !blend ? MC_GX_OPAQUE : dst == 1 ? MC_GX_ADD : MC_GX_ALPHA;
@@ -356,7 +386,7 @@ static C4 color_read(const uint8_t *p, int fmt) {
   }
 }
 
-typedef struct { float wx, wy, wz, vz, sx, sy; C4 col; float u, v; C4 chan[2]; C4 stex[STAGES]; } Vtx;
+typedef struct { float wx, wy, wz, vz, sx, sy; C4 col; float u, v; C4 chan[2]; C4 stex[STAGES]; float du, dv; } Vtx;   /* du, dv: the decal pass's texture coordinates */
 
 static int wrap_i(int i, int n, int mode);
 /* a texture's texel nearest (u, v), by its wrap modes */
@@ -519,8 +549,9 @@ static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o) {
   for (int ch = 0; ch < nch && ch < 2; ch++) chan[ch] = light_channel(ch, pv, nv, has_n, vcol);
   o->chan[0] = chan[0]; o->chan[1] = chan[1];
   /* texture coordinate for the draw's texture, and the other stages' textures sampled here */
-  o->u = o->v = 0;
+  o->u = o->v = 0; o->du = o->dv = 0;
   if (d->texcoord >= 0) texgen(d->texcoord, pos, nrm, tc, tmidx, chan, &o->u, &o->v);
+  if (d->decal_stage >= 0 && d->stage_coord[d->decal_stage] >= 0) texgen(d->stage_coord[d->decal_stage], pos, nrm, tc, tmidx, chan, &o->du, &o->dv);
   for (int st = 0; st < STAGES; st++) {
     o->stex[st] = (C4){1, 1, 1, 1};
     if (d->stage_kind[st] != TEX_SAMPLED) continue;
@@ -543,7 +574,7 @@ static void emit_tri(const Vtx *a, const Vtx *b, const Vtx *c, const DrawSetup *
    * clockwise (cross < 0): Melee's camera-facing shield quad must survive back culling */
   if (d->cull == 1 && cross > 0) return;
   if (d->cull == 2 && cross < 0) return;
-  if (ntris == captris) {
+  if (ntris + 2 > captris) {
     int cap = captris ? captris * 2 : 8192;
     Tri *p = realloc(tris, (size_t)cap * sizeof *p);
     if (!p) return;
@@ -558,6 +589,12 @@ static void emit_tri(const Vtx *a, const Vtx *b, const Vtx *c, const DrawSetup *
   }
   t->depth = (a->vz + b->vz + c->vz) / 3;
   t->tex = d->tex; t->blend = d->blend; t->zmode = d->zmode; t->p_link = span_plink; t->gobj = span_gobj;
+  if (d->decal_tex >= 0) {   /* the decal pass: the same triangle, multiplying its decal in, right after (order_keys) */
+    Tri *m = &tris[ntris++];
+    *m = *t;
+    for (int i = 0; i < 3; i++) { m->v[i].r = m->v[i].g = m->v[i].b = m->v[i].a = 255; m->v[i].u = v[i]->du; m->v[i].v = v[i]->dv; }
+    m->tex = d->decal_tex; m->blend = MC_GX_MULTIPLY;
+  }
 }
 
 /* the TEV's per-vertex inputs (the lit channel colours) are the same on every vertex: the draw's look is then a
@@ -606,6 +643,27 @@ static int tev_is_multiply(const DrawSetup *d, const Vtx *vs, const Tex *src) {
   }
   C4 zero = {0, 0, 0, 0}, o = tev(d, vs[0].chan, &zero, vs[0].stex);
   return fabsf(o.r) < 0.008f && fabsf(o.g) < 0.008f && fabsf(o.b) < 0.008f && fabsf(o.a) < 0.008f;
+}
+
+#define DECAL_HASH 0xDECA1000u
+static int32_t decal_texture(int32_t src, int invert) {
+  if (src < 0 || src >= ntex || !texs[src].rgba) return -1;
+  uint32_t h = DECAL_HASH | (uint32_t)invert;
+  for (int i = 0; i < ntex; i++)
+    if (texs[i].baked && texs[i].addr == (uint32_t)src && texs[i].tlut_hash == h && texs[i].rgba) { texs[i].last_used = decode_no; return i; }
+  int32_t id = baked_slot();
+  if (id < 0) return -1;
+  const Tex *s = &texs[src];
+  uint8_t *rgba = malloc((size_t)s->w * s->h * 4);
+  if (!rgba) return -1;
+  for (uint32_t t = 0; t < s->w * s->h; t++) {
+    const uint8_t *p = s->rgba + 4 * t;
+    rgba[4 * t] = invert ? (uint8_t)(255 - p[0]) : p[0]; rgba[4 * t + 1] = invert ? (uint8_t)(255 - p[1]) : p[1]; rgba[4 * t + 2] = invert ? (uint8_t)(255 - p[2]) : p[2];
+    rgba[4 * t + 3] = 255;
+  }
+  uint32_t gen = texs[id].gen;
+  texs[id] = (Tex){(uint32_t)src, FMT_BAKED, s->w, s->h, s->wrap, h, rgba, gen, decode_no, 1, 0, 0, -1};
+  return id;
 }
 
 static void bake(DrawSetup *d, Vtx *vs, int n) {
@@ -954,6 +1012,7 @@ static void order_keys(Key *k) {
     while (end < ntris && tris[end].gobj == t->gobj && tris[end].tex == t->tex && tris[end].blend == t->blend && tris[end].zmode == t->zmode) end++;
     if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
     if (t->blend == MC_GX_OPAQUE && (t->zmode & 0x10)) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
+    if (t->blend == MC_GX_MULTIPLY) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + DECAL_BIAS, j}; continue; }   /* right after the triangle it decorates */
     if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written: see last_writer */
       float bias = last_writer(t->gobj) > end - 1 ? -NO_WRITE_BIAS : NO_WRITE_BIAS;
       for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + bias, j};

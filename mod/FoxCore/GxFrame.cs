@@ -13,7 +13,7 @@ namespace FoxMelee {
     /// to multiply with the texture, texture coordinates (wraps already applied for the atlas).
     public sealed class GxFrame {
         public const int Atlas = 0x40000000;
-        public const byte Opaque = 0, Alpha = 1, Add = 2;
+        public const byte Opaque = 0, Alpha = 1, Add = 2, Multiply = 3;   // Multiply: a decal pass, the frame so far times the texture
         /// GObj p_links: fighters (8), items (9), effects (11, 12).
         public const ulong FoxAndEffects = (1ul << 8) | (1ul << 9) | (1ul << 11) | (1ul << 12);
 

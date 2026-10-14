@@ -19,7 +19,7 @@ namespace FoxMelee {
         Material[] mats = new Material[0];
         readonly Dictionary<(int id, int ws, int wt), (uint gen, Texture2D tex)> textures = new Dictionary<(int, int, int), (uint, Texture2D)>();
         readonly Dictionary<(Texture2D tex, byte blend), Material> materials = new Dictionary<(Texture2D, byte), Material>();
-        readonly Shader sprite, additive;
+        readonly Shader sprite, additive, multiply;
         readonly GameObject root;
         readonly Mesh mesh;
         readonly MeshRenderer renderer;
@@ -34,6 +34,8 @@ namespace FoxMelee {
             sprite = Shader.Find("Sprites/Default") ?? throw new InvalidOperationException("Sprites/Default shader not found");
             additive = Shader.Find("Legacy Shaders/Particles/Additive");
             if (additive == null) FoxMod.Instance.LogWarn("Particles/Additive shader not found: additive effects blend normally");
+            multiply = Shader.Find("Legacy Shaders/Particles/Multiply");
+            if (multiply == null) FoxMod.Instance.LogWarn("Particles/Multiply shader not found: decals (the turnip's face) are not drawn");
             root = new GameObject("FoxMeleeFrame");
             UnityEngine.Object.DontDestroyOnLoad(root);
             mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
@@ -245,9 +247,9 @@ namespace FoxMelee {
 
         Material Material(Texture2D tex, byte blend) {
             if (materials.TryGetValue((tex, blend), out var m)) return m;
-            bool add = blend == GxFrame.Add && additive != null;
-            m = new Material(add ? additive : sprite) { mainTexture = tex != null ? tex : Texture2D.whiteTexture };
-            if (add) m.SetColor("_TintColor", AdditiveTint); else m.color = Color.white;
+            bool add = blend == GxFrame.Add && additive != null, mul = blend == GxFrame.Multiply && multiply != null;
+            m = new Material(mul ? multiply : add ? additive : sprite) { mainTexture = tex != null ? tex : Texture2D.whiteTexture };
+            if (add) m.SetColor("_TintColor", AdditiveTint); else if (!mul) m.color = Color.white;
             materials[(tex, blend)] = m;
             return m;
         }

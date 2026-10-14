@@ -1144,6 +1144,40 @@ static void test_gw_black(void) {
   mc_shutdown();
 }
 
+
+/* Peach's turnip has a face: a texture of its own, with its own texture coordinates, subtracted from the body's colour
+ * in a later TEV stage, which sampling per vertex lost (the body came out blank). The decoded frame carries it as a
+ * second pass over the body's triangles, multiplying the face's texture in (MC_GX_MULTIPLY, the texture inverted: white
+ * where there is no face) right after each body triangle. */
+static void test_turnip_face(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0}, pull = {0};
+  pull.buttons = 0x0200; pull.stick_y = -127;
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 12);                              /* Peach */
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(1, &pull);
+  steps(44, &idle);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(1ull << 9, &v, &nv, &r, &nr) == 0 && nv > 300);
+  int decals = 0, body = 0, dark = 0;
+  for (int i = 0; i < nr; i++) {
+    if (r[i].blend != MC_GX_MULTIPLY) { body += (int)r[i].count; continue; }
+    decals += (int)r[i].count;
+    McGxTexture t;
+    CHECK(r[i].tex >= 0 && r[i].tex != MC_GX_ATLAS && mc_gx_texture(r[i].tex, &t) == 0 && t.w >= 8 && t.h >= 8);
+    if (decals == (int)r[i].count)   /* the face's texture: mostly white, with its dark lines */
+      for (uint32_t k = 0; k < t.w * t.h; k++) dark += t.rgba[4 * k] < 128;
+    for (uint32_t k = r[i].first; k < r[i].first + r[i].count; k++) CHECK(v[k].r == 255 && v[k].a == 255);
+  }
+  CHECK(decals > 60 && decals < body);                   /* the body's front, decorated, in its own runs */
+  CHECK(dark > 0);
+  mc_shutdown();
+}
+
 static void test_attributes(void) {
   float normal = run_distance(1.0f), fast = run_distance(1.1f);
   CHECK(fast > normal * 1.05f);
@@ -1293,6 +1327,7 @@ int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   if (argc > 3 && strcmp(argv[3], "gw") == 0) { test_gw_black(); puts("gw passed"); return 0; }   /* one test, while working on it */
+  if (argc > 3 && strcmp(argv[3], "turnip") == 0) { test_turnip_face(); puts("turnip passed"); return 0; }
   if (argc > 3 && strcmp(argv[3], "teeter") == 0) { test_edge_assist_holds_the_teeter(); puts("teeter passed"); return 0; }
   test_reload_is_invisible();
   test_bounds();
@@ -1332,6 +1367,7 @@ int main(int argc, char **argv) {
   test_bounce();
   test_gates();
   test_gw_black();
+  test_turnip_face();
   puts("rooms tests passed");
   return 0;
 }

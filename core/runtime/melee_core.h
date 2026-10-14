@@ -146,6 +146,7 @@ typedef struct { float x, y, z; uint8_t r, g, b, a; float u, v; } McGxVert;
 #define MC_GX_OPAQUE 0
 #define MC_GX_ALPHA 1
 #define MC_GX_ADD 2
+#define MC_GX_MULTIPLY 3   /* a decal pass: the frame so far times the texture (white where it draws nothing) */
 typedef struct { uint32_t first, count; int32_t tex; uint8_t blend, p_link, wrap_s, wrap_t; uint32_t gobj; } McGxRun;   /* wrap: 0 clamp, 1 repeat, 2 mirror */
 #define MC_GX_ATLAS 0x40000000   /* a run's tex: the shared atlas (4096x4096, wraps already laid out: sample clamped) */
 int mc_gx_decode(uint64_t plink_mask, const McGxVert **verts, int *nverts, const McGxRun **runs, int *nruns);
