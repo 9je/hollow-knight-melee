@@ -117,6 +117,11 @@ characters-test: core
 	$(CC) $(GEN_CFLAGS) $(INC) tests/test_characters.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_characters
 	seq 0 25 | xargs -P $$(nproc) -I{} $(B)/test_characters $(CORE_GEN)/mem1.bin "$(ISO)" {}
 .PHONY: characters-test
+# the mod's character change (the core started again with another character), after a KO and a respawn: Sheik to Link
+switch-test: core
+	$(CC) $(GEN_CFLAGS) $(INC) tests/test_switch.c $(B)/libmelee_core.a -lm -lpthread -o $(B)/test_switch
+	$(B)/test_switch $(CORE_GEN)/mem1.bin "$(ISO)" 19 6
+.PHONY: switch-test
 
 # ---- rooms (plan 2) ----
 room-test: | $(B)

@@ -153,7 +153,11 @@ namespace FoxMelee {
                 if (!session.Interacting) {     // reading a tablet or sitting down: Fox stays drawn where he stood
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
-                } else if (PlayerData.instance.GetBool("atBench")) { if (FinishSwitch(hero)) { BenchMenu(hero); if (state == State.Running) Rest(hero); } }
+                } else if (PlayerData.instance.GetBool("atBench")) {
+                    // Rest steps the core: never while a character change (BenchMenu may have just started one) restarts
+                    // it on its own thread (the two overlapped and the core's worker crashed: Sheik to Link froze the game)
+                    if (FinishSwitch(hero)) { BenchMenu(hero); if (state == State.Running && switching == null) Rest(hero); }
+                }
                 combat?.ReleaseAll(); grab?.Release();
                 return;
             }

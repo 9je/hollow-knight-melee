@@ -337,3 +337,34 @@ namespace FoxMelee.Tests {
         }
     }
 }
+
+namespace FoxMelee.Tests {
+    public class MeleeCoreThreadsTests {
+        // A character change restarts the core on a background thread while the game thread may still be stepping it (the
+        // bench's Rest did, and the worker crashed in coro_resume: Sheik to Link froze Hollow Knight, 2026-10-13). Calls
+        // from two threads must take turns, never overlap.
+        [Fact]
+        public void ARestartOnAnotherThreadWaitsForTheStepInProgress() {
+            if (!DevConfig.Available) return;
+            using var core = MeleeCore.Load(DevConfig.CoreSo);
+            Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+            Assert.True(core.StartMatch(19, true), core.Error);
+            core.SetInput(0, new McInput());
+            for (int p = 1; p < 4; p++) core.SetInput(p, null);
+            for (int i = 0; i < 130; i++) Assert.True(core.Step(), core.Error);
+            var stepping = new System.Threading.Thread(() => { for (int i = 0; i < 400; i++) { core.SetInput(0, new McInput()); core.Step(); } });
+            stepping.Start();
+            for (int n = 0; n < 3; n++) {
+                Assert.True(core.Init(DevConfig.Mem1, DevConfig.Iso), core.Error);
+                Assert.True(core.StartMatch(6, true), core.Error);
+                core.SetInput(0, new McInput());
+                for (int p = 1; p < 4; p++) core.SetInput(p, null);
+                for (int i = 0; i < 20; i++) Assert.True(core.Step(), core.Error);
+            }
+            stepping.Join();
+            Assert.True(core.Step(), core.Error);
+            Assert.True(core.ReadFighter(0, out var f));
+            Assert.True(f.Action < 400);
+        }
+    }
+}

@@ -298,11 +298,15 @@ int mc_read_fighter(int port, int follower, McFighter *out) {
 /* ---- combat (spec §5.1) ---- */
 #define HIT_SENTINEL 0x80002F08u   /* the victim recorded for hits outside Melee: never a GObj, never dereferenced */
 
+/* A port's fighter, or its follower: Nana (internal kind 11) alone. Zelda's and Sheik's dormant half sits in the follower's
+ * slot too, and is nobody's follower: reads say "no fighter", and the port's attributes are never written into it. */
 static uint32_t fighter_at(Cpu *c, int port, int follower) {
   uint32_t gobj = ld32(c, 0x80453080u + 0xE90u * (uint32_t)port + (follower ? 0xB4u : 0xB0u));
   if (!gobj || !in_mem1(gobj, 0x30)) return 0;
   uint32_t fp = ld32(c, gobj + 0x2C);
-  return in_mem1(fp, 0x2000) ? fp : 0;
+  if (!in_mem1(fp, 0x2000)) return 0;
+  if (follower && ld32(c, fp + 4) != 11u) return 0;
+  return fp;
 }
 
 static int victim_recorded(Cpu *c, uint32_t hit) {

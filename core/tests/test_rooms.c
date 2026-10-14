@@ -1008,6 +1008,36 @@ static void test_attributes_follower(void) {
   mc_shutdown();
 }
 
+/* Zelda and Sheik: the dormant half lives in the player block's second slot, where Nana would be. It is not a follower: a
+ * placement or a respawn of the leader (Hollow Knight's death) leaves it where it sleeps, hidden (Sheik respawned at a bench
+ * with Zelda standing behind her, 2026-10-13), and the far-follower rule never fetches it */
+static void test_dormant_twin_stays_put(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 19);                              /* Sheik */
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  enter_room(0, -40, 0);
+  steps(30, &idle);
+  uint32_t zfp = mc_peek32(mc_peek32(0x80453080u + 0xB4u) + 0x2C);
+  CHECK(zfp != 0 && mc_peek32(zfp + 4) == 19);           /* Zelda, asleep */
+  float zx = mc_peekf(zfp + 0xB0), zy = mc_peekf(zfp + 0xB4);
+  uint32_t zflags = mc_peek32(zfp + 0x221C);
+  CHECK(mc_ko(0, 0) == 0);
+  steps(60, &idle);
+  CHECK(mc_respawn_fighter(0, 40, 0) == 0);              /* far enough that a follower would be fetched */
+  steps(60, &idle);
+  CHECK(fabsf(fox().x - 40) < 5);
+  CHECK(mc_peekf(zfp + 0xB0) == zx && mc_peekf(zfp + 0xB4) == zy);
+  CHECK(mc_peek32(zfp + 0x221C) == zflags);
+  CHECK(mc_set_attribute(0, 0x88, 123.0f) == 0);         /* the port's attributes are the leader's and Nana's: not the twin's */
+  uint32_t u = mc_peek32(zfp + 0x110 + 0x88); float w; memcpy(&w, &u, 4);
+  CHECK(w != 123.0f);
+  mc_shutdown();
+}
+
 static void test_attributes(void) {
   float normal = run_distance(1.0f), fast = run_distance(1.1f);
   CHECK(fast > normal * 1.05f);
@@ -1163,6 +1193,7 @@ int main(int argc, char **argv) {
   test_nana_follows();
   test_attributes();
   test_attributes_follower();
+  test_dormant_twin_stays_put();
   test_standin_wake_keeps_percent();
   test_render_pause();
   test_bounce();

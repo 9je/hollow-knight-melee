@@ -296,6 +296,10 @@ static void ko_boundary_jobs(Cpu *c) {
 }
 
 #define FOLLOWER_FAR 200.0f              /* Melee units */
+/* The player block's second fighter is a follower only when it is Nana (internal kind 11): Zelda's and Sheik's dormant half
+ * lives in the same slot, and is left exactly as it sleeps (placing it wakes it: Sheik respawned with Zelda behind her). */
+#define KIND_NANA 11u
+static int is_follower(Cpu *c, uint32_t gobj) { return ld32(c, ld32(c, gobj + 0x2C) + 4) == KIND_NANA; }
 void room_boundary_jobs(Cpu *c) {
   Machine *m = g_m;
   standin_boundary_jobs(c);   /* plan 7: wake or sleep the stand-in before this frame's placements */
@@ -314,7 +318,7 @@ void room_boundary_jobs(Cpu *c) {
   for (int p = 0; p < 4; p++)
     for (int follower = 0; follower < 2; follower++) {
       uint32_t gobj = ld32(c, PLAYER_BLOCK(p) + (follower ? 0xB4u : 0xB0u));
-      if (!gobj) continue;
+      if (!gobj || (follower && !is_follower(c, gobj))) continue;
       uint32_t fp = ld32(c, gobj + 0x2C);
       if (gobj == m->standin_gobj && (ld8(c, fp + 0x221Fu) & 0x10u)) continue;   /* asleep: Fall would wake it */
       if (m->place_pending[p] && !follower && m->ko[p]) {   /* back from mc_ko */
@@ -330,7 +334,7 @@ void room_boundary_jobs(Cpu *c) {
    * falling, as she would after a placement */
   for (int p = 0; p < 4 && m->room_guest; p++) {   /* rooms only: in a Melee stage she is KO'd as Melee does */
     uint32_t lead = ld32(c, PLAYER_BLOCK(p) + 0xB0u), fol = ld32(c, PLAYER_BLOCK(p) + 0xB4u);
-    if (!lead || !fol) continue;
+    if (!lead || !fol || !is_follower(c, fol)) continue;
     uint32_t lp = ld32(c, lead + 0x2C), fp = ld32(c, fol + 0x2C);
     if (ld8(c, fp + 0x221Fu) & 0x10u) continue;   /* asleep */
     float dx = ldf(c, fp + 0xB0) - ldf(c, lp + 0xB0), dy = ldf(c, fp + 0xB4) - ldf(c, lp + 0xB4);

@@ -164,122 +164,124 @@ namespace FoxMelee {
         public string Error => localError ?? Marshal.PtrToStringAnsi(error()) ?? "";
         bool Ok(int rc) { localError = null; return rc == 0; }
 
-        public bool Init(string mem1Path, string isoPath) { Sync(); return Ok(init(mem1Path, isoPath)); }
+        public bool Init(string mem1Path, string isoPath) { lock (gate) { Sync(); return Ok(init(mem1Path, isoPath)); } }
         public bool StartSoloFox() {
-            Sync();
+            lock (gate) { Sync();
             var s = new byte[StartSize];
             solo(s);
             return Ok(start(s, 1, 0));
-        }
+        } }
         /// A match with `character` (Melee's external id) at port 0; with the grab stand-in (always Fox) at port 1.
         public bool StartMatch(int character, bool standIn) {
-            Sync();
+            lock (gate) { Sync();
             var s = new byte[StartSize];
             if (standIn) standinChar(s, character); else soloChar(s, character);
             return Ok(start(s, 1, 0));
-        }
+        } }
         /// Fox at port 0 and the grab/push stand-in's fighter at port 1 (plan 7).
         public bool StartFoxWithStandIn() {
-            Sync();
+            lock (gate) { Sync();
             var s = new byte[StartSize];
             standinStart(s);
             return Ok(start(s, 1, 0));
-        }
+        } }
         /// The stand-in (plan 7): asleep from the next frame; woken at (x, y) facing ±1; held in a grab (1), not (0), none (-1).
-        public bool SetStandIn(int port) { Sync(); return Ok(standinSet(port)); }
-        public bool StandInWake(float x, float y, float facing) { Sync(); return Ok(standinWake(x, y, facing)); }
-        public bool StandInSleep() { Sync(); return Ok(standinSleep()); }
-        public int StandInHeld() { Sync(); return standinHeld(); }
+        public bool SetStandIn(int port) { lock (gate) { Sync(); return Ok(standinSet(port)); } }
+        public bool StandInWake(float x, float y, float facing) { lock (gate) { Sync(); return Ok(standinWake(x, y, facing)); } }
+        public bool StandInSleep() { lock (gate) { Sync(); return Ok(standinSleep()); } }
+        public int StandInHeld() { lock (gate) { Sync(); return standinHeld(); } }
         /// Edge assist (not Melee): port 0's walk teeters at an edge whatever the tilt, as Melee's walk does below 75% tilt.
-        public bool SetEdgeAssist(bool on) { Sync(); return Ok(edgeAssist(on ? 1 : 0)); }
+        public bool SetEdgeAssist(bool on) { lock (gate) { Sync(); return Ok(edgeAssist(on ? 1 : 0)); } }
         public void SetInput(int port, McInput? value) {
-            Sync();
+            lock (gate) { Sync();
             if (value is McInput v) { Marshal.StructureToPtr(v, inputBuf, false); input(port, inputBuf); }
             else input(port, IntPtr.Zero);
-        }
+        } }
         /// Runs one frame (or the rest of one paused at the hit pause). A frame left paused at Melee's drawing
         /// (StepToRender) is finished first, then a whole frame runs.
-        public bool Step() { Sync(); if (finishFrame() != 0) return Ok(-1); return Ok(step()); }
+        public bool Step() { lock (gate) { Sync(); if (finishFrame() != 0) return Ok(-1); return Ok(step()); } }
         /// Hazard pogo (spec §5.4, not Melee): an airborne fighter goes up at vy, fast fall ended, double jump back.
         /// 0 done, 1 not airborne, -1 error.
-        public int Bounce(int port, float hop) { Sync(); localError = null; return bounce(port, hop); }
+        public int Bounce(int port, float hop) { lock (gate) { Sync(); localError = null; return bounce(port, hop); } }
         /// Hollow Knight's death: Melee's KO blast and voice (star: the star KO's scream) where the fighter stands; it stays
         /// hidden until its next placement.
         /// A fighter's attribute (Fighter co_attrs + offset: 0x1C dash_initial_velocity, 0x28 dash_max_velocity, 0x88 weight).
-        public bool GetAttribute(int port, uint offset, out float value) { Sync(); return Ok(getAttr(port, offset, out value)); }
-        public bool SetAttribute(int port, uint offset, float value) { Sync(); return Ok(setAttr(port, offset, value)); }
-        public bool Ko(int port, bool star) { Sync(); return Ok(ko(port, star ? 1 : 0)); }
+        public bool GetAttribute(int port, uint offset, out float value) { lock (gate) { Sync(); return Ok(getAttr(port, offset, out value)); } }
+        public bool SetAttribute(int port, uint offset, float value) { lock (gate) { Sync(); return Ok(setAttr(port, offset, value)); } }
+        public bool Ko(int port, bool star) { lock (gate) { Sync(); return Ok(ko(port, star ? 1 : 0)); } }
         /// Move gating (spec §6): MoveGates bits of the moves that don't start.
-        public bool SetGates(int port, uint locked) { Sync(); return Ok(gates(port, locked)); }
+        public bool SetGates(int port, uint locked) { lock (gate) { Sync(); return Ok(gates(port, locked)); } }
         /// Frame boundaries reached since Init.
-        public ulong Frame { get { Sync(); return frameNo(); } }
+        public ulong Frame { get { lock (gate) { Sync(); return frameNo(); } } }
         /// Runs the next frame up to Melee's hit resolution for port 0, where ReportHit lands in this frame; Step()
         /// finishes the frame. 0 paused there, 1 the frame ended without reaching it, -1 error.
-        public int StepToHits() { Sync(); localError = null; return stepToHits(); }
+        public int StepToHits() { lock (gate) { Sync(); localError = null; return stepToHits(); } }
         /// Runs the frame up to Melee's drawing: its logic is done, and reads report what it ends with. 0 paused there,
         /// 1 the frame ended first, -1 error. FinishFrameAsync (or any step) finishes it.
-        public int StepToRender() { Sync(); localError = null; return stepToRender(); }
+        public int StepToRender() { lock (gate) { Sync(); localError = null; return stepToRender(); } }
         /// Finishes a frame paused by StepToRender (Melee's drawing, about three quarters of a frame's time) on another
         /// thread; nothing if none is paused. Every other call waits for it first; a failure shows in the next call.
         public void FinishFrameAsync() {
-            Sync();
+            lock (gate) { Sync();
             pending = System.Threading.Tasks.Task.Run(() => { finishFrame(); });
-        }
-        public bool ReadFighter(int port, out McFighter f) { Sync(); return Ok(read(port, 0, out f)); }
-        public bool LoadCollision(IntPtr collision) { Sync(); return Ok(load(collision)); }
-        public bool SetBounds(McBox blast, McBox camera) { Sync(); return Ok(bounds(ref blast, ref camera)); }
-        public bool PlaceFighter(int port, float x, float y) { Sync(); return Ok(place(port, x, y)); }
+        } }
+        public bool ReadFighter(int port, out McFighter f) { lock (gate) { Sync(); return Ok(read(port, 0, out f)); } }
+        public bool LoadCollision(IntPtr collision) { lock (gate) { Sync(); return Ok(load(collision)); } }
+        public bool SetBounds(McBox blast, McBox camera) { lock (gate) { Sync(); return Ok(bounds(ref blast, ref camera)); } }
+        public bool PlaceFighter(int port, float x, float y) { lock (gate) { Sync(); return Ok(place(port, x, y)); } }
         /// Places the fighter for a respawn: falling, with no velocity, knockback or hitlag.
-        public bool RespawnFighter(int port, float x, float y) { Sync(); return Ok(respawn(port, x, y)); }
+        public bool RespawnFighter(int port, float x, float y) { lock (gate) { Sync(); return Ok(respawn(port, x, y)); } }
         /// As RespawnFighter, tumbling (DamageFall): a knockdown on landing unless he techs.
-        public bool TumbleFighter(int port, float x, float y) { Sync(); return Ok(tumble(port, x, y)); }
+        public bool TumbleFighter(int port, float x, float y) { lock (gate) { Sync(); return Ok(tumble(port, x, y)); } }
         /// Melee's joint world matrices (12 floats each, 3x4 row-major) for port's fighter; 0 = no fighter.
-        public int ReadBones(int port, float[] out12xN) { Sync(); return bones(port, 0, out12xN, out12xN.Length / 12); }
+        public int ReadBones(int port, float[] out12xN) { lock (gate) { Sync(); return bones(port, 0, out12xN, out12xN.Length / 12); } }
         /// Mesh parts (DObjs) in the bones' order: hidden flag and joint index per part; returns the count.
-        public int ReadDobjs(int port, byte[] hidden, byte[] joint) { Sync(); return dobjs(port, 0, hidden, joint, Math.Min(hidden.Length, joint.Length)); }
+        public int ReadDobjs(int port, byte[] hidden, byte[] joint) { lock (gate) { Sync(); return dobjs(port, 0, hidden, joint, Math.Min(hidden.Length, joint.Length)); } }
         /// Port 0's active hitboxes; returns the count (-1 on error).
-        public int ReadHitboxes(McHitbox[] o) { Sync(); return hitboxes(0, 0, o, o.Length); }
+        public int ReadHitboxes(McHitbox[] o) { lock (gate) { Sync(); return hitboxes(0, 0, o, o.Length); } }
         /// Port 0's leader (follower 0) or its follower (1: Nana)'s active hitboxes and items, from o[at]; the count.
         McHitbox[] hitboxTmp = new McHitbox[0];
         public int ReadHitboxes(McHitbox[] o, int at, int follower) {
-            Sync();
+            lock (gate) { Sync();
             if (hitboxTmp.Length != o.Length - at) hitboxTmp = new McHitbox[o.Length - at];
             int n = hitboxes(0, follower, hitboxTmp, hitboxTmp.Length);
             if (n > 0) Array.Copy(hitboxTmp, 0, o, at, n);
             return n;
-        }
-        public int ReadHurtboxes(McHurtbox[] o) { Sync(); return hurtboxes(0, 0, o, o.Length); }
+        } }
+        public int ReadHurtboxes(McHurtbox[] o) { lock (gate) { Sync(); return hurtboxes(0, 0, o, o.Length); } }
         /// Fox's hit in `group` landed outside Melee: Melee records it and gives Fox its attacker hitlag next frame.
-        public bool ReportHit(uint group, float damage, int follower = 0) { Sync(); return Ok(report(0, follower, group, damage)); }
+        public bool ReportHit(uint group, float damage, int follower = 0) { lock (gate) { Sync(); return Ok(report(0, follower, group, damage)); } }
         /// Melee's ItemKind for Fox's laser.
         public const uint FoxLaser = 54;
-        public bool ReadShield(out McShield s) { Sync(); return Ok(shield(0, 0, out s)); }
+        public bool ReadShield(out McShield s) { lock (gate) { Sync(); return Ok(shield(0, 0, out s)); } }
         /// Melee's items (lasers...); returns the count, -1 on error.
-        public int ReadItems(McItem[] o) { Sync(); return items(o, o.Length); }
+        public int ReadItems(McItem[] o) { lock (gate) { Sync(); return items(o, o.Length); } }
         /// Melee's hitlag frames for a hit of `damage` (its formula and cap); -1 on error.
-        public int HitlagFrames(int damage) { Sync(); return hitlag(damage); }
+        public int HitlagFrames(int damage) { lock (gate) { Sync(); return hitlag(damage); } }
         /// A hit from outside Melee on port 0, at the hit pause (StepToHits): McHit.Landed / Shielded / Intangible, -1 error.
-        public int ApplyHit(McHit hit) { Sync(); localError = null; return applyHit(0, ref hit); }
+        public int ApplyHit(McHit hit) { lock (gate) { Sync(); localError = null; return applyHit(0, ref hit); } }
         /// Port 0's percent (Focus, benches and deaths reset it).
-        public bool SetPercent(float percent) { Sync(); return Ok(setPercent(0, percent)); }
-        public bool SetPercent(int port, float percent) { Sync(); return Ok(setPercent(port, percent)); }
+        public bool SetPercent(float percent) { lock (gate) { Sync(); return Ok(setPercent(0, percent)); } }
+        public bool SetPercent(int port, float percent) { lock (gate) { Sync(); return Ok(setPercent(port, percent)); } }
         /// Capture Melee's graphics each frame (off by default; it changes nothing in the game).
-        public bool GxCapture(bool on) { Sync(); return Ok(gxCapture(on ? 1 : 0)); }
+        public bool GxCapture(bool on) { lock (gate) { Sync(); return Ok(gxCapture(on ? 1 : 0)); } }
         /// Decodes the last frame's drawing by the objects in `plinkMask` (GxFrame.FoxAndEffects) into `frame`.
         public bool GxDecode(ulong plinkMask, GxFrame frame) {
-            Sync();
+            lock (gate) { Sync();
             return Ok(DecodeInto(plinkMask, frame) ? 0 : -1);
-        }
+        } }
 
         /// The same on another thread (it takes milliseconds): every other call waits for it first, so Melee does not
         /// move on while the decode reads its memory, and the frame decoded is the one it started on (after a frame
         /// FinishFrameAsync is still drawing).
         public System.Threading.Tasks.Task<bool> GxDecodeAsync(ulong plinkMask, GxFrame frame) {
+            lock (gate) {
             var before = pending;   // a frame still drawing (FinishFrameAsync): decoded once it is done
             var t = before == null ? System.Threading.Tasks.Task.Run(() => DecodeInto(plinkMask, frame))
                                    : before.ContinueWith(_ => DecodeInto(plinkMask, frame), System.Threading.Tasks.TaskScheduler.Default);
             pending = t;
             return t;
+            }
         }
 
         unsafe bool DecodeInto(ulong plinkMask, GxFrame frame) {
@@ -289,6 +291,10 @@ namespace FoxMelee {
         }
 
         System.Threading.Tasks.Task pending;
+        /// One caller in the core at a time: a character change restarts it on its own thread while the game thread may still
+        /// call it (the two overlapped once and its worker crashed). Every public call takes this; the Tasks that finish a frame or
+        /// decode it run outside it, and Sync waits for them under it.
+        readonly object gate = new object();
         /// Waits for a decode still running on another thread.
         public void Sync() {
             var p = pending;
@@ -297,25 +303,25 @@ namespace FoxMelee {
             try { p.Wait(); } catch (AggregateException) { }
         }
         public bool GxTexture(int id, out GxTexture t) {
-            Sync();
+            lock (gate) { Sync();
             t = default;
             if (gxTexture(id, out var raw) != 0) { localError = "no such texture"; return false; }
             t = new GxTexture { W = (int)raw.W, H = (int)raw.H, Rgba = raw.Rgba, Gen = raw.Gen };
             localError = null;
             return true;
-        }
+        } }
         /// The atlas texels changed since the last call (x, y, w, h); false when none did.
         public bool GxAtlasDirty(out int x, out int y, out int w, out int h) {
-            Sync();
+            lock (gate) { Sync();
             bool any = gxAtlasDirty(out uint ux, out uint uy, out uint uw, out uint uh) == 1;
             x = (int)ux; y = (int)uy; w = (int)uw; h = (int)uh;
             return any;
-        }
+        } }
         /// Melee's sound effect calls since the last read, oldest first (drains them); count, -1 on error.
-        public int ReadSfx(McSfx[] o) { Sync(); return sfx(o, o.Length); }
+        public int ReadSfx(McSfx[] o) { lock (gate) { Sync(); return sfx(o, o.Length); } }
 
         public bool BuildCollision(IReadOnlyList<RoomShape> shapes, out IntPtr collision) {
-            Sync();
+            lock (gate) { Sync();
             var handles = new List<GCHandle>();
             try {
                 var native = new McShape[shapes.Count];
@@ -332,7 +338,7 @@ namespace FoxMelee {
             } finally {
                 foreach (var h in handles) h.Free();
             }
-        }
+        } }
 
         [StructLayout(LayoutKind.Sequential)]
         struct McCollisionNative {
@@ -344,7 +350,7 @@ namespace FoxMelee {
 
         /// A managed copy of a built collision (valid only until the next build: copy at once).
         public MeleeCollision ReadCollision(IntPtr collision) {
-            Sync();
+            lock (gate) { Sync();
             var c = Marshal.PtrToStructure<McCollisionNative>(collision);
             var m = new MeleeCollision { XY = new float[2 * c.NVerts], V0 = new ushort[c.NLines], V1 = new ushort[c.NLines], HiFlags = new ushort[c.NLines], LoFlags = new ushort[c.NLines] };
             Marshal.Copy(c.Verts, m.XY, 0, m.XY.Length);
@@ -355,12 +361,12 @@ namespace FoxMelee {
                 m.HiFlags[i] = (ushort)raw[8 * i + 6]; m.LoFlags[i] = (ushort)raw[8 * i + 7];
             }
             return m;
-        }
+        } }
 
         public void Dispose() {
-            Sync();
+            lock (gate) { Sync();
             shutdown();
             Marshal.FreeHGlobal(inputBuf);
-        }
+        } }
     }
 }
