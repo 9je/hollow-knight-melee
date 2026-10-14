@@ -1131,19 +1131,63 @@ static void test_gw_black(void) {
   const McGxVert *v; int nv; const McGxRun *r; int nr;
   CHECK(mc_gx_decode(1ull << 8, &v, &nv, &r, &nr) == 0 && nv > 3000);
   McFighter f = fox();
-  int greys = 0, blacks = 0, last = -1, covered = 0;
-  for (int i = 0; i + 2 < nv; i += 3) {                  /* the last triangle over his middle is what shows */
-    int black = v[i].r == 0 && v[i].g == 0 && v[i].b == 0;
-    if (!tri_covers(&v[i], f.x, f.y + 7)) continue;
-    covered++;
-    if (black) blacks++; else greys++;
-    last = black;
+  /* over a grid across his body: wherever any black triangle covers a point, the last triangle over it is black (the
+   * grey outline pass shows only outside the silhouette, as on the GameCube, where every black triangle drawn after it
+   * overwrites it); and the grey shows somewhere (the outline) */
+  int both = 0, wrong = 0, grey_shows = 0;
+  for (int gy = 0; gy < 40; gy++) for (int gx = 0; gx < 40; gx++) {
+    float x = f.x - 10 + gx * 0.5f, y = f.y + gy * 0.5f;
+    int any_black = 0, last = -1;
+    for (int i = 0; i + 2 < nv; i += 3) {
+      if (!tri_covers(&v[i], x, y)) continue;
+      int black = v[i].r == 0 && v[i].g == 0 && v[i].b == 0;
+      any_black |= black;
+      last = black;
+    }
+    if (last < 0) continue;
+    if (any_black) { both++; wrong += last != 1; }
+    else grey_shows++;
   }
-  CHECK(covered > 0 && greys > 0 && blacks > 0);         /* both passes cover the point */
-  CHECK(last == 1);                                      /* and the black one ends up on top */
+  CHECK(both > 200 && grey_shows > 10);
+  CHECK(wrong == 0);
   mc_shutdown();
 }
 
+/* A texture's transparent texels keep the colour of the opaque ones beside them (alpha bleed): the game filters textures
+ * bilinearly and would mix the fur's edge with the black the format gives transparent texels, a dark fringe on every
+ * cutout (Donkey Kong's fur, Bowser's spikes). Checked on every texture Donkey Kong's frame uses. */
+static void test_cutout_edges_keep_their_colour(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 1);                               /* Donkey Kong */
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(3, &idle);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(1ull << 8, &v, &nv, &r, &nr) == 0 && nv > 3000);
+  int edges = 0, dark = 0;
+  for (int i = 0; i < nr; i++) {
+    McGxTexture t;
+    if (r[i].tex < 0 || mc_gx_texture(r[i].tex, &t) != 0) continue;
+    for (uint32_t y = 1; y + 1 < t.h; y++) for (uint32_t x = 1; x + 1 < t.w; x++) {
+      const uint8_t *p = t.rgba + 4 * (y * t.w + x);
+      if (p[3] != 0) continue;
+      const uint8_t *n[4] = {p - 4, p + 4, p - 4 * t.w, p + 4 * t.w};
+      int opaque = 0, sum = 0;
+      for (int k = 0; k < 4; k++) if (n[k][3] > 128) { opaque++; sum += n[k][0] + n[k][1] + n[k][2]; }
+      if (!opaque) continue;
+      edges++;
+      /* black beside opaque texels that aren't themselves dark (Donkey Kong's fur is nearly black in places) */
+      if (p[0] + p[1] + p[2] < 30 && sum / opaque > 90 && dark++ == 0) printf("dark edge: run %d tex %d (%ux%u) at %u,%u\n", i, r[i].tex, t.w, t.h, x, y);
+    }
+  }
+  CHECK(edges > 100);                                    /* cutouts exist in his textures */
+  CHECK(dark == 0);                                      /* and none of their edges is black */
+  mc_shutdown();
+}
 
 /* Peach's turnip has a face: a texture of its own, with its own texture coordinates, subtracted from the body's colour
  * in a later TEV stage, which sampling per vertex lost (the body came out blank). The decoded frame carries it as a
@@ -1327,6 +1371,7 @@ int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
   if (argc > 3 && strcmp(argv[3], "gw") == 0) { test_gw_black(); puts("gw passed"); return 0; }   /* one test, while working on it */
+  if (argc > 3 && strcmp(argv[3], "cutout") == 0) { test_cutout_edges_keep_their_colour(); puts("cutout passed"); return 0; }
   if (argc > 3 && strcmp(argv[3], "turnip") == 0) { test_turnip_face(); puts("turnip passed"); return 0; }
   if (argc > 3 && strcmp(argv[3], "teeter") == 0) { test_edge_assist_holds_the_teeter(); puts("teeter passed"); return 0; }
   test_reload_is_invisible();
@@ -1367,6 +1412,7 @@ int main(int argc, char **argv) {
   test_bounce();
   test_gates();
   test_gw_black();
+  test_cutout_edges_keep_their_colour();
   test_turnip_face();
   puts("rooms tests passed");
   return 0;

@@ -919,10 +919,44 @@ static int wrap_i(int i, int n, int mode) {
   return i < 0 ? 0 : i >= n ? n - 1 : i;
 }
 
+/* transparent texels take the colour of the opaque ones beside them (a few texels in): the host filters textures
+ * bilinearly, and a cutout's edge would mix with the black the format gives transparent texels, a dark fringe on every
+ * fur card and spike. The texture itself keeps its texels (decals and bakes read them); the atlas gets the bled copy. */
+static void bleed_alpha(uint8_t *px, int w, int h) {
+  uint8_t *done = calloc((size_t)w * h, 1);
+  if (!done) return;
+  for (int i = 0; i < w * h; i++) done[i] = px[4 * i + 3] != 0;
+  for (int pass = 0; pass < 4; pass++) {
+    int changed = 0;
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+      int i = y * w + x;
+      if (done[i]) continue;
+      int n = 0, r = 0, g = 0, b = 0;
+      const int dx[4] = {-1, 1, 0, 0}, dy[4] = {0, 0, -1, 1};
+      for (int k = 0; k < 4; k++) {
+        int nx = x + dx[k], ny = y + dy[k];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        int j = ny * w + nx;
+        if (done[j] == 1) { n++; r += px[4 * j]; g += px[4 * j + 1]; b += px[4 * j + 2]; }
+      }
+      if (!n) continue;
+      px[4 * i] = (uint8_t)(r / n); px[4 * i + 1] = (uint8_t)(g / n); px[4 * i + 2] = (uint8_t)(b / n);
+      done[i] = 2; changed = 1;   /* filled this pass: a source for the next, not this one */
+    }
+    for (int i = 0; i < w * h; i++) if (done[i] == 2) done[i] = 1;
+    if (!changed) break;
+  }
+  free(done);
+}
+
 static int atlas_place(Tex *t) {
   int cw = 3 * (int)t->w + 2, ch = 3 * (int)t->h + 2;
   if (t->w > 256 || t->h > 256) return -1;
   if (!atlas) { atlas = calloc((size_t)ATLAS * ATLAS, 4); if (!atlas) return -1; }
+  uint8_t *bled = malloc((size_t)t->w * t->h * 4);
+  if (!bled) return -1;
+  memcpy(bled, t->rgba, (size_t)t->w * t->h * 4);
+  bleed_alpha(bled, (int)t->w, (int)t->h);
   if (shelf_x + cw > ATLAS) { shelf_x = 0; shelf_y += shelf_h; shelf_h = 0; }
   if (shelf_y + ch > ATLAS) return -1;
   t->ax = shelf_x; t->ay = shelf_y;
@@ -931,8 +965,22 @@ static int atlas_place(Tex *t) {
   for (int y = 0; y < ch; y++)
     for (int x = 0; x < cw; x++) {
       int sx = wrap_i(x - 1 - w, w, ws), sy = wrap_i(y - 1 - h, h, wt);   /* the middle copy starts at (w+1, h+1) */
-      memcpy(atlas + 4 * ((size_t)(t->ay + y) * ATLAS + (size_t)(t->ax + x)), t->rgba + 4 * ((size_t)sy * (size_t)w + (size_t)sx), 4);
+      memcpy(atlas + 4 * ((size_t)(t->ay + y) * ATLAS + (size_t)(t->ax + x)), bled + 4 * ((size_t)sy * (size_t)w + (size_t)sx), 4);
     }
+  /* and a ring of the cell's edge texels in the empty space around it (never sampled, but it keeps the atlas free of
+   * black beside opaque texels, which is what a filtered cutout edge must never meet) */
+  for (int y = -1; y <= ch; y++)
+    for (int x = -1; x <= cw; x++) {
+      if (x >= 0 && x < cw && y >= 0 && y < ch) continue;
+      int ax = t->ax + x, ay = t->ay + y;
+      if (ax < 0 || ay < 0 || ax >= ATLAS || ay >= ATLAS) continue;
+      uint8_t *p = atlas + 4 * ((size_t)ay * ATLAS + (size_t)ax);
+      if (p[0] | p[1] | p[2] | p[3]) continue;
+      int ex = x < 0 ? 0 : x >= cw ? cw - 1 : x, ey = y < 0 ? 0 : y >= ch ? ch - 1 : y;
+      const uint8_t *e = atlas + 4 * ((size_t)(t->ay + ey) * ATLAS + (size_t)(t->ax + ex));
+      p[0] = e[0]; p[1] = e[1]; p[2] = e[2];
+    }
+  free(bled);
   atlas_gen++;
   dirty_mark(t->ax, t->ay, cw, ch);
   return 1;
@@ -982,14 +1030,15 @@ static int cmp_key(const void *a, const void *b) {
 }
 static int z_always(uint8_t zmode) { return !(zmode & 1) || ((zmode >> 1) & 7) == 7; }
 
-/* the last triangle of `gobj` that writes depth while opaque, or -1: a draw of it that tests depth without writing it
- * sorts a hair farther than its depth while such a writer still follows in Melee's order (the writer covers it at equal
- * depth, as the GameCube's LEQUAL test lets it: Game & Watch's grey pass is drawn before his black one, and he is
- * black), a hair nearer once none does (it lands right after what it covers and still under anything in front) */
+/* the triangles of `gobj` that write depth while opaque (the last one's index, the farthest's depth): a draw of it that
+ * tests depth without writing it, drawn before them in Melee's order, is overwritten by every one of them that covers it
+ * (they write colour whatever the depth it left unwritten), so it sorts under all of them, a hair farther than their
+ * farthest (Game & Watch's grey outline pass under his black body: grey shows only outside the silhouette); one drawn
+ * after them sorts a hair nearer than its own depth (right after what it covers, still under anything in front) */
 #define WRITERS 64
-static uint32_t writer_gobj[WRITERS]; static int writer_last[WRITERS], nwriters;
-static int last_writer(uint32_t gobj) {
-  for (int i = 0; i < nwriters; i++) if (writer_gobj[i] == gobj) return writer_last[i];
+static uint32_t writer_gobj[WRITERS]; static int writer_last[WRITERS], nwriters; static float writer_far[WRITERS];
+static int writer_of(uint32_t gobj) {
+  for (int i = 0; i < nwriters; i++) if (writer_gobj[i] == gobj) return i;
   return -1;
 }
 static void order_keys(Key *k) {
@@ -1001,8 +1050,8 @@ static void order_keys(Key *k) {
       if (tris[i].zmode & 0x10) {
         int w = 0;
         while (w < nwriters && writer_gobj[w] != tris[i].gobj) w++;
-        if (w == nwriters && nwriters < WRITERS) { writer_gobj[nwriters] = tris[i].gobj; writer_last[nwriters] = i; nwriters++; }
-        else if (w < nwriters) writer_last[w] = i;
+        if (w == nwriters && nwriters < WRITERS) { writer_gobj[nwriters] = tris[i].gobj; writer_last[nwriters] = i; writer_far[nwriters] = tris[i].depth; nwriters++; }
+        else if (w < nwriters) { writer_last[w] = i; if (tris[i].depth < writer_far[w]) writer_far[w] = tris[i].depth; }
       }
     }
   float mid = nsolid ? (float)(solid / nsolid) : 0;
@@ -1013,9 +1062,10 @@ static void order_keys(Key *k) {
     if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
     if (t->blend == MC_GX_OPAQUE && (t->zmode & 0x10)) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
     if (t->blend == MC_GX_MULTIPLY) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + DECAL_BIAS, j}; continue; }   /* right after the triangle it decorates */
-    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written: see last_writer */
-      float bias = last_writer(t->gobj) > end - 1 ? -NO_WRITE_BIAS : NO_WRITE_BIAS;
-      for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + bias, j};
+    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written: see writer_of */
+      int w = writer_of(t->gobj);
+      if (w >= 0 && writer_last[w] > end - 1) { for (int j = i; j < end; j++) k[j] = (Key){1, writer_far[w] - NO_WRITE_BIAS, j}; }
+      else for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + NO_WRITE_BIAS, j};
       continue;
     }
     float sum = 0, far = -1e30f;

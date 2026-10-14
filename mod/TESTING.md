@@ -265,12 +265,15 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       still in ...` and fade in again.
     - **Ledge:** holding the stick at full tilt towards an edge teeters once and the teeter's wait plays on (the
       teeter restarted every frame before: a frozen pose). Easing the stick, then pushing or dashing goes off as before.
-    - **Game & Watch** is black with his light outline (his grey pass was being drawn over his black one). Thin light
-      lines where limbs overlap are Melee's own outline.
+    - **Game & Watch** is solid black with only his light outline (his grey outline pass now goes entirely under his
+      black body, as the GameCube ends up drawing it).
     - **Peach's turnip has its face** (a decal pass: the face texture multiplied over the body). Bob-ombs, Mr. Saturn
       and the Beam Sword she can pull are not checked: look at them when they come.
-    - **DK:** nothing found offline (he renders right). Press **F9** while he is on screen: the dump in
-      `Mods/FoxMelee/dump/<time>/` now holds `frame.bin`, which renders here exactly as the game drew it; send that folder.
+    - **DK, Bowser (fur and spikes):** the jagged dark fringe on cutout edges should be gone. The game filters
+      textures, and the transparent texels around every cutout were black, so each edge got a dark half-transparent rim;
+      transparent texels now carry the colour beside them. If anything still looks off, press **F9** while the
+      character is on screen: `Mods/FoxMelee/dump/<time>/` holds `frame.bin`, which renders here exactly as the game drew
+      it; send that folder.
 
 ## What to send back
 

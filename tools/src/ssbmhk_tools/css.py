@@ -181,8 +181,10 @@ def sheik_art(frames: list, base_tile: bytes) -> tuple[bytes, list[bytes]]:
     name, spacing = "SHEIK", 2
     widths = [d.textlength(ch, font=font) for ch in name]
     x = (tw - (sum(widths) + spacing * (len(name) - 1))) / 2
+    bb = d.textbbox((0, 0), name, font=font)              # the letters centred on the plate (rows fy1 .. th-3)
+    y = fy1 + ((th - 3 - fy1) - (bb[3] - bb[1])) / 2 - bb[1]
     for ch, w in zip(name, widths):
-        d.text((x, fy1 + 1), ch, font=font, fill=(255, 255, 255, 255))
+        d.text((x, y), ch, font=font, fill=(255, 255, 255, 255))
         x += w + spacing
     return tile.tobytes(), portraits
 
