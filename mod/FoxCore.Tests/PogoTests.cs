@@ -27,6 +27,16 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void OneSwingBouncesOnce() {   // Marth's long down-air fell back onto the spikes and bounced twice
+            var p = new Pogo(new PogoTuning { GraceFrames = 0 });
+            Assert.True(p.Frame(Dair, -1.5f, true));
+            for (int i = 0; i < 10; i++) p.Frame(Dair, 1f, false);   // up
+            Assert.False(p.Frame(Dair, -1.5f, true));                 // down again, the same swing still playing
+            p.Frame(Nair, -1.5f, false);                              // the swing ended (any other action)
+            Assert.True(p.Frame(Dair, -1.5f, true));                  // a new down-air bounces again
+        }
+
+        [Fact]
         public void OffNeverBounces() => Assert.False(new Pogo(new PogoTuning { Enabled = false }).Frame(Dair, -1f, true));
     }
 }

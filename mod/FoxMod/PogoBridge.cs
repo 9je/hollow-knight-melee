@@ -43,7 +43,26 @@ namespace FoxMelee {
                 }
             }
             if (!pogo.Frame(fox.Action, fox.SelfVelY, touching)) return true;
+            Clank(room, fox);
             return core.Bounce(0, (float)(tuning.BounceHeight * room.Scale)) >= 0;
+        }
+
+        Collider2D spikes;      // the spikes the down-air touched last
+        GameObject lastClank;   // the nail's tink effect (sound and spark) of the last spikes that had one
+
+        /// The Knight's nail clank: the spikes' TinkEffect spawns its block effect (the tink sound and spark) where the
+        /// character's feet are, as the nail bouncing off them does.
+        void Clank(RoomTransform room, McFighter fox) {
+            try {
+                var tink = spikes != null ? (spikes.GetComponent<TinkEffect>() ?? spikes.GetComponentInParent<TinkEffect>()) : null;
+                var fx = tink != null && tink.blockEffect != null ? tink.blockEffect : lastClank;
+                if (fx == null) return;
+                lastClank = fx;
+                var p = room.ToHk(new V2(fox.X, fox.Y));
+                var go = fx.Spawn(new Vector3((float)p.X, (float)p.Y, 0.002f), Quaternion.Euler(0f, 0f, 270f));
+                var audio = go != null ? go.GetComponent<AudioSource>() : null;
+                if (audio != null) audio.pitch = Random.Range(0.85f, 1.15f);
+            } catch (System.Exception e) { FoxMod.Instance.LogWarn("pogo clank: " + e.Message); lastClank = null; }
         }
 
         bool TouchesSpikes(RoomTransform room, float x, float y, float radius) {
@@ -51,7 +70,7 @@ namespace FoxMelee {
             int k = Physics2D.OverlapCircle(new Vector2((float)p.X, (float)p.Y), (float)(radius / room.Scale), filter, found);
             for (int j = 0; j < k; j++) {
                 var d = found[j].GetComponentInParent<DamageHero>();
-                if (d != null && d.hazardType == Spikes) return true;
+                if (d != null && d.hazardType == Spikes) { spikes = found[j]; return true; }
             }
             return false;
         }

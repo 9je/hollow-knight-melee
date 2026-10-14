@@ -67,7 +67,7 @@ namespace FoxMelee {
                 var at = room.ToMelee(new V2(from.x, from.y));
                 int r = core.ApplyHit(EnemyHits.ToMelee(tuning, p.Amount, (float)at.X, (float)at.Y, tuning.UnblockableFromMasks));
                 if (r < 0) { pending.Clear(); return false; }
-                if (r == McHit.Landed) landed.Add(p);
+                if (r == McHit.Landed) { landed.Add(p); hits.Invulnerable(tuning.InvulnerableFrames); }   // the Knight's moment of invincibility
                 else if (r == McHit.Later) later.Add(p);
             }
             pending.Clear();
@@ -77,10 +77,20 @@ namespace FoxMelee {
 
         /// Nana, at the hit pause: Hollow Knight tests its enemies against the Knight's box only, which stands at Popo, so
         /// an enemy's DamageHero collider touching her hurtboxes is her hit, applied to her through Melee. Her own cooldown
-        /// per enemy; the Knight's gate (respawn invulnerability and the rest) holds for her too.
+        /// per enemy and invulnerability; the Knight's gate (respawn invulnerability and the rest) holds for her too.
+        /// Only what the Knight's own HeroBox would take: a collider on a layer that meets his, with the DamageHero on the
+        /// collider's own object (an enemy's wide, invisible detection trigger is a child of the enemy and used to count as
+        /// its hit: Nana was knocked about by nothing).
+        bool nanaFilterSet;
         bool NanaFrame(MeleeCore core, RoomTransform room, HeroController hero) {
             int n = core.ReadHurtboxes(nanaHurt, 1);
             if (n <= 0 || !HollowWouldAccept(hero)) return true;
+            if (!nanaFilterSet) {
+                nanaFilterSet = true;
+                var box = hero.GetComponentInChildren<HeroBox>(true);
+                if (box != null) { filter.SetLayerMask(Physics2D.GetLayerCollisionMask(box.gameObject.layer)); filter.useLayerMask = true; }
+                FoxMod.Instance.Log($"Nana's hits: the Knight's box layer {(box != null ? LayerMask.LayerToName(box.gameObject.layer) : "not found")}");
+            }
             for (int i = 0; i < n; i++) {
                 var b = nanaHurt[i];
                 if (b.State != 0) continue;
@@ -90,12 +100,15 @@ namespace FoxMelee {
                                                  new Vector2(2 * r, Vector2.Distance(new Vector2((float)a.X, (float)a.Y), new Vector2((float)z.X, (float)z.Y)) + 2 * r),
                                                  CapsuleDirection2D.Vertical, Mathf.Atan2((float)(z.X - a.X), (float)(z.Y - a.Y)) * -Mathf.Rad2Deg, filter, found);
                 for (int j = 0; j < k; j++) {
-                    var d = found[j].GetComponentInParent<DamageHero>();
+                    var d = found[j].GetComponent<DamageHero>();   // on the collider's own object, as HeroBox.CheckForDamage reads it
                     if (d == null || d.hazardType != 1 || d.damageDealt <= 0 || !found[j].enabled) continue;
-                    if (!nanaHits.Accept(Enemy(found[j].gameObject, hero))) continue;
+                    var enemy = Enemy(found[j].gameObject, hero);
+                    if (!nanaHits.Accept(enemy)) continue;
                     var from = room.ToMelee(new V2(found[j].transform.position.x, found[j].transform.position.y));
                     int rc = core.ApplyHitToFollower(EnemyHits.ToMelee(tuning, d.damageDealt, (float)from.X, (float)from.Y, tuning.UnblockableFromMasks));
                     if (rc < 0) return false;
+                    if (rc == McHit.Landed) nanaHits.Invulnerable(tuning.InvulnerableFrames);
+                    FoxMod.Instance.Log($"Nana hit by {(enemy as GameObject)?.name ?? "?"} ({found[j].name}, {d.damageDealt}): {(rc == McHit.Landed ? "landed" : rc == McHit.Shielded ? "shielded" : "missed")}");
                 }
             }
             return true;

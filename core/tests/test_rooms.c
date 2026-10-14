@@ -1086,6 +1086,44 @@ static void test_dormant_twin_stays_put(void) {
   mc_shutdown();
 }
 
+
+/* Game & Watch's body is two passes over the same polygons: a grey one that tests depth without writing it, then a
+ * black one that writes it. On the GameCube the black pass, drawn after at equal depth (LEQUAL), is what shows; the
+ * decoded frame, drawn back to front, must end black where both cover (it showed grey: the unwritten pass was sorted
+ * a hair nearer, as if it came after). */
+static int tri_covers(const McGxVert *t, float x, float y) {
+  float d = (t[1].x - t[0].x) * (t[2].y - t[0].y) - (t[2].x - t[0].x) * (t[1].y - t[0].y);
+  if (fabsf(d) < 1e-6f) return 0;
+  float l1 = ((t[1].x - x) * (t[2].y - y) - (t[2].x - x) * (t[1].y - y)) / d;
+  float l2 = ((t[2].x - x) * (t[0].y - y) - (t[0].x - x) * (t[2].y - y)) / d;
+  return l1 >= 0 && l2 >= 0 && 1 - l1 - l2 >= 0;
+}
+static void test_gw_black(void) {
+  uint8_t start[MC_START_SIZE];
+  McInput idle = {0};
+  CHECK(mc_init(g_mem1, g_iso) == 0);
+  mc_solo_start(start, 3);                               /* Game & Watch */
+  CHECK(mc_start_match(start, 1, 0) == 0);
+  for (int p = 1; p < 4; p++) mc_set_input(p, NULL);
+  steps(180, &idle);
+  CHECK(mc_gx_capture(1) == 0);
+  steps(3, &idle);
+  const McGxVert *v; int nv; const McGxRun *r; int nr;
+  CHECK(mc_gx_decode(1ull << 8, &v, &nv, &r, &nr) == 0 && nv > 3000);
+  McFighter f = fox();
+  int greys = 0, blacks = 0, last = -1, covered = 0;
+  for (int i = 0; i + 2 < nv; i += 3) {                  /* the last triangle over his middle is what shows */
+    int black = v[i].r == 0 && v[i].g == 0 && v[i].b == 0;
+    if (!tri_covers(&v[i], f.x, f.y + 7)) continue;
+    covered++;
+    if (black) blacks++; else greys++;
+    last = black;
+  }
+  CHECK(covered > 0 && greys > 0 && blacks > 0);         /* both passes cover the point */
+  CHECK(last == 1);                                      /* and the black one ends up on top */
+  mc_shutdown();
+}
+
 static void test_attributes(void) {
   float normal = run_distance(1.0f), fast = run_distance(1.1f);
   CHECK(fast > normal * 1.05f);
@@ -1234,6 +1272,7 @@ static void test_gates(void) {
 int main(int argc, char **argv) {
   if (argc < 3) { fprintf(stderr, "usage: test_rooms <mem1.bin> <iso>\n"); return 2; }
   g_mem1 = argv[1]; g_iso = argv[2];
+  if (argc > 3 && strcmp(argv[3], "gw") == 0) { test_gw_black(); puts("gw passed"); return 0; }   /* one test, while working on it */
   test_reload_is_invisible();
   test_bounds();
   test_place();
@@ -1270,6 +1309,7 @@ int main(int argc, char **argv) {
   test_render_pause();
   test_bounce();
   test_gates();
+  test_gw_black();
   puts("rooms tests passed");
   return 0;
 }

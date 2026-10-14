@@ -19,27 +19,34 @@ namespace FoxMelee {
         public int KnockbackGrowth = 90;
         public double ShieldDamagePerMask = 8;      // on top of the hit's damage: Hollow Knight hits are heavy on shields
         public int UnblockableFromMasks = 3;        // attacks this big go through the shield
-        public int CooldownFrames = 30;             // per enemy, replacing the Knight's long invulnerability
+        public int CooldownFrames = 30;             // per enemy: it can't hit again for this long
+        public int InvulnerableFrames = 60;         // after a hit lands, no enemy hits for this long (the Knight's moment of invincibility, 1.3 s; 1 s here)
         public int GraceFrames = 20;                // after Fox's attack lands on an enemy, its body can't hurt him (0: off)
         public double PercentAtFullHealth = 10;     // Fox's percent follows his masks: this at full health,
         public double PercentAtLastMask = 100;      // this on his last mask (PercentFor)
     }
 
-    /// Enemies hitting Fox: each enemy (source) can hit again only after its cooldown, so one enemy's hit does not
-    /// make Fox invulnerable to the others (spec §5.2).
+    /// Enemies hitting Fox: each enemy (source) can hit again only after its cooldown (spec §5.2), and after a hit lands
+    /// nothing hits for the invulnerability (Invulnerable), as the Knight has his moment of invincibility, so two enemies
+    /// at once or a bounce back into one don't combo him.
     public sealed class EnemyHits {
         readonly int cooldown;
         readonly Dictionary<object, int> left = new Dictionary<object, int>();
         readonly List<object> done = new List<object>();
+        int invulnerable;
 
         public EnemyHits(int cooldownFrames) { cooldown = cooldownFrames; }
 
         /// True when `source` may hit now (and starts its cooldown).
         public bool Accept(object source) {
-            if (left.ContainsKey(source)) return false;
+            if (invulnerable > 0 || left.ContainsKey(source)) return false;
             left[source] = cooldown;
             return true;
         }
+
+        /// A hit landed: no enemy hits for `frames` (never shortens one running).
+        public void Invulnerable(int frames) { if (frames > invulnerable) invulnerable = frames; }
+        public bool IsInvulnerable => invulnerable > 0;
 
         /// Fox's attack landed on `source`: it can't hit him for `frames` (as the nail's knockback keeps the Knight
         /// clear, so attacking through an enemy is not punished by touching it). Never shortens a running cooldown.
@@ -50,12 +57,13 @@ namespace FoxMelee {
 
         /// After each Melee frame.
         public void Tick() {
+            if (invulnerable > 0) invulnerable--;
             done.Clear();
             foreach (var k in new List<object>(left.Keys)) if (--left[k] <= 0) done.Add(k);
             foreach (var k in done) left.Remove(k);
         }
 
-        public void Clear() => left.Clear();
+        public void Clear() { left.Clear(); invulnerable = 0; }
 
         /// Fox's percent for his health: PercentAtFullHealth with every mask, PercentAtLastMask on the last one, in
         /// steps between. Losing masks raises it, healing lowers it; it is held there between hits.

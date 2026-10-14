@@ -45,7 +45,7 @@ static Tex *texs; static int ntex, captex;
 static int depth_dl;
 static uint32_t state_epoch = 1;   /* bumped by every state load: cached vertices are only valid within one epoch */
 #define PLAY_DEPTH 500.0f
-#define NO_WRITE_BIAS 0.05f   /* view units: a second pass's triangle sorts after its first-pass twin (their depths differ by float noise) */
+#define NO_WRITE_BIAS 0.05f   /* view units: an unwritten pass's triangle sorts just before or after its writing twin (their depths differ by float noise): order_keys */
 static uint32_t size_mismatches;   /* vertex_size disagreeing with a full parse (mc_gx_size_mismatches) */
 static uint32_t decode_errors;
 
@@ -924,10 +924,29 @@ static int cmp_key(const void *a, const void *b) {
 }
 static int z_always(uint8_t zmode) { return !(zmode & 1) || ((zmode >> 1) & 7) == 7; }
 
+/* the last triangle of `gobj` that writes depth while opaque, or -1: a draw of it that tests depth without writing it
+ * sorts a hair farther than its depth while such a writer still follows in Melee's order (the writer covers it at equal
+ * depth, as the GameCube's LEQUAL test lets it: Game & Watch's grey pass is drawn before his black one, and he is
+ * black), a hair nearer once none does (it lands right after what it covers and still under anything in front) */
+#define WRITERS 64
+static uint32_t writer_gobj[WRITERS]; static int writer_last[WRITERS], nwriters;
+static int last_writer(uint32_t gobj) {
+  for (int i = 0; i < nwriters; i++) if (writer_gobj[i] == gobj) return writer_last[i];
+  return -1;
+}
 static void order_keys(Key *k) {
   double solid = 0; int nsolid = 0;
+  nwriters = 0;
   for (int i = 0; i < ntris; i++)
-    if (tris[i].blend == MC_GX_OPAQUE && !z_always(tris[i].zmode)) { solid += tris[i].depth; nsolid++; }
+    if (tris[i].blend == MC_GX_OPAQUE && !z_always(tris[i].zmode)) {
+      solid += tris[i].depth; nsolid++;
+      if (tris[i].zmode & 0x10) {
+        int w = 0;
+        while (w < nwriters && writer_gobj[w] != tris[i].gobj) w++;
+        if (w == nwriters && nwriters < WRITERS) { writer_gobj[nwriters] = tris[i].gobj; writer_last[nwriters] = i; nwriters++; }
+        else if (w < nwriters) writer_last[w] = i;
+      }
+    }
   float mid = nsolid ? (float)(solid / nsolid) : 0;
   for (int i = 0, end; i < ntris; i = end) {
     const Tri *t = &tris[i];
@@ -935,8 +954,9 @@ static void order_keys(Key *k) {
     while (end < ntris && tris[end].gobj == t->gobj && tris[end].tex == t->tex && tris[end].blend == t->blend && tris[end].zmode == t->zmode) end++;
     if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
     if (t->blend == MC_GX_OPAQUE && (t->zmode & 0x10)) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
-    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written (G&W's second pass over his body): each triangle a hair nearer than its depth, so it lands right after the triangle it covers and still under anything in front */
-      for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + NO_WRITE_BIAS, j};
+    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written: see last_writer */
+      float bias = last_writer(t->gobj) > end - 1 ? -NO_WRITE_BIAS : NO_WRITE_BIAS;
+      for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth + bias, j};
       continue;
     }
     float sum = 0, far = -1e30f;

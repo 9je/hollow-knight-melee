@@ -11,6 +11,7 @@ namespace FoxMelee {
         const uint AttackAirLw = 69;
         readonly PogoTuning tuning;
         int grace;
+        bool bounced;   // this down-air bounced already: one bounce per swing, as the Knight's nail (Marth's long one fell back on the spikes)
 
         public Pogo(PogoTuning tuning) { this.tuning = tuning; }
 
@@ -20,8 +21,10 @@ namespace FoxMelee {
         /// Each Melee frame: Fox's action, vertical speed, and whether a down-air hitbox touches spikes. True: bounce now.
         public bool Frame(uint action, float velY, bool touchingSpikes) {
             if (grace > 0) grace--;
-            if (!tuning.Enabled || action != AttackAirLw || !touchingSpikes || velY > 0) return false;
+            if (action != AttackAirLw) bounced = false;
+            if (!tuning.Enabled || action != AttackAirLw || bounced || !touchingSpikes || velY > 0) return false;
             grace = tuning.GraceFrames;
+            bounced = true;
             return true;
         }
     }

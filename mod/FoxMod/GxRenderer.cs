@@ -61,7 +61,9 @@ namespace FoxMelee {
         int emptyFrames;
         const int KeepThroughEmpty = 2;
 
+        MeleeCore lastCore;   // the core the frame came from (Dump's textures)
         public bool Draw(MeleeCore core, RoomTransform room, Renderer like, float z, bool fresh) {
+            lastCore = core;
             if (decoding != null && (decoding.IsCompleted || fresh)) {
                 watch.Restart();
                 bool ok = decoding.Result;   // done, or nearly: Melee's next frame needs it finished anyway
@@ -147,7 +149,37 @@ namespace FoxMelee {
             }
             var path = System.IO.Path.Combine(dir, "frame.txt");
             System.IO.File.WriteAllText(path, sb.ToString());
+            try { DumpFrame(lastCore, System.IO.Path.Combine(dir, "frame.bin")); } catch (Exception e) { sb.AppendLine("frame.bin: " + e.Message); System.IO.File.WriteAllText(path, sb.ToString()); }
             return path;
+        }
+
+        /// The frame as core/tools/frame_dump.c writes one (vertices, runs, the textures used), so what the game showed can
+        /// be rendered offline with ssbmhk-frame-png and compared with the decoder's own picture of the same character.
+        void DumpFrame(MeleeCore core, string path) {
+            using (var w = new System.IO.BinaryWriter(System.IO.File.Create(path))) {
+                int nv = frame.VertexCount, nr = frame.Runs.Count;
+                w.Write(nv); w.Write(nr); w.Write(0f); w.Write(0f);
+                for (int i = 0; i < nv; i++) {
+                    w.Write(frame.Pos[3 * i]); w.Write(frame.Pos[3 * i + 1]); w.Write(frame.Pos[3 * i + 2]);
+                    w.Write(frame.Color[4 * i]); w.Write(frame.Color[4 * i + 1]); w.Write(frame.Color[4 * i + 2]); w.Write(frame.Color[4 * i + 3]);
+                    w.Write(frame.Uv[2 * i]); w.Write(frame.Uv[2 * i + 1]);
+                }
+                var seen = new List<int>();
+                foreach (var r in frame.Runs) {
+                    w.Write((uint)r.First); w.Write((uint)r.Count); w.Write(r.Tex); w.Write(r.Blend); w.Write(r.PLink); w.Write(r.WrapS); w.Write(r.WrapT); w.Write(0u);
+                    if (!seen.Contains(r.Tex)) seen.Add(r.Tex);
+                }
+                w.Write(seen.Count);
+                foreach (var id in seen) {
+                    GxTexture t = default;
+                    bool ok = id >= 0 && core != null && core.GxTexture(id, out t);
+                    w.Write(id); w.Write(ok ? (uint)t.W : 0u); w.Write(ok ? (uint)t.H : 0u);
+                    if (!ok) continue;
+                    var bytes = new byte[t.W * t.H * 4];
+                    System.Runtime.InteropServices.Marshal.Copy(t.Rgba, bytes, 0, bytes.Length);
+                    w.Write(bytes);
+                }
+            }
         }
 
         public void Hide() {

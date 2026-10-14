@@ -46,7 +46,16 @@ namespace FoxMelee {
                 foreach (var t in go.GetComponentsInChildren<Text>(true)) t.text = "Reset character";
                 button = go.GetComponent<PauseMenuButton>();
                 button.pauseButtonType = ResetType;
-                // the controller moves Quit -> Reset character -> (Continue)
+                // the controller moves Quit -> Reset character -> (Continue). The menu's MenuButtonList lays its buttons'
+                // navigation out itself when the screen first shows (Start) and would skip a button it doesn't list, so the
+                // new one is added to its list (the Modding API's AddSelectable) and the layout redone if it already ran.
+                var list = ui.pauseMenuScreen.GetComponent<MenuButtonList>() ?? ui.pauseMenuScreen.GetComponentInChildren<MenuButtonList>(true);
+                if (list != null) {
+                    list.AddSelectable(button);
+                    bool started = false;
+                    try { started = Modding.ReflectionHelper.GetField<MenuButtonList, bool>(list, "started"); } catch (Exception) { }
+                    if (started) list.RecalculateNavigation();
+                }
                 var nq = quit.navigation; nq.mode = Navigation.Mode.Explicit; nq.selectOnDown = button; quit.navigation = nq;
                 var nr = new Navigation { mode = Navigation.Mode.Explicit, selectOnUp = quit, selectOnDown = cont != null ? cont : quit };
                 button.navigation = nr;
@@ -54,14 +63,17 @@ namespace FoxMelee {
                 // the menu's bottom ornament (its fleur) sat where the new button goes: one step down with it
                 var fleur = ui.pauseMenuScreen.bottomFleur != null ? ui.pauseMenuScreen.bottomFleur.GetComponent<RectTransform>() : null;
                 if (fleur != null) fleur.anchoredPosition += rq.anchoredPosition - ro.anchoredPosition;
-                FoxMod.Instance.Log("pause menu: Reset character added" + (fleur == null ? " (no bottom fleur found)" : ""));
+                FoxMod.Instance.Log("pause menu: Reset character added" + (fleur == null ? " (no bottom fleur found)" : "") + (list == null ? " (no button list: navigation set by hand)" : " (in the menu's button list)"));
             } catch (Exception e) {
                 FoxMod.Instance.LogWarn("pause menu: Reset character not added (" + e.Message + ")");
                 if (button != null) { UnityEngine.Object.Destroy(button.gameObject); button = null; }
             }
         }
 
-        // Benchwarp's way: unpause, fade out, then Hollow Knight's own respawn at the bench (GameManager.ReadyForRespawn)
+        // Benchwarp's way: unpause, fade out, then Hollow Knight's own respawn at the bench (GameManager.ReadyForRespawn),
+        // and once the scene is in, fade back in ourselves. The fade-out used here (the level transition's) leaves the
+        // camera's fade state machine waiting for a level load, where the RESPAWN that Hollow Knight's respawn sends to
+        // fade a death back in means nothing to it; the screen stayed black with the game playing under it.
         static IEnumerator Reset() {
             var gm = GameManager.instance;
             var hero = HeroController.instance;
@@ -79,6 +91,18 @@ namespace FoxMelee {
             hero.cState.superDashing = false;
             hero.cState.spellQuake = false;
             gm.ReadyForRespawn(false);
+            yield return null;
+            yield return new WaitWhile(() => gm.IsInSceneTransition);
+            Time.timeScale = 1f;
+            gm.FadeSceneIn();
+            FoxMod.Instance.Log("Reset character: scene in, fading in");
+            // and if the camera is still dark a moment later, once more (the failsafe Hollow Knight's own camera has)
+            yield return new WaitForSecondsRealtime(2f);
+            var fade = GameCameras.instance != null ? GameCameras.instance.cameraFadeFSM : null;
+            if (fade != null && fade.ActiveStateName != "Normal") {
+                FoxMod.Instance.Log($"Reset character: camera fade still in {fade.ActiveStateName}: fading in again");
+                gm.FadeSceneIn();
+            }
         }
     }
 }

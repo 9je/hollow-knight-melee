@@ -32,6 +32,22 @@ namespace FoxMelee.Tests {
         }
 
         [Fact]
+        public void AfterALandedHitNoEnemyHitsForTheInvulnerability() {   // the Knight's moment of invincibility after a hit
+            var e = new EnemyHits(cooldownFrames: 30);
+            object a = new object(), b = new object();
+            Assert.True(e.Accept(a));
+            e.Invulnerable(frames: 45);
+            Assert.False(e.Accept(b));                  // another enemy, right after: no
+            for (int i = 0; i < 44; i++) { e.Tick(); Assert.False(e.Accept(b)); }
+            e.Tick();
+            Assert.True(e.Accept(b));
+            Assert.True(e.Accept(a));                   // a's own cooldown (30) ran out meanwhile
+            e.Invulnerable(frames: 10);
+            e.Invulnerable(frames: 5);                  // never shortened
+            for (int i = 0; i < 9; i++) { e.Tick(); Assert.False(e.Accept(b)); }
+        }
+
+        [Fact]
         public void AHollowKnightHitBecomesAMeleeHitScaledByMasks() {
             var t = new EnemyHitTuning { PercentPerMask = 10, Angle = 361, BaseKnockback = 30, KnockbackGrowth = 90, ShieldDamagePerMask = 8 };
             var h = EnemyHits.ToMelee(t, masks: 2, fromX: -12.5f, fromY: 4);
