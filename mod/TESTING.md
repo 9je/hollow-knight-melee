@@ -220,6 +220,12 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Entering a shop or tablet mid-dash:** the character finishes the move and stands (no frozen mid-dash pose);
       leaving, the Knight comes to where the character stands (`the Knight joins Fox at ...` in the log) instead of the
       character snapping back.
+    - **Peach's turnip** is white with a purple shade, not black (its body subtracts a shadow texture in a second
+      TEV stage; the decoder now samples a draw's other textures per vertex instead of taking them as white). Her
+      down-B pulls one; throw it, look at it on the ground.
+    - **Game & Watch** is drawn in one even shade, no black-and-grey hatching (his body is two passes over the same
+      polygons; the second now lands after the first as on the GameCube). Mewtwo's and Ganondorf's untextured parts,
+      the stock icons and effects should look as before.
     - **Quick map, logged:** while D-pad right is held, `ModLog.txt` logs Hollow Knight's Map Control states (`quick map:
       Button Down Check; button down, CanQuickMap True ...`). If the map doesn't open, send those lines.
     - **Quick map:** hold D-pad right (or Tab): the map opens after a moment and stays while held. It failed before at

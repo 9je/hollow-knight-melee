@@ -115,10 +115,15 @@ static int32_t texture_for(int map) {
 /* ---- per-draw setup ---- */
 typedef struct { float r, g, b, a; } C4;
 
+#define STAGES 8
+/* what a TEV stage's texture input is: TEX_NONE (the stage has no texture: the hardware gives 0), TEX_PRIMARY (the
+ * draw's texture, left to the host: evaluated as white), TEX_SAMPLED (another texture, sampled per vertex) */
+enum { TEX_NONE, TEX_PRIMARY, TEX_SAMPLED };
 typedef struct {
   int ntev, texmap, texcoord, cull;
   int32_t tex;
   uint8_t blend, zmode;   /* zmode: BP 0x40 (bit 0 compare, bits 1-3 function, bit 4 update) */
+  int stage_kind[STAGES]; int32_t stage_tex[STAGES]; int stage_coord[STAGES];
 } DrawSetup;
 
 #define tev_raw S.tev_raw
@@ -197,8 +202,9 @@ static C4 light_channel(int ch, const float *pv, const float *nv, int has_n, con
 
 static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-/* TEV with a white texture (the host multiplies by the texture) */
-static C4 tev(const DrawSetup *d, const C4 *chan, const C4 *texc) {
+/* TEV with the draw's texture white (the host multiplies by it; texc: a texel, for baking); a stage's other texture
+ * (a shadow or specular map) is the colour sampled for this vertex (stex), a stage without one reads 0 */
+static C4 tev(const DrawSetup *d, const C4 *chan, const C4 *texc, const C4 *stex) {
   C4 reg[4];
   memcpy(reg, tev_regs, sizeof reg);
   C4 last = reg[0];
@@ -206,7 +212,8 @@ static C4 tev(const DrawSetup *d, const C4 *chan, const C4 *texc) {
     uint32_t tref = S.bp[0x28 + s / 2] >> ((s & 1) ? 12 : 0);
     int chsel = (int)((tref >> 7) & 7);
     C4 ras = chsel == 0 ? chan[0] : chsel == 1 ? chan[1] : (C4){0, 0, 0, 0};
-    C4 tex = texc ? *texc : (C4){1, 1, 1, 1};
+    int kind = s < STAGES ? d->stage_kind[s] : TEX_PRIMARY;
+    C4 tex = kind == TEX_NONE ? (C4){0, 0, 0, 0} : kind == TEX_SAMPLED && stex ? stex[s] : texc ? *texc : (C4){1, 1, 1, 1};
     uint32_t ksel = S.bp[0xF6 + s / 2];
     int kc = (int)((ksel >> ((s & 1) ? 14 : 4)) & 0x1F), ka = (int)((ksel >> ((s & 1) ? 19 : 9)) & 0x1F);
     uint32_t ce = S.bp[0xC0 + 2 * s], ae = S.bp[0xC1 + 2 * s];
@@ -292,6 +299,17 @@ static void setup_draw(DrawSetup *d) {
     d->texmap = (int)(tref & 7); d->texcoord = (int)((tref >> 3) & 7);
   }
   if (d->texmap >= 0) d->tex = texture_for(d->texmap);
+  for (int s = 0; s < STAGES; s++) {
+    d->stage_kind[s] = TEX_NONE; d->stage_tex[s] = -1; d->stage_coord[s] = -1;
+    if (s >= d->ntev) continue;
+    uint32_t tref = S.bp[0x28 + s / 2] >> ((s & 1) ? 12 : 0);
+    if (!((tref >> 6) & 1)) continue;
+    int map = (int)(tref & 7);
+    if (map == d->texmap) { d->stage_kind[s] = TEX_PRIMARY; continue; }
+    int32_t t = texture_for(map);
+    if (t < 0) { d->stage_kind[s] = TEX_PRIMARY; continue; }   /* unreadable: as white, the old way */
+    d->stage_kind[s] = TEX_SAMPLED; d->stage_tex[s] = t; d->stage_coord[s] = (int)((tref >> 3) & 7);
+  }
   uint32_t cm = S.bp[0x41];
   int blend = (int)(cm & 1), src = (int)((cm >> 8) & 7), dst = (int)((cm >> 5) & 7);
   d->blend = !blend ? MC_GX_OPAQUE : dst == 1 ? MC_GX_ADD : MC_GX_ALPHA;
@@ -337,7 +355,16 @@ static C4 color_read(const uint8_t *p, int fmt) {
   }
 }
 
-typedef struct { float wx, wy, wz, vz, sx, sy; C4 col; float u, v; C4 chan[2]; } Vtx;
+typedef struct { float wx, wy, wz, vz, sx, sy; C4 col; float u, v; C4 chan[2]; C4 stex[STAGES]; } Vtx;
+
+static int wrap_i(int i, int n, int mode);
+/* a texture's texel nearest (u, v), by its wrap modes */
+static C4 sample_tex(const Tex *t, float u, float v) {
+  int w = (int)t->w, h = (int)t->h;
+  int x = wrap_i((int)floorf(u * (float)w), w, (int)(t->wrap & 3)), y = wrap_i((int)floorf(v * (float)h), h, (int)((t->wrap >> 2) & 3));
+  const uint8_t *p = t->rgba + 4 * ((size_t)y * (size_t)w + (size_t)x);
+  return (C4){p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f, p[3] / 255.0f};
+}
 
 /* bytes per vertex in the stream for a vertex format: direct attributes by their format, indexed ones 1 or 2 */
 static uint32_t vertex_size(int vat) {
@@ -371,6 +398,38 @@ static uint32_t vertex_size(int vat) {
     n += (uint32_t)(cnt ? 2 : 1) * (uint32_t)comp_size(type);
   }
   return n;
+}
+
+/* texture coordinate `coord` (XF texgen 0..7) for a vertex: from its position, normal or a texture coordinate attribute,
+ * through the texture matrix (and the post matrix with dual texgen), or a colour channel */
+static void texgen(int coord, const float *pos, const float *nrm, float tc[8][2], const int *tmidx, const C4 *chan, float *ou, float *ov) {
+  uint32_t info = S.xfr[0x40 + coord];
+  int proj = (int)((info >> 1) & 1), form = (int)((info >> 2) & 1), type = (int)((info >> 4) & 7), row = (int)((info >> 7) & 0x1F);
+  float src[4] = {0, 0, 1, 1};
+  if (row == 0) { src[0] = pos[0]; src[1] = pos[1]; src[2] = pos[2]; }
+  else if (row == 1) { src[0] = nrm[0]; src[1] = nrm[1]; src[2] = nrm[2]; }
+  else if (row >= 5 && row <= 12) { src[0] = tc[row - 5][0]; src[1] = tc[row - 5][1]; src[2] = 1; }
+  if (!form) src[2] = 1;
+  if (type == 0) {
+    int ma = tmidx[coord] * 4;
+    float s = xfm(ma) * src[0] + xfm(ma + 1) * src[1] + xfm(ma + 2) * src[2] + xfm(ma + 3) * src[3];
+    float t = xfm(ma + 4) * src[0] + xfm(ma + 5) * src[1] + xfm(ma + 6) * src[2] + xfm(ma + 7) * src[3];
+    float q = proj ? xfm(ma + 8) * src[0] + xfm(ma + 9) * src[1] + xfm(ma + 10) * src[2] + xfm(ma + 11) * src[3] : 1;
+    if (S.xfr[0x12] & 1) {   /* dual texgen: post-transform matrix */
+      uint32_t post = S.xfr[0x50 + coord];
+      int pa2 = 0x500 + (int)(post & 0x3F) * 4;
+      float in3[3] = {s, t, q};
+      if (post & 0x100) { float l = sqrtf(s * s + t * t + q * q); if (l > 0) { in3[0] /= l; in3[1] /= l; in3[2] /= l; } }
+      s = xfm(pa2) * in3[0] + xfm(pa2 + 1) * in3[1] + xfm(pa2 + 2) * in3[2] + xfm(pa2 + 3);
+      t = xfm(pa2 + 4) * in3[0] + xfm(pa2 + 5) * in3[1] + xfm(pa2 + 6) * in3[2] + xfm(pa2 + 7);
+      q = xfm(pa2 + 8) * in3[0] + xfm(pa2 + 9) * in3[1] + xfm(pa2 + 10) * in3[2] + xfm(pa2 + 11);
+      if (!proj) q = 1;
+    }
+    if (q != 0 && q != 1) { s /= q; t /= q; }
+    *ou = s; *ov = t;
+  } else if (type == 2 || type == 3) {   /* colour texgen */
+    *ou = chan[type - 2].r; *ov = chan[type - 2].g;
+  } else { *ou = src[0]; *ov = src[1]; }
 }
 
 static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o) {
@@ -457,39 +516,18 @@ static int read_vertex(Rd *r, int vat, const DrawSetup *d, Vtx *o) {
   int nch = (int)(S.xfr[0x09] & 3);
   C4 chan[2] = {{1, 1, 1, 1}, {1, 1, 1, 1}};
   for (int ch = 0; ch < nch && ch < 2; ch++) chan[ch] = light_channel(ch, pv, nv, has_n, vcol);
-  o->col = tev(d, chan, NULL);
   o->chan[0] = chan[0]; o->chan[1] = chan[1];
-  /* texture coordinate for the draw's texture */
+  /* texture coordinate for the draw's texture, and the other stages' textures sampled here */
   o->u = o->v = 0;
-  if (d->texcoord >= 0) {
-    uint32_t info = S.xfr[0x40 + d->texcoord];
-    int proj = (int)((info >> 1) & 1), form = (int)((info >> 2) & 1), type = (int)((info >> 4) & 7), row = (int)((info >> 7) & 0x1F);
-    float src[4] = {0, 0, 1, 1};
-    if (row == 0) { src[0] = pos[0]; src[1] = pos[1]; src[2] = pos[2]; }
-    else if (row == 1) { src[0] = nrm[0]; src[1] = nrm[1]; src[2] = nrm[2]; }
-    else if (row >= 5 && row <= 12) { src[0] = tc[row - 5][0]; src[1] = tc[row - 5][1]; src[2] = 1; }
-    if (!form) src[2] = 1;
-    if (type == 0) {
-      int ma = tmidx[d->texcoord] * 4;
-      float s = xfm(ma) * src[0] + xfm(ma + 1) * src[1] + xfm(ma + 2) * src[2] + xfm(ma + 3) * src[3];
-      float t = xfm(ma + 4) * src[0] + xfm(ma + 5) * src[1] + xfm(ma + 6) * src[2] + xfm(ma + 7) * src[3];
-      float q = proj ? xfm(ma + 8) * src[0] + xfm(ma + 9) * src[1] + xfm(ma + 10) * src[2] + xfm(ma + 11) * src[3] : 1;
-      if (S.xfr[0x12] & 1) {   /* dual texgen: post-transform matrix */
-        uint32_t post = S.xfr[0x50 + d->texcoord];
-        int pa2 = 0x500 + (int)(post & 0x3F) * 4;
-        float in3[3] = {s, t, q};
-        if (post & 0x100) { float l = sqrtf(s * s + t * t + q * q); if (l > 0) { in3[0] /= l; in3[1] /= l; in3[2] /= l; } }
-        s = xfm(pa2) * in3[0] + xfm(pa2 + 1) * in3[1] + xfm(pa2 + 2) * in3[2] + xfm(pa2 + 3);
-        t = xfm(pa2 + 4) * in3[0] + xfm(pa2 + 5) * in3[1] + xfm(pa2 + 6) * in3[2] + xfm(pa2 + 7);
-        q = xfm(pa2 + 8) * in3[0] + xfm(pa2 + 9) * in3[1] + xfm(pa2 + 10) * in3[2] + xfm(pa2 + 11);
-        if (!proj) q = 1;
-      }
-      if (q != 0 && q != 1) { s /= q; t /= q; }
-      o->u = s; o->v = t;
-    } else if (type == 2 || type == 3) {   /* colour texgen */
-      o->u = chan[type - 2].r; o->v = chan[type - 2].g;
-    } else { o->u = src[0]; o->v = src[1]; }
+  if (d->texcoord >= 0) texgen(d->texcoord, pos, nrm, tc, tmidx, chan, &o->u, &o->v);
+  for (int st = 0; st < STAGES; st++) {
+    o->stex[st] = (C4){1, 1, 1, 1};
+    if (d->stage_kind[st] != TEX_SAMPLED) continue;
+    float u = 0, v = 0;
+    if (d->stage_coord[st] >= 0) texgen(d->stage_coord[st], pos, nrm, tc, tmidx, chan, &u, &v);
+    o->stex[st] = sample_tex(&texs[d->stage_tex[st]], u, v);
   }
+  o->col = tev(d, chan, NULL, o->stex);
   return 1;
 }
 
@@ -523,12 +561,14 @@ static void emit_tri(const Vtx *a, const Vtx *b, const Vtx *c, const DrawSetup *
 
 /* the TEV's per-vertex inputs (the lit channel colours) are the same on every vertex: the draw's look is then a
  * function of the texture alone, and is baked into a texture with the exact TEV, per texel */
-static int uniform_inputs(const Vtx *vs, int n) {
-  for (int i = 1; i < n; i++)
-    for (int ch = 0; ch < 2; ch++) {
-      const C4 *a = &vs[0].chan[ch], *b = &vs[i].chan[ch];
-      if (fabsf(a->r - b->r) > 0.004f || fabsf(a->g - b->g) > 0.004f || fabsf(a->b - b->b) > 0.004f || fabsf(a->a - b->a) > 0.004f) return 0;
-    }
+static int same_c4(const C4 *a, const C4 *b) {
+  return fabsf(a->r - b->r) <= 0.004f && fabsf(a->g - b->g) <= 0.004f && fabsf(a->b - b->b) <= 0.004f && fabsf(a->a - b->a) <= 0.004f;
+}
+static int uniform_inputs(const DrawSetup *d, const Vtx *vs, int n) {
+  for (int i = 1; i < n; i++) {
+    for (int ch = 0; ch < 2; ch++) if (!same_c4(&vs[0].chan[ch], &vs[i].chan[ch])) return 0;
+    for (int st = 0; st < STAGES; st++) if (d->stage_kind[st] == TEX_SAMPLED && !same_c4(&vs[0].stex[st], &vs[i].stex[st])) return 0;
+  }
   return 1;
 }
 
@@ -554,30 +594,30 @@ static int32_t baked_slot(void) {
  * per frame for an animated colour (lasers, glows) */
 static int tev_is_multiply(const DrawSetup *d, const Vtx *vs, const Tex *src) {
   C4 one = {1, 1, 1, 1};
-  C4 w = tev(d, vs[0].chan, &one);
+  C4 w = tev(d, vs[0].chan, &one, vs[0].stex);
   uint32_t nt = src->w * src->h, step = nt / 31 + 1;
   for (uint32_t t = 0; t < nt; t += step) {
     const uint8_t *p = src->rgba + 4 * t;
     C4 tc = {p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f, p[3] / 255.0f};
-    C4 o = tev(d, vs[0].chan, &tc);
+    C4 o = tev(d, vs[0].chan, &tc, vs[0].stex);
     if (fabsf(o.r - tc.r * w.r) > 0.008f || fabsf(o.g - tc.g * w.g) > 0.008f || fabsf(o.b - tc.b * w.b) > 0.008f || fabsf(o.a - tc.a * w.a) > 0.008f)
       return 0;
   }
-  C4 zero = {0, 0, 0, 0}, o = tev(d, vs[0].chan, &zero);
+  C4 zero = {0, 0, 0, 0}, o = tev(d, vs[0].chan, &zero, vs[0].stex);
   return fabsf(o.r) < 0.008f && fabsf(o.g) < 0.008f && fabsf(o.b) < 0.008f && fabsf(o.a) < 0.008f;
 }
 
 static void bake(DrawSetup *d, Vtx *vs, int n) {
   const Tex *src = &texs[d->tex];
   if (tev_is_multiply(d, vs, src)) return;
-  uint32_t cfg[64]; int k = 0;
+  uint32_t cfg[96]; int k = 0;
   cfg[k++] = (uint32_t)d->tex; cfg[k++] = (uint32_t)d->ntev;
   for (int i = 0; i < 4; i++) cfg[k++] = S.bp[0x28 + i];
   for (int i = 0; i < 2 * d->ntev && i < 32; i++) cfg[k++] = S.bp[0xC0 + i];
   for (int i = 0; i < 4; i++) cfg[k++] = S.bp[0xF6 + i];
   for (int i = 0; i < 4; i++) { cfg[k++] = tev_raw[i][0]; cfg[k++] = tev_raw[i][1]; cfg[k++] = konst_raw[i][0]; cfg[k++] = konst_raw[i][1]; }
-  for (int ch = 0; ch < 2; ch++) {
-    const C4 *c = &vs[0].chan[ch];
+  for (int ch = 0; ch < 2 + STAGES; ch++) {
+    const C4 *c = ch < 2 ? &vs[0].chan[ch] : &vs[0].stex[ch - 2];
     cfg[k++] = (uint32_t)(c->r * 255 + 0.5f) << 24 | (uint32_t)(c->g * 255 + 0.5f) << 16 | (uint32_t)(c->b * 255 + 0.5f) << 8 | (uint32_t)(c->a * 255 + 0.5f);
   }
   uint32_t h = fnv((const uint8_t *)cfg, (uint32_t)k * 4);
@@ -593,7 +633,7 @@ static void bake(DrawSetup *d, Vtx *vs, int n) {
     for (uint32_t t = 0; t < src->w * src->h; t++) {
       const uint8_t *p = src->rgba + 4 * t;
       C4 tc = {p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f, p[3] / 255.0f};
-      C4 o = tev(d, vs[0].chan, &tc);
+      C4 o = tev(d, vs[0].chan, &tc, vs[0].stex);
       rgba[4 * t] = (uint8_t)(o.r * 255 + 0.5f); rgba[4 * t + 1] = (uint8_t)(o.g * 255 + 0.5f);
       rgba[4 * t + 2] = (uint8_t)(o.b * 255 + 0.5f); rgba[4 * t + 3] = (uint8_t)(o.a * 255 + 0.5f);
     }
@@ -628,8 +668,9 @@ static void trace_draw(const DrawSetup *d, const Vtx *vs, int n, int prim) {
     printf("  chan%d ctl %06x actl %06x mat %08x amb %08x\n", ch, S.xfr[0x0E + ch], S.xfr[0x10 + ch], S.xfr[0x0C + ch], S.xfr[0x0A + ch]);
   for (int st = 0; st < d->ntev; st++) {
     uint32_t tref = S.bp[0x28 + st / 2] >> ((st & 1) ? 12 : 0), ksel = S.bp[0xF6 + st / 2];
-    printf("  tev%d ce %06x ae %06x tref %03x (map %u coord %u texen %u chsel %u) kc %u ka %u\n", st, S.bp[0xC0 + 2 * st], S.bp[0xC1 + 2 * st], tref & 0xFFF,
-           tref & 7, (tref >> 3) & 7, (tref >> 6) & 1, (tref >> 7) & 7, (ksel >> ((st & 1) ? 14 : 4)) & 0x1F, (ksel >> ((st & 1) ? 19 : 9)) & 0x1F);
+    printf("  tev%d ce %06x ae %06x tref %03x (map %u coord %u texen %u chsel %u) kc %u ka %u kind %d tex %d\n", st, S.bp[0xC0 + 2 * st], S.bp[0xC1 + 2 * st], tref & 0xFFF,
+           tref & 7, (tref >> 3) & 7, (tref >> 6) & 1, (tref >> 7) & 7, (ksel >> ((st & 1) ? 14 : 4)) & 0x1F, (ksel >> ((st & 1) ? 19 : 9)) & 0x1F,
+           st < STAGES ? d->stage_kind[st] : -1, st < STAGES ? d->stage_tex[st] : -1);
   }
   for (int i = 0; i < 4; i++) printf("  reg%d %06x %06x konst%d %06x %06x\n", i, tev_raw[i][0], tev_raw[i][1], i, konst_raw[i][0], konst_raw[i][1]);
   if (d->tex >= 0) {
@@ -644,7 +685,8 @@ static void trace_draw(const DrawSetup *d, const Vtx *vs, int n, int prim) {
   int black = 0, first = -1; float lo = 9, hi = -9;
   for (int i = 0; i < n; i++) {
     float m = (vs[i].col.r + vs[i].col.g + vs[i].col.b) / 3;
-    if (m < lo) lo = m; if (m > hi) hi = m;
+    if (m < lo) lo = m;
+    if (m > hi) hi = m;
     if (m < 0.02f) { black++; if (first < 0) first = i; }
   }
   printf("  cols mean %.2f..%.2f black %d/%d", lo, hi, black, n);
@@ -659,7 +701,7 @@ static void trace_draw(const DrawSetup *d, const Vtx *vs, int n, int prim) {
     printf("  stages v%d:", which ? first : 0);
     for (int st = 0; st < d->ntev; st++) {
       DrawSetup one = *d; one.ntev = st + 1;
-      C4 o = tev(&one, v->chan, NULL);
+      C4 o = tev(&one, v->chan, NULL, v->stex);
       printf(" [%d] %.2f %.2f %.2f %.2f", st, o.r, o.g, o.b, o.a);
     }
     printf("\n");
@@ -700,7 +742,7 @@ static int draw(Rd *r, int op) {
     if ((uint32_t)(r->p - at) != vsz) size_mismatches++;
   }
   trace_draw(&d, vs, n, prim);
-  if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
+  if (span_want && d.tex >= 0 && n > 0 && d.blend != MC_GX_OPAQUE && uniform_inputs(&d, vs, n)) bake(&d, vs, n);   /* effects; opaque bodies are texture x colour */
   switch (prim) {
     case 0x80: for (int i = 0; i + 3 < n; i += 4) { emit_tri(&vs[i], &vs[i + 1], &vs[i + 2], &d); emit_tri(&vs[i], &vs[i + 2], &vs[i + 3], &d); } break;
     case 0x90: for (int i = 0; i + 2 < n; i += 3) emit_tri(&vs[i], &vs[i + 1], &vs[i + 2], &d); break;
@@ -865,7 +907,8 @@ static void to_atlas(Tri *tr) {
 }
 
 /* Draw order without a depth buffer, after Melee's z modes (BP 0x40):
- *  layer 1: solid depth-tested triangles, each by its own depth (Fox's body);
+ *  layer 1: solid depth-tested triangles, each by its own depth (Fox's body); a solid draw that doesn't write depth
+ *    (a second pass over the same body) kept whole at its mean depth, so it lands after the pass it covers;
  *  layer 0 / 2: translucent depth-tested draws (most effects), each kept whole and placed by its mean depth, behind
  *    the solid ones when it lies wholly behind their mean depth, else in front;
  *  layer 3: draws whose depth test always passes (the shield bubble, the shine's outline): over everything, in
@@ -890,7 +933,13 @@ static void order_keys(Key *k) {
     end = i + 1;   /* one draw: the same object, texture, blend and z mode, in a row */
     while (end < ntris && tris[end].gobj == t->gobj && tris[end].tex == t->tex && tris[end].blend == t->blend && tris[end].zmode == t->zmode) end++;
     if (z_always(t->zmode)) { for (int j = i; j < end; j++) k[j] = (Key){3, 0, j}; continue; }
-    if (t->blend == MC_GX_OPAQUE) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
+    if (t->blend == MC_GX_OPAQUE && (t->zmode & 0x10)) { for (int j = i; j < end; j++) k[j] = (Key){1, tris[j].depth, j}; continue; }
+    if (t->blend == MC_GX_OPAQUE) {   /* depth-tested but not written (G&W's second pass over his body): whole, at its mean depth, in Melee's order after what it covers */
+      float sum = 0;
+      for (int j = i; j < end; j++) sum += tris[j].depth;
+      for (int j = i; j < end; j++) k[j] = (Key){1, sum / (float)(end - i), j};
+      continue;
+    }
     float sum = 0, far = -1e30f;
     for (int j = i; j < end; j++) { sum += tris[j].depth; far = fmaxf(far, tris[j].depth); }
     int layer = nsolid && far < mid ? 0 : 2;
