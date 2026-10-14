@@ -220,6 +220,12 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
     - **Entering a shop or tablet mid-dash:** the character finishes the move and stands (no frozen mid-dash pose);
       leaving, the Knight comes to where the character stands (`the Knight joins Fox at ...` in the log) instead of the
       character snapping back.
+    - **The character select looks like Melee's:** sit at a bench, press D-pad up (T). Melee's own tiles (faces and
+      name plates, from your ISO: `css.bin`), its layout, P1's coin on the choice, and below it P1's red panel with the
+      character's portrait. **Colours:** X / Y (keyboard E / Q) turn the costume; the portrait and the stock icons under
+      the name change with it; A plays it (the same character in a new colour restarts the core like a change). The
+      colour is remembered per character (`Costumes` in the settings). No extra downloads: Melee loads its costume
+      files from the ISO. Sheik has Zelda's portrait and no tile, as in Melee.
     - **Peach's turnip** is white with a purple shade, not black (its body subtracts a shadow texture in a second
       TEV stage; the decoder now samples a draw's other textures per vertex instead of taking them as white). Her
       down-B pulls one; throw it, look at it on the ground.

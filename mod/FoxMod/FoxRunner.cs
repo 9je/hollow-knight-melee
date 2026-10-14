@@ -515,7 +515,7 @@ namespace FoxMelee {
             var s = FoxMod.Instance.Settings;
             bool grabs = s.Grabs?.Enabled ?? false;
             if (!core.Init(mem1, s.IsoPath)) return "mc_init: " + core.Error;
-            if (!core.StartMatch(c.MeleeId, grabs)) return "mc_start_match: " + core.Error;
+            if (!core.StartMatch(c.MeleeId, grabs, CostumeOf(c))) return "mc_start_match: " + core.Error;
             core.SetInput(0, new McInput());
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
             for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
@@ -562,7 +562,8 @@ namespace FoxMelee {
         CharacterGrid grid;
         CharacterSelect select;
         System.Collections.Generic.HashSet<Character> ownedNow;
-        bool selUp, selA, selB;
+        bool selUp, selA, selB, selX, selY;
+        readonly System.Collections.Generic.Dictionary<Character, int> costumePick = new System.Collections.Generic.Dictionary<Character, int>();   // the select's costume per character
         int repeatDx, repeatDy; float repeatAt;
 
         void BenchMenu(HeroController hero) {
@@ -572,8 +573,10 @@ namespace FoxMelee {
             bool up = (b & GcButtons.DUp) != 0 || Input.GetKey(KeyCode.T);
             bool a = (b & GcButtons.A) != 0 || Input.GetKey(KeyCode.J) || Input.GetKey(KeyCode.Return);
             bool bk = (b & GcButtons.B) != 0 || Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.Escape);
+            bool nextC = (b & GcButtons.X) != 0 || Input.GetKey(KeyCode.E), prevC = (b & GcButtons.Y) != 0 || Input.GetKey(KeyCode.Q);
             bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
             bool pUp = Pressed(up, ref selUp), pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
+            bool pNext = Pressed(nextC, ref selX), pPrev = Pressed(prevC, ref selY);
             if (grid == null) {
                 if (GcInput.HoldFromHollow && b == 0 && Math.Abs(sx) < 30 && Math.Abs(sy) < 30) GcInput.HoldFromHollow = false;
                 if (!pUp) return;
@@ -581,6 +584,8 @@ namespace FoxMelee {
                 ownedNow = new System.Collections.Generic.HashSet<Character>(Roster.Owned(n => data.GetBool("gotCharm_" + n),
                     FoxMod.Instance.Save.MarthBought, FoxMod.Instance.Settings.UnlockAllCharacters));
                 grid = new CharacterGrid(character);
+                costumePick.Clear();
+                foreach (var ch in Roster.All) costumePick[ch] = CostumeOf(ch);
                 select ??= new CharacterSelect(Log);
                 GcInput.HoldFromHollow = true;
                 repeatDx = repeatDy = 0;
@@ -591,16 +596,21 @@ namespace FoxMelee {
             if (dx != repeatDx || dy != repeatDy) { repeatDx = dx; repeatDy = dy; repeatAt = Time.unscaledTime + 0.35f; grid.Move(dx, dy); }
             else if ((dx != 0 || dy != 0) && Time.unscaledTime >= repeatAt) { repeatAt = Time.unscaledTime + 0.12f; grid.Move(dx, dy); }
             if (pB) { grid = null; return; }
+            if ((pNext || pPrev) && ownedNow.Contains(grid.Current)) {   // Melee's costume: X / Y (keyboard E / Q)
+                var ch = grid.Current;
+                costumePick[ch] = (costumePick[ch] + (pNext ? 1 : ch.Costumes - 1)) % ch.Costumes;
+            }
             if (pA && ownedNow.Contains(grid.Current)) {
                 var pick = grid.Current;
+                int costume = costumePick[pick];
                 grid = null;
-                if (pick != character) SwitchCharacter(hero, pick);
+                if (pick != character || costume != CostumeOf(pick)) SwitchCharacter(hero, pick, costume);
             }
         }
 
         void OnGUI() {
-            if (switching != null && select != null) select.DrawLoading(switchingTo);
-            else if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c));
+            if (switching != null && select != null) select.DrawLoading(switchingTo, CostumeOf(switchingTo));
+            else if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c), c => costumePick[c]);
         }
 
         // A character change restarts the core off Unity's thread (about a second); meanwhile nothing else uses the core and
@@ -610,9 +620,17 @@ namespace FoxMelee {
         float switchStarted;
         const float SwitchTimeout = 20f;   // seconds: a core restart takes about one
 
-        void SwitchCharacter(HeroController hero, Character c) {
+        /// The costume a character plays in (Settings.Costumes), within what it has.
+        static int CostumeOf(Character c) {
+            var all = FoxMod.Instance.Settings.Costumes;
+            return all != null && all.TryGetValue(c.Name, out int k) ? Math.Max(0, Math.Min(c.Costumes - 1, k)) : 0;
+        }
+
+        void SwitchCharacter(HeroController hero, Character c, int costume) {
             if (switching != null) return;
-            Log($"switching to {c.Name}");
+            FoxMod.Instance.Settings.Costumes ??= new System.Collections.Generic.Dictionary<string, int>();
+            FoxMod.Instance.Settings.Costumes[c.Name] = Math.Max(0, Math.Min(c.Costumes - 1, costume));
+            Log($"switching to {c.Name} (costume {CostumeOf(c) + 1})");
             combat?.ReleaseAll(); grab?.Release(); launcher?.StopAll();
             sfx?.Destroy(); sfx = null;
             switchingTo = c;

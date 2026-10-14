@@ -11,6 +11,12 @@ namespace FoxMelee {
         public int Charm;            // the Hollow Knight charm that unlocks it (0: none)
         public bool IselaShop;       // sold in Iselda's map shop (Marth)
         public uint[] NonAttackActions = new uint[0];   // its actions whose hitboxes don't hurt enemies (beyond the pummel)
+        /// Its costumes in the ISO (Pl<Ch><Co>.dat; Game & Watch's colours are code): the costume byte goes 0..Costumes-1.
+        public int Costumes => CostumeCounts.TryGetValue(MeleeId, out int n) ? n : 1;
+        static readonly Dictionary<int, int> CostumeCounts = new Dictionary<int, int> {
+            {0, 6}, {1, 5}, {2, 4}, {3, 4}, {4, 6}, {5, 4}, {6, 5}, {7, 4}, {8, 5}, {9, 5}, {10, 4}, {11, 4}, {12, 5},
+            {13, 4}, {14, 4}, {15, 5}, {16, 5}, {17, 6}, {18, 5}, {19, 5}, {20, 4}, {21, 5}, {22, 5}, {23, 5}, {24, 4}, {25, 5},
+        };
     }
 
     public static class Roster {

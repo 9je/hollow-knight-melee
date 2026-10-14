@@ -23,6 +23,8 @@ ssbmhk-extract-fox = "ssbmhk_tools.foxmodel:main"
 ssbmhk-extract-sfx = "ssbmhk_tools.meleesfx:main"
 ssbmhk-build-core = "ssbmhk_tools.buildcore:main"
 ssbmhk-extract-stocks = "ssbmhk_tools.stocks:main"
+ssbmhk-extract-css = "ssbmhk_tools.css:main"
+ssbmhk-frame-png = "ssbmhk_tools.framepng:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

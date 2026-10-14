@@ -7,7 +7,7 @@ Steps (each skipped when its output is current, keyed by its inputs):
   3. recompile main.dol into C (with the core's HLE, tap and Gecko lists) and mem1.bin;
   4. compile it and the runtime with a C compiler (zig cc for Windows; gcc or zig on Linux) in parallel, and link
      libmelee_core.dll / libmelee_core.so;
-  5. extract fox.model, the sound banks and the stock icons.
+  5. extract fox.model, the sound banks, the stock icons and the character select (css.bin).
 
 Only the standard library is used, so an embeddable Python runs it. usage:
   ssbmhk-build-core <iso> --core <repo core dir> --out <dir> [--cc "zig cc"] [--target windows|linux] [--jobs N]
@@ -176,7 +176,7 @@ def main(argv=None) -> int:
     ap.add_argument("--target", choices=["windows", "linux"], default="windows" if os.name == "nt" else "linux")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     a = ap.parse_args(argv)
-    from . import foxmodel, gciso, hsd, iso as isomod, meleesfx, stocks
+    from . import css, foxmodel, gciso, hsd, iso as isomod, meleesfx, stocks
     _log("checking the ISO...")
     isomod.verify_iso(a.iso)
     core = a.core.resolve()
@@ -193,6 +193,7 @@ def main(argv=None) -> int:
     foxmodel.write_model(foxmodel.build_model(hsd.read_joints(dat, dat.roots["PlyFox5K_Share_joint"])), a.out / "fox.model")
     meleesfx.main([str(a.iso), "--out", str(a.out)])
     stocks.main([str(a.iso), "--out", str(a.out)])
+    css.main([str(a.iso), "--out", str(a.out)])
     _log(f"done: {a.out}")
     return 0
 

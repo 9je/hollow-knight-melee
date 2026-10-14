@@ -175,11 +175,13 @@ namespace FoxMelee {
             solo(s);
             return Ok(start(s, 1, 0));
         } }
-        /// A match with `character` (Melee's external id) at port 0; with the grab stand-in (always Fox) at port 1.
-        public bool StartMatch(int character, bool standIn) {
+        /// A match with `character` (Melee's external id) in `costume` (0: its first) at port 0; with the grab stand-in
+        /// (always Fox) at port 1.
+        public bool StartMatch(int character, bool standIn, int costume = 0) {
             lock (gate) { Sync();
             var s = new byte[StartSize];
             if (standIn) standinChar(s, character); else soloChar(s, character);
+            s[0x60 + 3] = (byte)Math.Max(0, Math.Min(5, costume));   // the player block's costume byte
             return Ok(start(s, 1, 0));
         } }
         /// Fox at port 0 and the grab/push stand-in's fighter at port 1 (plan 7).

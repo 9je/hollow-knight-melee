@@ -33,7 +33,7 @@ if (-not (Test-Path $mod)) { $mod = (Get-ChildItem "$hk\hollow_knight_Data\Manag
 Check (Test-Path "$hk\hollow_knight_Data\Managed.vanilla\Assembly-CSharp.dll") "the game's Managed folder backed up"
 Check (Test-Path "$([Environment]::GetFolderPath('MyDocuments'))\hollow-knight-save-backup\user1.dat") "the saves backed up"
 Check ((Get-Item "$hk\hollow_knight_Data\Managed\Assembly-CSharp.dll").Length -ne (Get-Item "$hk\hollow_knight_Data\Managed.vanilla\Assembly-CSharp.dll").Length) "the Modding API installed"
-foreach ($f in 'libmelee_core.dll', 'mem1.bin', 'stocks.bin', 'fox.model', 'melee.sfx') { Check ($mod -and (Test-Path "$mod\$f")) "mod folder has $f" }
+foreach ($f in 'libmelee_core.dll', 'mem1.bin', 'stocks.bin', 'css.bin', 'fox.model', 'melee.sfx') { Check ($mod -and (Test-Path "$mod\$f")) "mod folder has $f" }
 Check (Test-Path "$saves\FoxMod.GlobalSettings.json") "settings written (IsoPath)"
 if ($mod) { Get-ChildItem $mod | Select-Object Name, Length | Out-String -Width 200 | Set-Content "$r\mod-folder.txt" }
 

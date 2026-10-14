@@ -23,7 +23,7 @@ cp -f "$repo/core/build/libmelee_core.so" "$repo/core/build/gen-core/mem1.bin" "
 iso="$(python3 -c "import tomllib;print(tomllib.load(open('$repo/dev.toml','rb'))['iso'])" 2>/dev/null || true)"
 # Fox's model from your ISO (never fatal: without it the mod draws a placeholder)
 venv="${TOOLS_VENV:-$repo/tools/.venv}"
-if [ ! -x "$venv/bin/ssbmhk-extract-fox" ] || [ ! -x "$venv/bin/ssbmhk-extract-sfx" ] || [ ! -x "$venv/bin/ssbmhk-extract-stocks" ]; then
+if [ ! -x "$venv/bin/ssbmhk-extract-fox" ] || [ ! -x "$venv/bin/ssbmhk-extract-sfx" ] || [ ! -x "$venv/bin/ssbmhk-extract-stocks" ] || [ ! -x "$venv/bin/ssbmhk-extract-css" ]; then
   { [ -x "$venv/bin/python" ] || python3 -m venv "$venv"; } && "$venv/bin/pip" install -q -e "$repo/tools" \
     || echo "could not set up the tools environment ($venv)"
 fi
@@ -41,6 +41,10 @@ fi
 # Melee's stock icons from your ISO (the character choice and Iselda's Marth; never fatal)
 if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-stocks" ]; then
   "$venv/bin/ssbmhk-extract-stocks" "$iso" --out "$dest" || echo "stocks.bin not extracted: characters are shown by name only"
+fi
+# Melee's character select (its tiles, every costume's portrait and stock icon) from your ISO; never fatal
+if [ -n "$iso" ] && [ -f "$iso" ] && [ -x "$venv/bin/ssbmhk-extract-css" ]; then
+  "$venv/bin/ssbmhk-extract-css" "$iso" --out "$dest" || echo "css.bin not extracted: the character select shows stock icons only"
 fi
 settings="$saves/FoxMod.GlobalSettings.json"
 if [ -n "$iso" ]; then   # set IsoPath when it is missing or empty; keep every other setting
