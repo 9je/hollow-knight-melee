@@ -78,9 +78,18 @@ namespace FoxMelee {
                 var bbs = t.Find("Backboards")?.Cast<Transform>().ToList() ?? new List<Transform>();
                 if (bbs.Count < 10) throw new Exception($"the charm grid has {bbs.Count} slots");
                 var slots = bbs.Select(b => t.InverseTransformPoint(b.position)).ToList();
-                var rowYs = slots.Select(p => (float)Math.Round(p.y, 2)).Distinct().OrderByDescending(y => y).ToList();
+                // the slots' rows (a slot can sit a little off its row while the charms bob): heights a slot apart or more
+                var rowYs = new List<float>();
+                foreach (var y in slots.Select(p => p.y).OrderByDescending(y => y)) if (rowYs.Count == 0 || rowYs[rowYs.Count - 1] - y > 0.5f) rowYs.Add(y);
                 float left = slots.Min(p => p.x), right = slots.Max(p => p.x);
-                float rowStep = rowYs.Count > 1 ? rowYs[0] - rowYs[1] : 1.45f;
+                float rowStep = rowYs.Count > 1 ? rowYs[0] - rowYs[1] : 0;
+                log($"Characters page: the charm grid read as {slots.Count} slots, rows at {string.Join(", ", rowYs.Select(y => y.ToString("0.00")))}, x {left:0.00} to {right:0.00}");
+                if (rowYs.Count != 4 || rowStep < 1f || rowStep > 2f || right - left < 8f) {
+                    // not the grid Hollow Knight's files lay out: theirs (Backboards at z -6, rows 1.45 apart from -8.34, slots -5.51 to 4.99)
+                    log("Characters page: the charm grid isn't as expected: laid out as Hollow Knight's files have it");
+                    rowYs = new List<float> { -8.34f, -9.79f, -11.26f, -12.72f }; rowStep = 1.45f; left = -5.51f; right = 4.99f;
+                    slots = new List<Vector3> { new Vector3(left, rowYs[0]), new Vector3(left + 1.5f, rowYs[0]) };
+                }
                 var bbArt = bbs[0].GetComponent<SpriteRenderer>();
                 int layerId = bbArt != null ? bbArt.sortingLayerID : 0, order = bbArt != null ? bbArt.sortingOrder + 1 : 1;
                 var nextDot = t.Find("Equipped Charms/Next Dot");
@@ -111,9 +120,10 @@ namespace FoxMelee {
                 // the tiles, centred in the charm grid (Melee's 9 / 10 / 7), a row's height apart from the grid's top row
                 var counts = CharacterGrid.Rows.Select(r => r.Count).ToArray();
                 // the slots' spacing within a row (alternate rows are offset by half a slot), centred on the grid
-                float step = slots.GroupBy(p => (float)Math.Round(p.y, 2))
+                float step = slots.GroupBy(p => rowYs.OrderBy(y => Math.Abs(y - p.y)).First())
                     .SelectMany(g => g.Select(p => p.x).OrderBy(x => x).Zip(g.Select(p => p.x).OrderBy(x => x).Skip(1), (a, b) => b - a))
-                    .Where(d => d > 0.1f).DefaultIfEmpty(1.5f).Min();
+                    .Where(d => d > 0.5f).DefaultIfEmpty(1.5f).Min();
+                if (step < 1f || step > 2f) step = 1.5f;
                 float centre = (left + right) / 2, half = (counts.Max() - 1) / 2f * step;
                 left = centre - half; right = centre + half;
                 float tileW = step * 0.94f, tileH = tileW * 56f / 64f;
@@ -133,13 +143,14 @@ namespace FoxMelee {
                 float colorH = tileH * 0.9f;
                 for (int k = 0; k < maxCostumes; k++)
                     (colors[k], colorArt[k]) = Item(page, $"Color {k + 1}", colorsAt + new Vector3(k * step, 0, 0), colorH, colorH, layerId, order);
-                // the portrait where the charm's big picture was (1.98 units: 132 px at 100 per unit, scaled 1.5), half as
-                // tall again (Melee's portraits are 136 x 188) and grown upwards, so the name under it stays clear
+                // the portrait where the charm's big picture was (1.98 units: 132 px at 100 per unit, scaled 1.5), 2.2 times
+                // as tall (a big preview of the character in the chosen color) and grown upwards, so the text under it stays clear
                 var ds = detail.transform;
-                float iconH = detail.sprite != null ? detail.sprite.bounds.size.y * ds.localScale.y : 1.98f;
-                float tallH = iconH * 1.5f;
-                ds.localPosition += new Vector3(0, (tallH - iconH) / 2, 0);   // in Details' units, as iconH
-                float portraitH = tallH / Math.Max(0.01f, ds.localScale.y);
+                ds.localScale = new Vector3(1.5f, 1.5f, 1);   // the charm screen's (its animation may have left it mid-way)
+                detail.enabled = true; detail.color = Color.white; detail.gameObject.SetActive(true);
+                const float iconH = 1.98f, tallH = iconH * 2.2f;
+                ds.localPosition += new Vector3(0, (tallH - iconH) / 2, 0);
+                float portraitH = tallH / 1.5f;
 
                 // the fade: Hollow Knight fades the page's renderers in and out (FadeGroup); the charms' are gone, the tiles join
                 var mine = tileArt.SelectMany(r => r).Concat(colorArt).ToArray();
@@ -199,7 +210,7 @@ namespace FoxMelee {
             bool now = state == "Opened" && current == Page;
             if (nowShown && !shown) Refresh(playing, costumeOf, ownedNow());
             shown = nowShown;
-            if (now && !active) { foreach (var f in cursorObjFsms) f.SendEvent("CURSOR ACTIVATE"); Show(); log($"Characters page open: {owned.Count} characters, playing {playing.Name}"); }
+            if (now && !active) { foreach (var f in cursorObjFsms) f.SendEvent("CURSOR ACTIVATE"); Show(); log($"Characters page open: {owned.Count} characters, playing {playing.Name}"); LogPlaces(); }
             if (!now && active) Deactivate();
             active = now;
             if (!active) return null;
@@ -280,6 +291,23 @@ namespace FoxMelee {
                     tileArt[r][c].sprite = art.Sprite(art.Tile(ch, !owned.Contains(ch)), tileH);
                 }
             Show();
+        }
+
+        // where the page's parts are on screen (0..1 across and up), once, for the log
+        bool placesLogged;
+        void LogPlaces() {
+            if (placesLogged) return;
+            placesLogged = true;
+            var cam = Camera.allCameras.FirstOrDefault(c => (c.cullingMask & (1 << Page.layer)) != 0);
+            string At(Component c) {
+                if (c == null) return "none";
+                var v = cam != null ? cam.WorldToViewportPoint(c.transform.position) : c.transform.position;
+                var sr = c as SpriteRenderer;
+                return $"({v.x:0.00}, {v.y:0.00}){(c.gameObject.activeInHierarchy ? "" : " hidden")}" + (sr != null ? $" alpha {sr.color.a:0.00}{(sr.sprite == null ? " no sprite" : $" {sr.bounds.size.y:0.00} tall")}" : "");
+            }
+            var t = Page.transform;
+            log($"Characters page on screen ({(cam != null ? cam.name : "no camera")}): first tile {At(tileArt[0][0])}, last tile {At(tileArt[2][tileArt[2].Length - 1])}, "
+              + $"first color {At(colorArt[0])}, portrait {At(portrait)}, name {At(t.Find("Text Name"))}, desc {At(t.Find("Text Desc"))}, color label {At(t.Find("Equipped Charms/Text Equipped"))}");
         }
 
         void Deactivate() {

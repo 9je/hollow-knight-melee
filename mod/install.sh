@@ -6,6 +6,8 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 hk="${1:-$HOME/.steam/steam/steamapps/common/Hollow Knight}"
 managed="$hk/hollow_knight_Data/Managed"
 [ -f "$managed/Assembly-CSharp.dll" ] || { echo "not a Hollow Knight folder: $hk" >&2; exit 1; }
+# the running game has the core loaded: copying over it crashes the game
+if pgrep -f 'hollow_knight\.x86_64' >/dev/null; then echo "Hollow Knight is running: quit it first (installing over the loaded mod crashes it)" >&2; exit 1; fi
 saves="${HK_SAVES:-$HOME/.config/unity3d/Team Cherry/Hollow Knight}"   # overridable for dry runs
 backups="${BACKUP_DIR:-$HOME/Documents}"
 backup="$backups/hollow-knight-save-backup"   # one backup, made once; kept as long as it exists

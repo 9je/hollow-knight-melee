@@ -26,5 +26,32 @@ namespace FoxMelee {
             float h = Math.Max(knightHeight, top / scale);
             return new Fit { Width = w, Height = h, OffsetY = knightOffsetY - knightHeight / 2 + h / 2 };
         }
+
+        /// The box held steady: Hollow Knight's camera zones (CameraLockArea) switch as the box enters and leaves them, so a
+        /// box that breathes with an idle animation across a zone's edge shook the camera. It grows at once; it shrinks only
+        /// once the body has been smaller for `frames` frames running, to the largest of those.
+        public sealed class Held {
+            readonly int frames;
+            Fit held, smaller;
+            int count = -1;
+            public Held(int frames) { this.frames = frames; }
+
+            public Fit Next(Fit f) {
+                if (count < 0 || f.Width > held.Width || f.Height > held.Height) {
+                    if (count < 0) held = f;
+                    else held = Larger(held, f);
+                    count = 0;
+                    return held;
+                }
+                smaller = count == 0 ? f : Larger(smaller, f);
+                if (++count >= frames) { held = smaller; count = 0; }
+                return held;
+            }
+
+            static Fit Larger(Fit a, Fit b) {
+                var tall = b.Height > a.Height ? b : a;
+                return new Fit { Width = Math.Max(a.Width, b.Width), Height = tall.Height, OffsetY = tall.OffsetY };
+            }
+        }
     }
 }

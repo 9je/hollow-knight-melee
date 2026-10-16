@@ -265,7 +265,7 @@ namespace FoxMelee {
             if (!session.KnightFollowsFox) return;   // Melee has not placed Fox yet: he is still where he died
             var hk = room.ToHk(new V2(fox.X, fox.Y));
             hero.transform.position = new Vector3((float)hk.X, (float)hk.Y + HeroFeetOffset(hero), hero.transform.position.z);
-            FitKnightBox(hero);
+            FitKnightBox(hero, frames > 0);
             if (frames > 0 && outOfRoom.Frame(hk.X, hk.Y, gm.sceneWidth, gm.sceneHeight)) {
                 Log($"out of the room at ({hk.X:F1}, {hk.Y:F1}): pit");
                 hero.TakeDamage(null, GlobalEnums.CollisionSide.top, 1, 5);   // Hollow Knight's pit (hazard type 5)
@@ -1095,7 +1095,9 @@ namespace FoxMelee {
         // gets his body back (its moves through doors and respawns are sized for it)
         static BoxCollider2D knightBox; static Vector2 knightSize, knightOffset; static bool knightBoxFitted;
         readonly McHurtbox[] hurt = new McHurtbox[24];
-        void FitKnightBox(HeroController hero) {
+        readonly KnightBox.Held heldBox = new KnightBox.Held(180);   // Melee frames (3 s): longer than an idle animation's breath
+        KnightBox.Fit heldFit;
+        void FitKnightBox(HeroController hero, bool newMeleeFrame) {
             if (knightBox == null) {
                 knightBox = hero.GetComponent<BoxCollider2D>();
                 if (knightBox == null) return;
@@ -1103,7 +1105,8 @@ namespace FoxMelee {
             }
             int n = core.ReadHurtboxes(hurt);
             if (n <= 0) return;
-            var fit = KnightBox.For(hurt, n, fox.X, fox.Y, (float)room.Scale, knightSize.x, knightSize.y, knightOffset.y);
+            if (newMeleeFrame || !knightBoxFitted) heldFit = heldBox.Next(KnightBox.For(hurt, n, fox.X, fox.Y, (float)room.Scale, knightSize.x, knightSize.y, knightOffset.y));
+            var fit = heldFit;
             knightBox.size = new Vector2(fit.Width, fit.Height);
             knightBox.offset = new Vector2(knightOffset.x, fit.OffsetY);
             knightBoxFitted = true;

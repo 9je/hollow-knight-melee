@@ -42,5 +42,32 @@ namespace FoxMelee.Tests {
             var fit = KnightBox.For(boxes, 1, 0, 0, Scale, W, H, Oy);
             Assert.Equal(90 / Scale, fit.Width, 3);
         }
+
+        static KnightBox.Fit Box(float w, float h) => new KnightBox.Fit { Width = w, Height = h, OffsetY = h / 2 };
+
+        [Fact]
+        public void TheHeldBoxGrowsAtOnceAndShrinksOnlyOnceTheBodyHasStayedSmaller() {
+            var held = new KnightBox.Held(3);
+            Assert.Equal(2f, held.Next(Box(1, 2)).Height);
+            Assert.Equal(2.2f, held.Next(Box(1, 2.2f)).Height);   // breathing in: at once
+            Assert.Equal(2.2f, held.Next(Box(1, 2.1f)).Height);   // breathing out: held, so the box's edge doesn't wobble
+            Assert.Equal(2.2f, held.Next(Box(1, 2f)).Height);
+            Assert.Equal(2.2f, held.Next(Box(1, 2.2f)).Height);   // in again: as big as held
+            Assert.Equal(2.2f, held.Next(Box(1, 1.5f)).Height);
+            Assert.Equal(2.2f, held.Next(Box(1, 1.5f)).Height);
+            var shrunk = held.Next(Box(0.8f, 1.5f));               // smaller three frames running: the largest of those
+            Assert.Equal(1.5f, shrunk.Height);
+            Assert.Equal(1f, shrunk.Width);
+            Assert.Equal(0.75f, shrunk.OffsetY);
+        }
+
+        [Fact]
+        public void TheWidthIsHeldTheSameWay() {
+            var held = new KnightBox.Held(2);
+            held.Next(Box(1, 1));
+            Assert.Equal(1.5f, held.Next(Box(1.5f, 1)).Width);
+            Assert.Equal(1.5f, held.Next(Box(1, 1)).Width);
+            Assert.Equal(1f, held.Next(Box(1, 1)).Width);
+        }
     }
 }
