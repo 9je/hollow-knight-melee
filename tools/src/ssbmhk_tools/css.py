@@ -2,7 +2,8 @@
 the 25 select tiles (64x56, the faces with their name plates, in the select's original order), the character portraits
 (136x188, one per costume), and the stock icons of every costume (24x24). MnSelectChrDataTable's models hold the tiles
 (one texture each); its texture animations hold the portraits and stock icons, costume-major: every character's first
-costume, then every character's second, and so on (the portraits skip Sheik, as Melee's select does).
+costume, then every character's second, and so on (the portraits skip Sheik, as Melee's select does, and keep their
+fifth and sixth costumes in an order of their own).
 
 Sheik has no tile or portrait in Melee's select (she is Zelda's transformation); given frames of her rendered by the
 core (frame_dump's raster, one per costume, and one facing the camera), she gets a portrait made of each and a tile
@@ -37,6 +38,16 @@ def costume_blocks(characters: list[int]) -> list[tuple[int, int]]:
 
 
 PORTRAIT_CHARACTERS = [c for c in range(26) if c != 19]
+# the portraits' fifth and sixth costumes are not costume-major: Melee's file keeps them in this order (checked against
+# each costume's stock icon)
+PORTRAIT_TAIL = [(0, 4), (1, 4), (4, 4), (6, 4), (8, 4), (16, 4), (17, 4), (18, 4), (21, 4), (22, 4),
+                 (0, 5), (4, 5), (17, 5), (12, 4), (9, 4), (15, 4), (25, 4), (23, 4)]
+
+
+def portrait_order() -> list[tuple[int, int]]:
+    """(character, costume) of each portrait in the file: the first four costumes costume-major, then PORTRAIT_TAIL."""
+    head = [(c, k) for c, k in costume_blocks(PORTRAIT_CHARACTERS) if k < 4]
+    return head + PORTRAIT_TAIL
 STOCK_CHARACTERS = list(range(26))
 
 
@@ -107,11 +118,11 @@ def extract(iso: Path) -> dict:
     tiles = _tiles(d, raw)
     if len(tiles) < len(TILE_ORDER):
         raise ValueError(f"MnSlChr.usd: {len(tiles)} select tiles, expected {len(TILE_ORDER)} or more")
-    portraits = _images(d, _texanim_of(d, table, dsize, PORTRAIT, len(costume_blocks(PORTRAIT_CHARACTERS))))
+    portraits = _images(d, _texanim_of(d, table, dsize, PORTRAIT, len(portrait_order())))
     stocks = _images(d, _texanim_of(d, table, dsize, STOCK, STOCK_IMAGES))
     return {
         "tiles": (TILE[:2], [(c, 0, tiles[i]) for i, c in enumerate(TILE_ORDER)]),
-        "portraits": (PORTRAIT[:2], [(c, k, img) for (c, k), img in zip(costume_blocks(PORTRAIT_CHARACTERS), portraits)]),
+        "portraits": (PORTRAIT[:2], [(c, k, img) for (c, k), img in zip(portrait_order(), portraits)]),
         "stocks": (STOCK[:2], stock_entries(stocks)),
     }
 

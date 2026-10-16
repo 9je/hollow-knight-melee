@@ -21,6 +21,14 @@ def test_costume_blocks_are_costume_major_and_skip_short_characters():
     assert len(css.costume_blocks(css.STOCK_CHARACTERS)) == 123
 
 
+def test_portraits_fifth_and_sixth_costumes_are_in_melees_order():
+    order = css.portrait_order()
+    assert len(order) == 118 and len(set(order)) == 118
+    assert set(order) == set(css.costume_blocks(css.PORTRAIT_CHARACTERS))
+    assert order[:100] == css.costume_blocks(css.PORTRAIT_CHARACTERS)[:100]
+    assert order[105] == (16, 4) and order[110] == (0, 5) and order[114] == (9, 4) and order[117] == (23, 4)
+
+
 def test_tile_order_is_melees_original_layout():
     assert css.TILE_ORDER[:3] == [8, 7, 5] and len(set(css.TILE_ORDER)) == 25 and 19 not in css.TILE_ORDER
 
