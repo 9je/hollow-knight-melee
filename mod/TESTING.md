@@ -124,7 +124,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 20. Overnight 2026-10-12/13. Run `bash mod/install.sh` first: it now extracts every character's sounds, so expect
     30 `melee-*.sfx` files.
     - **Characters at a bench:** sit, then press D-pad up (keyboard T). Choose with left/right, play with up, close with
-      down. Your settings have `UnlockAllCharacters: true`, so all 26 are listed. Picking one restarts Melee with that
+      down. All 26 are listed (`UnlockAllCharacters` is on by default now). Picking one restarts Melee with that
       character where the Knight sits (`ModLog.txt`: `switching to ...`, `character: ...`). Stand up and play. Check
       that:
       - their sounds play;

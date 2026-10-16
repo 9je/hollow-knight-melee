@@ -19,7 +19,7 @@ namespace FoxMelee {
         public bool DrawOffThread = true;           // Melee's drawing (3/4 of its frame) runs on the core's thread while Unity goes on
         public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
         public bool AbilityGates = true;            // doors the Knight couldn't reach without an ability you lack are closed (GateLogic)
-        public bool UnlockAllCharacters = false;    // every character at the bench, without their charms (testing)
+        public bool UnlockAllCharacters = true;     // every character at the bench, without their charms (false: each with its charm)
         public System.Collections.Generic.Dictionary<string, int> Costumes = new System.Collections.Generic.Dictionary<string, int>();   // each character's chosen costume (0: its first)
         public KnockbackTuning Knockback = new KnockbackTuning();   // Fox's hits launch small enemies with Melee's knockback and hitstun
         public PogoTuning Pogo = new PogoTuning();   // spec §5.4: down-air bounces off spikes (not Melee: the one exception)
