@@ -101,7 +101,10 @@ namespace FoxMelee {
                     g.gameObject.SetActive(true);
                 }
                 var nextDot = t.Find("Equipped Charms/Next Dot");
-                Vector3 colorsAt = nextDot != null ? t.InverseTransformPoint(nextDot.position) : new Vector3(left, rowYs[0] + 4 * rowStep, 0);
+                // the colors under the Color label, halfway between it and the line over the grid (the charm screen's own
+                // animations move its Next Dot and big picture away, so neither places anything: these are the page's places)
+                float colorsX = nextDot != null ? t.InverseTransformPoint(nextDot.position).x : left;
+                var colorsAt = new Vector3(colorsX, rowYs[0] + 3.85f, 0);
                 var detail = t.Find("Details/Detail Sprite")?.GetComponent<SpriteRenderer>();
                 if (detail == null) throw new Exception("no Details/Detail Sprite");
 
@@ -152,12 +155,13 @@ namespace FoxMelee {
                 for (int k = 0; k < maxCostumes; k++)
                     (colors[k], colorArt[k]) = Item(page, $"Color {k + 1}", colorsAt + new Vector3(k * step, 0, 0), colorH, colorH, layerId, order);
                 // the portrait where the charm's big picture was (1.98 units: 132 px at 100 per unit, scaled 1.5), twice
-                // as tall (a big preview of the character in the chosen color) and grown upwards, so the text under it stays clear
+                // as tall (a big preview of the character in the chosen color)
                 var ds = detail.transform;
                 ds.localScale = new Vector3(1.5f, 1.5f, 1);   // the charm screen's (its animation may have left it mid-way)
                 detail.enabled = true; detail.color = Color.white; detail.gameObject.SetActive(true);
                 const float iconH = 1.98f, tallH = iconH * 2f;
-                ds.localPosition += new Vector3(0, (tallH - iconH) / 2, 0);
+                // centred between the name and the description (Details sits on the page: its places are the page's)
+                ds.localPosition = new Vector3(ds.localPosition.x, rowYs[0] + 3.6f, ds.localPosition.z);
                 float portraitH = tallH / 1.5f;
 
                 // the fade: Hollow Knight fades the page's renderers in and out (FadeGroup); the charms' are gone, the tiles join
