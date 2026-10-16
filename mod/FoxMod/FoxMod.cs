@@ -28,6 +28,12 @@ namespace FoxMelee {
             go.AddComponent<FoxRunner>();
             IselaShop.Hook();
             CharacterCharms.Hook();
+            ModHooks.LanguageGetHook += CharacterPaneUi.Language;
+            // a save never remembers the Characters page as the last one open: without this mod Hollow Knight's inventory
+            // couldn't open on a page it doesn't have
+            ModHooks.BeforeSavegameSaveHook += d => {
+                if (FoxRunner.PageIndex >= 0 && d?.playerData != null && d.playerData.GetInt("currentInvPane") == FoxRunner.PageIndex) d.playerData.SetInt("currentInvPane", 0);
+            };
         }
     }
 }

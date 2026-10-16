@@ -31,8 +31,7 @@ namespace FoxMelee {
         public static bool HideDPadSides;
         public static bool InventoryOpen;       // FoxRunner: Hollow Knight's inventory is open (D-pad right moves right)
         public static bool QuickMapHeld;        // D-pad right held: the quick map (Fox stands still)
-        public static bool HoldFromHollow;
-        public static bool DreamNailButton;     // D-pad up held: Hollow Knight's Dream Nail button (Action4) is pressed      // the bench's character select is the controller's: Hollow Knight sees it idle
+        public static bool DreamNailButton;     // D-pad up held: Hollow Knight's Dream Nail button (Action4) is pressed
 
         /// Fox's input for the next Melee frame, or null when no GameCube controller is plugged in.
         public McInput? Melee() { Poll(); return pads.Melee(port); }
@@ -59,7 +58,7 @@ namespace FoxMelee {
 
             public override void Update(ulong tick, float dt) {
                 gc.Poll();
-                var v = HoldFromHollow ? default(McInput) : gc.Current() ?? default(McInput);
+                var v = gc.Current() ?? default(McInput);
                 bool B(ushort b) => (v.Buttons & b) != 0;
                 UpdateLeftStickWithValue(new Vector2(v.StickX / 127f, v.StickY / 127f), tick, dt);
                 UpdateRightStickWithValue(new Vector2(v.CStickX / 127f, v.CStickY / 127f), tick, dt);

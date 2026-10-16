@@ -35,7 +35,7 @@ namespace FoxMelee {
                 var sr = item.transform.Find("Item Sprite")?.GetComponent<SpriteRenderer>();
                 if (sr == null || sr.sprite == null) return;
                 var s = StockIcons.Parse(System.IO.File.ReadAllBytes(System.IO.Path.Combine(FoxMod.ModDir, "stocks.bin")));
-                var tex = CharacterSelect.Texture(s.For(Roster.Find("Marth", out _)), s.Width, s.Height);
+                var tex = CssArt.Texture(s.For(Roster.Find("Marth", out _)), s.Width, s.Height);
                 float units = Mathf.Max(sr.sprite.bounds.size.x, sr.sprite.bounds.size.y);   // the Quill picture's size
                 sr.sprite = Sprite.Create(tex, new Rect(0, 0, s.Width, s.Height), new Vector2(0.5f, 0.5f), s.Width / Mathf.Max(0.1f, units));
             } catch (System.Exception e) { FoxMod.Instance.Log("Iselda's Marth keeps the Quill's picture (" + e.Message + ")"); }

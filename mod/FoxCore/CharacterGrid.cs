@@ -24,9 +24,16 @@ namespace FoxMelee {
 
         public Character Current => Rows[Row][Column];
 
-        public void Move(int dx, int dy) {
+        /// Moving past the grid's sides or top: Move stays and says which (the page's arrows, the colors above).
+        public const int Left = -1, Right = 1, Top = 2;
+
+        public int Move(int dx, int dy) {
+            if (dy < 0 && Row == 0) return Top;
+            if (dx < 0 && Column == 0 && dy == 0) return Left;
+            if (dx > 0 && Column == Rows[Row].Count - 1 && dy == 0) return Right;
             Row = Math.Max(0, Math.Min(Rows.Count - 1, Row + dy));
             Column = Math.Max(0, Math.Min(Rows[Row].Count - 1, Column + dx));
+            return 0;
         }
     }
 }

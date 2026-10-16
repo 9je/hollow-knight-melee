@@ -69,7 +69,7 @@ namespace FoxMelee {
         static void Log(string m) => FoxMod.Instance.Log(m);
         void Fail(string why) {
             FoxMod.Instance.LogError(why);
-            GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false;   // the controller is Hollow Knight's again
+            GcInput.DreamNailButton = false;   // the controller is Hollow Knight's again
             state = State.Failed;
             if (session.Fail()) ReleaseHero();  // only a Knight Fox took (a boot failure leaves him alone)
             holdingBody = false;
@@ -89,10 +89,10 @@ namespace FoxMelee {
                    && GameManager.instance.gameState != GlobalEnums.GameState.PAUSED,
         };
 
-        // Keyboard: while the character select (or a change loading) is up, Hollow Knight's own input is off: its action set
+        // Keyboard: while a character change loads, Hollow Knight's own input is off: its action set
         // is disabled, so every action reads as released (InControl: EnabledInHierarchy), the pause (Escape) and the bench's
         // own listeners (its state machine gets the Knight up on jump, attack or any arrow) included. Hollow Knight never
-        // sets the set's Enabled itself. Asked every frame, so whatever closes the select gives it back.
+        // sets the set's Enabled itself. Asked every frame, so the end of the change (or its failure) gives it back.
         bool mutedHollow;
         void MuteHollowKeys(bool want) {
             var ih = GameManager.instance?.inputHandler;
@@ -107,8 +107,8 @@ namespace FoxMelee {
                 switching = null;
                 Fail($"the change to {switchingTo?.Name} didn't finish in {SwitchTimeout} s");
             }
-            MuteHollowKeys(state != State.Failed && (grid != null || switching != null));
-            if (state == State.Failed) { GcInput.HoldFromHollow = false; GcInput.DreamNailButton = false; return; }
+            MuteHollowKeys(state != State.Failed && switching != null);
+            if (state == State.Failed) { GcInput.DreamNailButton = false; return; }
             var hero = HeroController.instance;
             var gm = GameManager.instance;
             var invState = gm != null && gm.inventoryFSM != null ? gm.inventoryFSM.ActiveStateName : null;
@@ -117,7 +117,7 @@ namespace FoxMelee {
             // menus (and quitting to them: Quit_To_Menu is a gameplay scene to Hollow Knight, but Fox holding the Knight
             // there stalled the quit on a black screen): nothing of Fox lingers
             if (hero == null || gm == null || !gm.IsGameplayScene() || gm.sceneName == "Quit_To_Menu") {
-                grid = null; inCharms = false;   // no character select outside gameplay (its keyboard mute with it)
+                pendingPick = null;
                 if (placeholder) placeholder.SetActive(false);
                 model?.Hide(); effects?.Hide(); gx?.Hide();
                 combat?.ReleaseAll(); grab?.Release();
@@ -126,6 +126,7 @@ namespace FoxMelee {
                 needPlace = true;
                 return;
             }
+            CharactersPage(gm);
             if (state == State.Waiting && !Boot()) return;
             if (switching != null && !switching.IsCompleted) return;   // a character change is restarting the core: nothing else uses it
             // another save loaded since the core started (the character is the save's): its character takes over
@@ -151,15 +152,15 @@ namespace FoxMelee {
                 holdingBody = false;
                 needPlace = true;
                 accumulator = 0;
-                if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) { grid = null; inCharms = false; GcInput.HoldFromHollow = false; }
+                if (!session.Interacting || !PlayerData.instance.GetBool("atBench")) pendingPick = null;
                 if (!session.Interacting) {     // a transition, a death: nothing of the character is drawn
                     if (placeholder) placeholder.SetActive(false);
                     model?.Hide(); effects?.Hide(); gx?.Hide();
                 } else if (!PlayerData.instance.GetBool("atBench")) Settle(hero);   // a shop, a tablet, an NPC: he stands where he stopped
                 else {
-                    // Rest steps the core: never while a character change (BenchMenu may have just started one) restarts
+                    // Rest steps the core: never while a character change (TakePick may have just started one) restarts
                     // it on its own thread (the two overlapped and the core's worker crashed: Sheik to Link froze the game)
-                    if (FinishSwitch(hero)) { BenchMenu(hero); if (state == State.Running && switching == null) Rest(hero); }
+                    if (FinishSwitch(hero)) { TakePick(hero); if (state == State.Running && switching == null) Rest(hero); }
                 }
                 combat?.ReleaseAll(); grab?.Release();
                 return;
@@ -167,7 +168,7 @@ namespace FoxMelee {
             if (switching != null && !FinishSwitch(hero)) return;   // a character change still loading
             if (gatesKey >= 0 && AbilitiesKey(Abilities()) != gatesKey) { Log("abilities changed: the room's gates again"); session.ForgetRoom(); return; }
             if (!WatchTerrain(gm.sceneName)) return;
-            grid = null; inCharms = false; GcInput.HoldFromHollow = false;   // the character moves: no character select holds the controller
+            pendingPick = null;
             if (needPlace && waking) {            // Fox already lies where the Knight woke: he gets up from there
                 waking = false; needPlace = false; getUp = true;
                 session.TakeRespawns();
@@ -566,101 +567,56 @@ namespace FoxMelee {
         }
         int focusMasks = 1;
 
-        // ---- choosing a character at a bench: Hollow Knight's charm screen (the inventory, opened while sitting) is
-        // Melee's character select (CharmScreen), with the row of charms that are still charms under it; nothing else opens
-        // it. Stick or D-pad moves, A (keyboard J or Enter) plays the character or equips a
-        // charm, B (keyboard K or Escape) closes, X / Y turn the color. While it is open the controller is the screen's:
-        // Hollow Knight sees it idle, until every button is let go after it closes. ----
-        CharacterGrid grid;
-        CharacterSelect select;
-        System.Collections.Generic.HashSet<Character> ownedNow;
-        bool selA, selB, selX, selY;
-        readonly System.Collections.Generic.Dictionary<Character, int> costumePick = new System.Collections.Generic.Dictionary<Character, int>();   // the select's costume per character
-        int repeatDx, repeatDy; float repeatAt;
-        CharmRow charmRow = new CharmRow(new int[0]);   // the charms under the grid
-        bool inCharms;      // opened over Hollow Knight's inventory (the charm screen, at a bench): closing it closes the inventory
-        bool charmsSeen;    // the inventory was open last frame (the select opens once per opening)
+        // ---- choosing a character: the inventory's Characters page (CharacterPaneUi), Hollow Knight's Charms page made
+        // into Melee's select and added after the Map (InventoryPage). It shows anywhere; a character is chosen at a bench
+        // only, as charms are equipped. Built once per inventory, while it is closed. ----
+        CssArt art;
+        CharacterPaneUi pane;
+        PlayMakerFSM paneFor;              // the inventory the page was built for (a new one, after the main menu, gets its own)
+        CharacterPaneUi.Pick? pendingPick; // chosen on the page, played at the bench (after the inventory closes)
+        public static int PageIndex = -1;  // the page's number (PlayerData currentInvPane), -1 without it
 
-        void BenchMenu(HeroController hero) {
-            var gc = FoxMod.Instance.GameCube?.Current();
-            var b = gc?.Buttons ?? 0;
-            int sx = gc?.StickX ?? 0, sy = gc?.StickY ?? 0;
-            bool up = (b & GcButtons.DUp) != 0 || Input.GetKey(KeyCode.T);
-            bool a = (b & GcButtons.A) != 0 || Input.GetKey(KeyCode.J) || Input.GetKey(KeyCode.Return);
-            bool bk = (b & GcButtons.B) != 0 || Input.GetKey(KeyCode.K) || Input.GetKey(KeyCode.Escape);
-            bool nextC = (b & GcButtons.X) != 0 || Input.GetKey(KeyCode.E), prevC = (b & GcButtons.Y) != 0 || Input.GetKey(KeyCode.Q);
-            bool Pressed(bool now, ref bool was) { bool p = now && !was; was = now; return p; }
-            bool pA = Pressed(a, ref selA), pB = Pressed(bk, ref selB);
-            bool pNext = Pressed(nextC, ref selX), pPrev = Pressed(prevC, ref selY);
-            // at a bench the inventory is the charm screen (charms are equipped nowhere else): opening it, on whichever pane
-            // it comes up, opens the select over it; it closes with the select. (Watching for its Charms pane instead
-            // flickered as the inventory opened, so the select was closed and reopened under the player's hands.)
-            bool charms = GcInput.InventoryOpen;
-            bool charmsOpened = charms && !charmsSeen;
-            charmsSeen = charms;
-            if (grid == null) {
-                if (GcInput.HoldFromHollow && b == 0 && Math.Abs(sx) < 30 && Math.Abs(sy) < 30) GcInput.HoldFromHollow = false;
-                if (charmsOpened) OpenSelect(true);
-                return;
+        void CharactersPage(GameManager gm) {
+            var inv = gm.inventoryFSM;
+            if (inv == null) return;
+            if (inv != paneFor) {
+                if (inv.ActiveStateName != "Closed") return;
+                art ??= new CssArt(Log);
+                var built = CharacterPaneUi.Build(inv, art, Log);
+                if (built == null && inv.transform.Find("Charms")?.gameObject.activeSelf == true) return;   // not put away yet: next frame
+                paneFor = inv;
+                pane = null; PageIndex = -1;
+                if (built == null) return;
+                InventoryPage.OtherPagesOnInventory(inv.transform.Find("Inv")?.gameObject, Log);
+                PageIndex = InventoryPage.Install(inv, built.Page, CharacterPaneUi.PageKey, Log);
+                if (PageIndex < 0) { Destroy(built.Page); return; }
+                pane = built;
             }
-            if (inCharms && !charms) { Log("character select: Hollow Knight closed its inventory"); CloseSelect(false); return; }
-            int dx = ((b & GcButtons.DRight) != 0 || sx > 64 || Input.GetKey(KeyCode.RightArrow) ? 1 : 0) - ((b & GcButtons.DLeft) != 0 || sx < -64 || Input.GetKey(KeyCode.LeftArrow) ? 1 : 0);
-            int dy = ((b & GcButtons.DDown) != 0 || sy < -64 || Input.GetKey(KeyCode.DownArrow) ? 1 : 0) - (up || sy > 64 || Input.GetKey(KeyCode.UpArrow) ? 1 : 0);
-            if (dx != repeatDx || dy != repeatDy) { repeatDx = dx; repeatDy = dy; repeatAt = Time.unscaledTime + 0.35f; MoveCursor(dx, dy); }
-            else if ((dx != 0 || dy != 0) && Time.unscaledTime >= repeatAt) { repeatAt = Time.unscaledTime + 0.12f; MoveCursor(dx, dy); }
-            if (pB || (inCharms && Input.GetKeyDown(KeyCode.I))) { CloseSelect(true); return; }
-            if ((pNext || pPrev) && !charmRow.Active && ownedNow.Contains(grid.Current)) {   // Melee's costume: X / Y (keyboard E / Q)
-                var ch = grid.Current;
-                costumePick[ch] = (costumePick[ch] + (pNext ? 1 : ch.Costumes - 1)) % ch.Costumes;
-            }
-            if (!pA) return;
-            if (charmRow.Active) { Log(CharmScreen.Toggle(charmRow.Current)); return; }
-            if (!ownedNow.Contains(grid.Current)) return;
-            var pick = grid.Current;
-            int costume = costumePick[pick];
-            CloseSelect(true);
-            if (pick != character || costume != CostumeOf(pick)) SwitchCharacter(hero, pick, costume);
+            if (pane == null) return;
+            var pick = pane.Update(character, CostumeOf, OwnedNow, PlayerData.instance.GetBool("atBench"));
+            if (pick != null && switching == null) { pendingPick = pick; inv.SendEvent("INVENTORY CANCEL"); }
         }
 
-        // the cursor: down from the grid's bottom row goes to the charm row (under the column it was in), up from it comes back
-        void MoveCursor(int dx, int dy) {
-            if (charmRow.Active) {
-                if (dy < 0) charmRow.Leave(); else charmRow.Move(dx);
-                return;
-            }
-            if (dy > 0 && grid.Row == CharacterGrid.Rows.Count - 1 && charmRow.Enter(grid.Column, CharacterGrid.Rows[grid.Row].Count)) return;
-            grid.Move(dx, dy);
-        }
-
-        void OpenSelect(bool fromCharms) {
+        System.Collections.Generic.HashSet<Character> OwnedNow() {
             var data = PlayerData.instance;
-            ownedNow = new System.Collections.Generic.HashSet<Character>(Roster.Owned(n => data.GetBool("gotCharm_" + n),
+            return new System.Collections.Generic.HashSet<Character>(Roster.Owned(n => data.GetBool("gotCharm_" + n),
                 FoxMod.Instance.Save.MarthBought, FoxMod.Instance.Settings.UnlockAllCharacters));
-            grid = new CharacterGrid(character);
-            costumePick.Clear();
-            foreach (var ch in Roster.All) costumePick[ch] = CostumeOf(ch);
-            select ??= new CharacterSelect(Log);
-            charmRow = new CharmRow(CharmScreen.Owned());
-            inCharms = fromCharms;
-            GcInput.HoldFromHollow = true;
-            repeatDx = repeatDy = 0;
-            Log($"character select: open from the charm screen, {charmRow.Charms.Count} charms in the row");
         }
 
-        /// The select goes; opened over the charm screen, Hollow Knight's inventory closes with it (unless it closed itself).
-        void CloseSelect(bool closeInventory) {
-            grid = null;
-            if (inCharms && closeInventory) CharmScreen.CloseInventory(GameManager.instance);
-            inCharms = false;
+        /// A character chosen on the page plays once the inventory has closed (the Knight still on the bench).
+        void TakePick(HeroController hero) {
+            if (pendingPick == null || GcInput.InventoryOpen) return;
+            var p = pendingPick.Value;
+            pendingPick = null;
+            if (p.Character != character || p.Costume != CostumeOf(p.Character)) SwitchCharacter(hero, p.Character, p.Costume);
         }
 
         void OnGUI() {
-            if (switching != null && select != null) select.DrawLoading(switchingTo, CostumeOf(switchingTo));
-            else if (grid != null && select != null) select.Draw(grid, c => ownedNow.Contains(c), c => costumePick[c], charmRow, inCharms);
+            if (switching != null && art != null) art.DrawLoading(switchingTo, CostumeOf(switchingTo));
         }
 
         // A character change restarts the core off Unity's thread (about a second); meanwhile nothing else uses the core and
-        // the select screen says it is loading. FinishSwitch then sets the new character up where the Knight sits.
+        // a card says it is loading. FinishSwitch then sets the new character up where the Knight sits.
         System.Threading.Tasks.Task<string> switching;
         Character switchingTo;
         float switchStarted;

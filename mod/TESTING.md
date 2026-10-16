@@ -241,16 +241,7 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
 
 22. Overnight 2026-10-13/14 (your list). Run `bash mod/install.sh` first (it now also renders Sheik for the select, so it
     takes a little longer).
-    - **The character select is the bench's charm screen.** Sit at a bench and open the inventory (D-pad right tap on
-      the GameCube pad, or your inventory key): Melee's select opens over it, whichever pane the inventory came up on
-      (watching for the Charms pane flickered as it opened, and the select closed and reopened under your hands:
-      left and right seemed dead). Stick or D-pad moves, A plays a character, X / Y turn the color, B (or the
-      inventory key) closes it and the inventory with it.
-      Under the characters is the row of charms that are still charms: down from the bottom row reaches it, A equips
-      or unequips (no overcharming), the notches in use show at the right, and the cursor's charm is named. Nothing
-      else opens the select (D-pad up at the bench no longer does). `ModLog.txt`: `character select: open from the charm screen, N charms in
-      the row`, `charm N equipped (...)`. If the select does not open from the charm screen, send the log: the line
-      `charm screen: inventory in ..., current pane ..., UI Charms ...` says what the mod saw.
+    - (The character select over the charm screen is replaced: see 23.)
     - **Vanilla look:** no color counter or button hints; "color". Sheik has her own tile and portraits, made from her
       model in each costume at install (`css.bin: 26 tiles, 123 portraits` on install; if Sheik still shows Zelda's
       portrait, install.sh printed `Sheik not rendered`). Her tile's face sits on the select's grey like the others'
@@ -281,6 +272,29 @@ To turn Fox's hits off, set `FoxHits` to false in FoxMod.GlobalSettings.json.
       transparent texels now carry the colour beside them. If anything still looks off, press **F9** while the
       character is on screen: `Mods/FoxMelee/dump/<time>/` holds `frame.bin`, which renders here exactly as the game drew
       it; send that folder.
+
+23. **The Characters page** (2026-10-15). The full-screen select is gone. Choosing a character is now a page of Hollow
+    Knight's own inventory, after the Map: Inventory, Charms, Journal, Map, **Characters**. Turn to it as to any page
+    (the shoulder buttons, or the arrows at the page's sides). The page is a copy of the Charms page: the same frame,
+    cursor, fade, page names and arrows. Every other page (charms, items, map, journal) is Hollow Knight's own and
+    untouched.
+    - Melee's tiles sit where the charm grid is (Melee's three rows; characters you don't have yet are dark). The big
+      picture at the right is the portrait of the character under the cursor, with its name and a line under it
+      ("Rest at a bench to play as Marth.", "Play as Marth.", "Playing as Fox.", or how to get a locked one).
+    - The row at the top, where equipped charms sit, is the colors (labelled Color): up from the top row reaches it,
+      left and right pick one. X / Y also turn the color from anywhere on the page.
+    - Confirm plays the character, **only while sitting at a bench** (like charms); the prompt at the bottom right
+      shows "Choose" when it would. The inventory closes, the loading card shows, and the character appears on the
+      bench.
+    - Left past the grid's left end (or the colors' first) reaches the left arrow; left again or Confirm turns the
+      page, the same on the right.
+    - `ModLog.txt`: `inventory: Characters page added (page 4)`, `Characters page made of the Charms page: 26 tiles ...`,
+      `Characters page open: N characters, playing Fox`, `Characters page: Marth chosen (color 2)`. If something
+      doesn't match what the mod expects, the inventory stays exactly Hollow Knight's and the log says why
+      (`inventory: Characters page not added: ...` or `not made: ...`): send those lines.
+    - Things to look at: the tiles' size and place against the frame, the portrait against the name under it, the
+      cursor on the tiles, the colors and the arrows, the page fading in and out with the others, and the inventory
+      opening on the Characters page after you closed it there.
 
 ## What to send back
 
