@@ -92,6 +92,14 @@ namespace FoxMelee {
                 }
                 var bbArt = bbs[0].GetComponent<SpriteRenderer>();
                 int layerId = bbArt != null ? bbArt.sortingLayerID : 0, order = bbArt != null ? bbArt.sortingOrder + 1 : 1;
+                // the charm screen keeps its details and equipped row put away (100 down) until it brings them in: here they stay in
+                foreach (var name in new[] { "Details", "Equipped Charms" }) {
+                    var g = t.Find(name);
+                    if (g == null) continue;
+                    if (Mathf.Abs(g.localPosition.x) > 1 || Mathf.Abs(g.localPosition.y) > 1) log($"Characters page: {name} brought in from ({g.localPosition.x:0.0}, {g.localPosition.y:0.0})");
+                    g.localPosition = new Vector3(0, 0, g.localPosition.z);
+                    g.gameObject.SetActive(true);
+                }
                 var nextDot = t.Find("Equipped Charms/Next Dot");
                 Vector3 colorsAt = nextDot != null ? t.InverseTransformPoint(nextDot.position) : new Vector3(left, rowYs[0] + 4 * rowStep, 0);
                 var detail = t.Find("Details/Detail Sprite")?.GetComponent<SpriteRenderer>();
@@ -143,12 +151,12 @@ namespace FoxMelee {
                 float colorH = tileH * 0.9f;
                 for (int k = 0; k < maxCostumes; k++)
                     (colors[k], colorArt[k]) = Item(page, $"Color {k + 1}", colorsAt + new Vector3(k * step, 0, 0), colorH, colorH, layerId, order);
-                // the portrait where the charm's big picture was (1.98 units: 132 px at 100 per unit, scaled 1.5), 2.2 times
+                // the portrait where the charm's big picture was (1.98 units: 132 px at 100 per unit, scaled 1.5), twice
                 // as tall (a big preview of the character in the chosen color) and grown upwards, so the text under it stays clear
                 var ds = detail.transform;
                 ds.localScale = new Vector3(1.5f, 1.5f, 1);   // the charm screen's (its animation may have left it mid-way)
                 detail.enabled = true; detail.color = Color.white; detail.gameObject.SetActive(true);
-                const float iconH = 1.98f, tallH = iconH * 2.2f;
+                const float iconH = 1.98f, tallH = iconH * 2f;
                 ds.localPosition += new Vector3(0, (tallH - iconH) / 2, 0);
                 float portraitH = tallH / 1.5f;
 
@@ -165,7 +173,10 @@ namespace FoxMelee {
                 else log("Characters page: no fade group (the tiles show without fading)");
 
                 // the labels: "Equipped" says Color, the button prompt says Choose
-                Relabel(t.Find("Equipped Charms/Text Equipped"), ColorKey);
+                var label = t.Find("Equipped Charms/Text Equipped");
+                Relabel(label, ColorKey);
+                var labelText = label?.GetComponent<TextMeshPro>();
+                if (labelText != null && fade != null && !fade.texts.Contains(labelText)) fade.texts = fade.texts.Concat(new[] { labelText }).ToArray();
                 var confirm = t.Find("Confirm Action")?.gameObject;
                 if (confirm != null) foreach (var tx in confirm.GetComponentsInChildren<SetTextMeshProGameText>(true)) { tx.sheetName = "UI"; tx.convName = ChooseKey; }
 
