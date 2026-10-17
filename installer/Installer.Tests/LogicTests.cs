@@ -5,6 +5,17 @@ using Xunit;
 namespace HkMelee.Installer.Tests {
     public class LogicTests {
         [Fact]
+        public void TheGamesEngineVersionFromItsHeader() {
+            var head = new byte[48];
+            System.Text.Encoding.ASCII.GetBytes("2020.2.2f1").CopyTo(head, 20);
+            Assert.Equal("2020.2.2f1", Steam.EngineVersion(head));
+            var six = new byte[48];
+            System.Text.Encoding.ASCII.GetBytes("6000.0.61f1").CopyTo(six, 20);
+            Assert.Equal("6000.0.61f1", Steam.EngineVersion(six));
+            Assert.Null(Steam.EngineVersion(new byte[48]));
+        }
+
+        [Fact]
         public void SteamLibrariesFromLibraryFoldersVdf() {
             var vdf = "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Program Files (x86)\\\\Steam\"\n\t\t\"label\"\t\t\"\"\n\t}\n" +
                       "\t\"1\"\n\t{\n\t\t\"path\"\t\t\"D:\\\\SteamLibrary\"\n\t}\n}\n";

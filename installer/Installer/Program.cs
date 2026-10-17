@@ -183,6 +183,10 @@ namespace HkMelee.Installer {
         // ---- install ----
         static void Install(string hk) {
             if (GameRunning()) throw new Exception("Hollow Knight is running: close it first");
+            var engine = Steam.EngineVersion(hk);
+            if (engine != null && engine != Steam.SupportedEngine)
+                throw new Exception($"this Hollow Knight is a newer version (Unity {engine}) than the mod is made for (1.5.78). In Steam: right-click Hollow Knight, "
+                                  + "Properties, Betas (Game Versions & Betas), choose the 1.5.78 branch, let it download, then run this installer again");
             var iso = FindIso();
             var managed = Steam.Managed(hk);
             // backups, each made once and kept

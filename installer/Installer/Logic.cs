@@ -63,6 +63,22 @@ namespace HkMelee.Installer {
 
         public static bool IsHollowKnight(string dir) => File.Exists(Path.Combine(Managed(dir), "Assembly-CSharp.dll"));
         public static string Managed(string dir) => Path.Combine(dir, "hollow_knight_Data", "Managed");
+
+        /// The Unity version the game was built with (globalgamemanagers' header names it), or null. The Modding API
+        /// and the mod are for Hollow Knight 1.5.78 (Unity 2020.2.2f1); Steam's default branch moved to Unity 6 in 2026.
+        public const string SupportedEngine = "2020.2.2f1";
+        public static string EngineVersion(byte[] head) {
+            var m = Regex.Match(System.Text.Encoding.ASCII.GetString(head), @"\b(\d{4}\.\d+\.\d+[abfp]\d+)\b");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+        public static string EngineVersion(string dir) {
+            var f = Path.Combine(dir, "hollow_knight_Data", "globalgamemanagers");
+            if (!File.Exists(f)) return null;
+            using var s = File.OpenRead(f);
+            var head = new byte[Math.Min(4096, (int)s.Length)];
+            s.ReadExactly(head);
+            return EngineVersion(head);
+        }
     }
 
     static class Versions {
