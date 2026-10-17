@@ -114,6 +114,7 @@ namespace FoxMelee {
             var invState = gm != null && gm.inventoryFSM != null ? gm.inventoryFSM.ActiveStateName : null;
             GcInput.InventoryOpen = invState != null && invState != "Closed" && !invState.StartsWith("Init");
             if (gm != null && state != State.Failed) FoxMod.Instance.GameCube?.PinHollowInput(gm.inputHandler?.inputActions);
+            if (GcInput.InventoryTapped) { GcInput.InventoryTapped = false; if (gm != null && gm.IsGameplayScene()) OpenInventory(gm); }
             GcInput.HideDPadSides = hero != null && gm != null && gm.IsGameplayScene() && gm.gameState == GlobalEnums.GameState.PLAYING && !GcInput.InventoryOpen;
             // menus (and quitting to them: Quit_To_Menu is a gameplay scene to Hollow Knight, but Fox holding the Knight
             // there stalled the quit on a black screen): nothing of Fox lingers

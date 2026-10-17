@@ -48,6 +48,7 @@ namespace FoxMelee {
         public static bool HideDPadSides;
         public static bool InventoryOpen;       // FoxRunner: Hollow Knight's inventory is open (D-pad right moves right)
         public static bool QuickMapHeld;        // D-pad right held: the quick map (Fox stands still)
+        public static bool InventoryTapped;     // D-pad right tapped: FoxRunner opens the inventory (and clears it)
         public static bool DreamNailButton;     // D-pad up held: Hollow Knight's Dream Nail button (Action4) is pressed
 
         /// Fox's input for the next Melee frame, or null when no GameCube controller is plugged in.
@@ -96,9 +97,10 @@ namespace FoxMelee {
                 UpdateWithState(InputControlType.RightBumper, B(GcButtons.Z), tick, dt);
                 UpdateWithState(InputControlType.Start, B(GcButtons.Start), tick, dt);
                 UpdateWithState(InputControlType.Command, B(GcButtons.Start), tick, dt);
-                // no Select or LB on a GameCube pad: D-pad right tapped opens the inventory, held shows the quick map
-                UpdateWithState(InputControlType.View, right.Inventory, tick, dt);
-                UpdateWithState(InputControlType.Back, right.Inventory, tick, dt);
+                // no Select or LB on a GameCube pad: D-pad right tapped opens the inventory (FoxRunner opens it itself:
+                // a player's own button bindings may have View / Back on another action, which got the Knight off a bench),
+                // held shows the quick map
+                if (right.Inventory) InventoryTapped = true;
                 UpdateWithState(InputControlType.LeftBumper, right.MapButton, tick, dt);
             }
         }
