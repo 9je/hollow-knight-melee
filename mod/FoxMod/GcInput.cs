@@ -15,7 +15,24 @@ namespace FoxMelee {
         public GcInput(int port) {
             this.port = port;
             if (!adapter.Start()) { FoxMod.Instance.LogWarn("GameCube adapter off: " + adapter.Status); return; }
-            InputManager.AttachDevice(new GcDevice(this));
+            InputManager.AttachDevice(Device = new GcDevice(this));
+        }
+
+        /// The controller as Hollow Knight's input sees it (an InControl device).
+        public InputDevice Device { get; private set; }
+
+        /// While a controller is in the port, Hollow Knight's actions read only it (and the keyboard): the same pad seen a
+        /// second time as another device (Steam Input's virtual pad on Windows) would hand Hollow Knight the D-pad the mod
+        /// keeps for itself, and at a bench D-pad right got the Knight up instead of opening the inventory.
+        bool pinned;
+        public void PinHollowInput(InControl.PlayerActionSet actions) {
+            if (actions == null || Device == null) return;
+            bool want = Current() != null;
+            if (want == pinned && (!want || actions.Device == Device)) return;
+            actions.Device = want ? Device : null;
+            pinned = want;
+            var others = string.Join(", ", System.Linq.Enumerable.Select(System.Linq.Enumerable.Where(InputManager.Devices, d => d != Device), d => d.Name));
+            FoxMod.Instance.Log(want ? $"Hollow Knight reads the GameCube controller only (other controllers: {(others.Length > 0 ? others : "none")})" : "Hollow Knight reads any controller");
         }
 
         /// Reads the newest adapter report (call before each Melee frame and each InControl update).
