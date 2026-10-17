@@ -1115,6 +1115,7 @@ namespace FoxMelee {
             }
             int n = core.ReadHurtboxes(hurt);
             if (n <= 0) return;
+            if (!knightBoxFitted) heldBox.Reset();   // Hollow Knight had his body (a new room, a respawn): the body's size again
             if (newMeleeFrame || !knightBoxFitted) heldFit = heldBox.Next(KnightBox.For(hurt, n, fox.X, fox.Y, (float)room.Scale, knightSize.x, knightSize.y, knightOffset.y));
             var fit = heldFit;
             knightBox.size = new Vector2(fit.Width, fit.Height);

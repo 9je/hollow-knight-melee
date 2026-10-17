@@ -27,30 +27,24 @@ namespace FoxMelee {
             return new Fit { Width = w, Height = h, OffsetY = knightOffsetY - knightHeight / 2 + h / 2 };
         }
 
-        /// The box held steady: Hollow Knight's camera zones (CameraLockArea) switch as the box enters and leaves them, so a
-        /// box that breathes with an idle animation across a zone's edge shook the camera. It grows at once; it shrinks only
-        /// once the body has been smaller for `frames` frames running, to the largest of those.
+        /// The box's height held steady: Hollow Knight's camera zones (CameraLockArea) switch as the box enters and leaves
+        /// them, so a box that breathed with an idle animation across a zone's top or bottom shook the camera. The height
+        /// grows at once and shrinks only once the body has been shorter for `frames` frames running, to the tallest of
+        /// those. The width is the body's every frame (a width held from a wide move reached back into the doorway just
+        /// come through and sent the Knight back), and Reset starts over in each room.
         public sealed class Held {
             readonly int frames;
-            Fit held, smaller;
+            Fit held, shorter;
             int count = -1;
             public Held(int frames) { this.frames = frames; }
 
-            public Fit Next(Fit f) {
-                if (count < 0 || f.Width > held.Width || f.Height > held.Height) {
-                    if (count < 0) held = f;
-                    else held = Larger(held, f);
-                    count = 0;
-                    return held;
-                }
-                smaller = count == 0 ? f : Larger(smaller, f);
-                if (++count >= frames) { held = smaller; count = 0; }
-                return held;
-            }
+            public void Reset() => count = -1;
 
-            static Fit Larger(Fit a, Fit b) {
-                var tall = b.Height > a.Height ? b : a;
-                return new Fit { Width = Math.Max(a.Width, b.Width), Height = tall.Height, OffsetY = tall.OffsetY };
+            public Fit Next(Fit f) {
+                if (count < 0 || f.Height > held.Height) { held = f; count = 0; return f; }
+                shorter = count == 0 || f.Height > shorter.Height ? f : shorter;
+                if (++count >= frames) { held = shorter; count = 0; }
+                return new Fit { Width = f.Width, Height = held.Height, OffsetY = held.OffsetY };
             }
         }
     }
