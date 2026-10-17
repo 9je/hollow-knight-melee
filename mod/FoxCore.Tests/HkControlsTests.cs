@@ -14,7 +14,8 @@ namespace FoxMelee.Tests {
             // a modern pad: same D-pad split
             var pad = new PadState { DPadUp = true, DPadRight = true };
             Assert.Equal(GcButtons.DUp, InputMapper.Map(pad).Buttons);
-            Assert.True(HkControls.FromPad(pad).Interact);
+            Assert.False(HkControls.FromPad(pad).Interact);   // D-pad right opens the inventory on any controller
+            Assert.True(HkControls.FromPad(new PadState { DPadLeft = true }).Interact);
             Assert.True(HkControls.FromPad(new PadState { DPadDown = true }).Focus);
         }
 

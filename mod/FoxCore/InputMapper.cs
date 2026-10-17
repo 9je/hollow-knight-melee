@@ -53,7 +53,9 @@ namespace FoxMelee {
             Inventory = (gc.Buttons & GcButtons.DRight) != 0,
         };
 
-        public static HkControls FromPad(PadState p) => new HkControls { Interact = p.DPadLeft || p.DPadRight, Focus = p.DPadDown };
+        /// A gamepad (or a GameCube adapter Windows hasn't given its WinUSB driver: a plain gamepad then): D-pad left
+        /// interacts, D-pad right is the inventory as on a GameCube pad (DPadRight, FoxRunner).
+        public static HkControls FromPad(PadState p) => new HkControls { Interact = p.DPadLeft, Focus = p.DPadDown };
 
         /// The GameCube controller's input for Melee without the buttons Hollow Knight uses.
         public static McInput ForMelee(McInput gc) { gc.Buttons &= unchecked((ushort)~Hollow); return gc; }

@@ -200,6 +200,7 @@ namespace FoxMelee {
                     if (up.Taunt) input.Buttons |= GcButtons.DUp;
                     if (up.DreamNail && fox.Airborne == 0) { DreamNail(hero); return; }
                 }
+                if (gc == null && padRight.Update(pad.DPadRight, Frame, GcInput.InventoryOpen).Inventory) OpenInventory(gm);
                 if (hkc.Interact && !interactHeld && fox.Airborne == 0) { interactHeld = true; Interact(hero); return; }
                 interactHeld = hkc.Interact;
                 // the quick map (GameCube: D-pad right held; keyboard: Tab): Hollow Knight opens it only for a Knight it
@@ -365,6 +366,13 @@ namespace FoxMelee {
         // Knight is handed over, as for an interact, and kept while D-pad up is held and a little after (the slash finishing);
         // its Dream Nail button (Action4) is pressed from DPadUp.ButtonDelay on.
         readonly DPadUp dpadUp = new DPadUp();
+        readonly DPadRight padRight = new DPadRight();   // a gamepad's D-pad right, tapped: the inventory (a GameCube pad's is GcInput's)
+
+        // as Hollow Knight's inventory button does: its Inventory Control opens on BUTTON PRESSED (while it may)
+        static void OpenInventory(GameManager gm) {
+            var inv = gm?.inventoryFSM;
+            if (inv != null && inv.ActiveStateName == "Closed") { FoxMod.Instance.Log("D-pad right: inventory"); inv.SendEvent("BUTTON PRESSED"); }
+        }
         bool dreaming;
         void DreamNail(HeroController hero) {
             dreaming = true;

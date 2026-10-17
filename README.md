@@ -26,7 +26,7 @@ anyway". To uninstall, run the installer and choose Uninstall: the game's own fi
 
 - A GameCube controller on a Wii U/Mayflash adapter plays exactly as in Melee (Windows: install the adapter's WinUSB
   driver once with Zadig, as for Dolphin). A gamepad or keyboard works too.
-- D-pad left/right: interact (talk, read, sit). D-pad down: Focus (heal). D-pad right held: map. Start: pause.
+- D-pad left: interact (talk, read, sit). D-pad right: tap for the inventory, hold for the map. D-pad down: Focus (heal). Start: pause.
 - Characters: the inventory's last page, after the Map. Choose a character and its color there while sitting at a bench.
 - Stuck? Pause, then **Reset character** takes you back to your last bench.
 
