@@ -38,5 +38,18 @@ namespace FoxMelee.Tests {
 
         [Fact]
         public void OffNeverBounces() => Assert.False(new Pogo(new PogoTuning { Enabled = false }).Frame(Dair, -1f, true));
+
+        [Fact]
+        public void AMushroomBouncesAFallOntoItAndADownAirHigh() {
+            var t = new PogoTuning();
+            Assert.Equal(t.BounceHeight, ShroomBounce.Height(t, true, -2f, 0, feetOnShroom: true, downAirOnShroom: false));
+            Assert.Equal(t.ShroomBounceHeight, ShroomBounce.Height(t, true, -2f, ShroomBounce.AttackAirLw, false, true));
+            Assert.Equal(t.ShroomBounceHeight, ShroomBounce.Height(t, true, -2f, ShroomBounce.AttackAirLw, true, false));
+            Assert.Equal(0, ShroomBounce.Height(t, true, 1f, 0, true, false));     // rising (just bounced): once per fall
+            Assert.Equal(0, ShroomBounce.Height(t, false, 0f, 0, true, false));    // standing beside one
+            Assert.Equal(0, ShroomBounce.Height(t, true, -2f, 0, false, true));    // only a down-air uses the nail's flag
+            t.Shrooms = false;
+            Assert.Equal(0, ShroomBounce.Height(t, true, -2f, ShroomBounce.AttackAirLw, true, true));
+        }
     }
 }

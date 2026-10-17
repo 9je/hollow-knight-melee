@@ -17,7 +17,7 @@ namespace FoxMelee {
         public bool EnemiesHitFox = true;           // enemies' hits go through Melee (shield, dodges, DI); off: the Knight takes them
         public EnemyHitTuning EnemyHits = new EnemyHitTuning();   // how a Hollow Knight hit becomes a Melee hit
         public bool DrawOffThread = true;           // Melee's drawing (3/4 of its frame) runs on the core's thread while Unity goes on
-        public bool EdgeAssist = true;              // not Melee: a full-tilt walk teeters at an edge as a slower walk does (dash/run still go off)
+        public bool FullWalkTeeters = false;        // not Melee: a full-tilt walk teeters at an edge as a slower walk does (it was EdgeAssist, on: walking off ledges got stuck)
         public bool AbilityGates = true;            // doors the Knight couldn't reach without an ability you lack are closed (GateLogic)
         public bool UnlockAllCharacters = true;     // every character at the bench, without their charms (false: each with its charm)
         public System.Collections.Generic.Dictionary<string, int> Costumes = new System.Collections.Generic.Dictionary<string, int>();   // each character's chosen costume (0: its first)

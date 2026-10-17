@@ -541,7 +541,7 @@ namespace FoxMelee {
             if (grabs) core.SetInput(GrabBridge.Port, new McInput());
             for (int p = grabs ? 2 : 1; p < 4; p++) core.SetInput(p, null);
             for (int i = 0; i < CountdownFrames; i++) if (!core.Step()) return "countdown: " + core.Error;
-            if (!core.SetEdgeAssist(s.EdgeAssist)) return "mc_set_edge_assist: " + core.Error;
+            if (!core.SetEdgeAssist(s.FullWalkTeeters)) return "mc_set_edge_assist: " + core.Error;
             if (grabs && !core.SetStandIn(GrabBridge.Port)) return "mc_standin_set: " + core.Error;
             // the attributes the boost charms change, as this character's match starts
             if (!core.GetAttribute(0, AttrDash, out float dash) || !core.GetAttribute(0, AttrRun, out float run) || !core.GetAttribute(0, AttrWeight, out float weight))

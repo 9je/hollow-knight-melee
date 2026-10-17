@@ -42,9 +42,38 @@ namespace FoxMelee {
                                            boxes[i].PrevY + (boxes[i].Y - boxes[i].PrevY) * k / 2f, boxes[i].Radius);
                 }
             }
-            if (!pogo.Frame(fox.Action, fox.SelfVelY, touching)) return true;
+            if (!pogo.Frame(fox.Action, fox.SelfVelY, touching)) return Shroom(core, room, fox);
             Clank(room, fox);
             return core.Bounce(0, (float)(tuning.BounceHeight * room.Scale)) >= 0;
+        }
+
+        // Fungal Wastes' mushrooms (ShroomBounce): the feet a fall's step above one, or a down-air hitbox on one
+        bool Shroom(MeleeCore core, RoomTransform room, McFighter fox) {
+            if (!tuning.Shrooms || fox.Airborne == 0 || fox.SelfVelY > 0) return true;
+            float fall = System.Math.Max(2f, -fox.SelfVelY);
+            var feet = TouchesShroom(room, fox.X, fox.Y - fall / 2, fall / 2 + 1f, true);   // the ones that bounce what lands on them
+            BounceShroom hit = null;
+            if (feet == null && fox.Action == ShroomBounce.AttackAirLw) {
+                int n = core.ReadHitboxes(boxes);
+                if (n < 0) return false;
+                for (int i = 0; i < n && hit == null; i++) if (!HitRules.IsItem(boxes[i])) hit = TouchesShroom(room, boxes[i].X, boxes[i].Y, boxes[i].Radius, false);   // any (the nail's flag)
+            }
+            double h = ShroomBounce.Height(tuning, true, fox.SelfVelY, fox.Action, feet != null, hit != null);
+            if (h <= 0) return true;
+            var shroom = feet ?? hit;
+            FoxMod.Instance.Log($"mushroom bounce ({(h > tuning.BounceHeight ? "down-air" : "landing")})");
+            try { shroom.SendMessage("BounceSmall", SendMessageOptions.DontRequireReceiver); } catch (System.Exception) { }
+            return core.Bounce(0, (float)(h * room.Scale)) >= 0;
+        }
+
+        BounceShroom TouchesShroom(RoomTransform room, float x, float y, float radius, bool landing) {
+            var p = room.ToHk(new V2(x, y));
+            int k = Physics2D.OverlapCircle(new Vector2((float)p.X, (float)p.Y), (float)(radius / room.Scale), filter, found);
+            for (int j = 0; j < k; j++) {
+                var b = found[j].GetComponentInParent<BounceShroom>();
+                if (b != null && (b.active || !landing)) return b;
+            }
+            return null;
         }
 
         Collider2D spikes;      // the spikes the down-air touched last

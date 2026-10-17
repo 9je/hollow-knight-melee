@@ -5,6 +5,21 @@ namespace FoxMelee {
         public bool Enabled = true;
         public double BounceHeight = 2.5;  // how high the bounce peaks, Hollow Knight units, the same for every character (the Knight's nail bounce: about half his jump)
         public int GraceFrames = 8;       // Melee frames after a bounce in which spikes don't hurt Fox
+        public bool Shrooms = true;       // Fungal Wastes' bounce mushrooms: falling onto one bounces (BounceHeight), a down-air on one bounces high
+        public double ShroomBounceHeight = 6.5;   // the Knight's down-slash on a mushroom (SHROOM_BOUNCE_VELOCITY), Hollow Knight units
+    }
+
+    /// The bounce mushrooms (BounceShroom): the Knight landing on an active one bounces as his nail's pogo does, his
+    /// down-slash on any (the component is also just a flag) sends him much higher. A character falling onto one (its feet about to touch) bounces the same; a down-air touching
+    /// one bounces high. Once per fall: the bounce sends it up, and only falling again counts.
+    public static class ShroomBounce {
+        public const uint AttackAirLw = 69;
+        /// The height to bounce to now (Hollow Knight units), or 0.
+        public static double Height(PogoTuning t, bool airborne, float velY, uint action, bool feetOnShroom, bool downAirOnShroom) {
+            if (!t.Enabled || !t.Shrooms || !airborne || velY > 0) return 0;
+            if (action == AttackAirLw && (downAirOnShroom || feetOnShroom)) return t.ShroomBounceHeight;
+            return feetOnShroom ? t.BounceHeight : 0;
+        }
     }
 
     public sealed class Pogo {
