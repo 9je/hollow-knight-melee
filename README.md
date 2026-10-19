@@ -7,6 +7,10 @@ The mod doesn't imitate Melee. It runs Melee's own game code, statically recompi
 library (`libmelee_core`). Hollow Knight's rooms become Melee collision, and Fox's hits, hitlag, knockback, grabs and
 sounds come from Melee itself.
 
+[![Fox fighting through Hollow Knight (click to watch)](media/preview.png)](media/preview.mp4)
+
+*Fox in Hollow Knight: [watch the clip](media/preview.mp4) (1080p, 38 s).*
+
 **Status:** early development. All 26 Melee characters are playable: Fox to start, the others unlocked by charms and
 chosen at a bench. Windows and Linux.
 
