@@ -3,6 +3,8 @@
 Play Hollow Knight as Super Smash Bros. Melee characters, with movement and combat that match Melee NTSC 1.02
 frame for frame.
 
+https://github.com/user-attachments/assets/0d85fab2-4a09-4335-97c5-6a6955713fbb
+
 The mod doesn't imitate Melee. It runs Melee's own game code, statically recompiled from your ISO into a native
 library (`libmelee_core`). Hollow Knight's rooms become Melee collision, and Fox's hits, hitlag, knockback, grabs and
 sounds come from Melee itself.
